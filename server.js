@@ -17,7 +17,13 @@ const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
+app.set("trust proxy", 1); // correct client IP behind Nginx (needed for webhook IP logging & rate limiting)
 app.use(cors());
+
+// TradingView webhook — mounted BEFORE express.json() because it parses its own
+// raw body for signature verification. Router only matches /api/webhooks/*.
+app.use("/api/webhooks", require("./routes/webhooks"));
+
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(UPLOAD_DIR));
@@ -62,6 +68,7 @@ io.on("connection", (socket) => {
   onlineUsers.set(uid, socket.id);
   io.emit("online_users", Array.from(onlineUsers.keys()));
   socket.join(`user_${uid}`);
+  socket.join("signals"); // receive TradingView signal broadcasts
 
   socket.on("typing", (data) => {
     if (data.chatId) {
