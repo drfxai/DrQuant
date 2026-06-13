@@ -9,6 +9,9 @@ set -e
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 APP_DIR="/var/www/drfx-quantum"
+# Directory this installer (and the repo) live in — used to locate migrations
+# and the optional Quantum Chat installer even after we cd into $APP_DIR.
+SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 clear
 echo ""
@@ -85,15 +88,23 @@ npm install -g pm2 > /dev/null 2>&1; echo -e "  ${GREEN}✓${NC} PM2"
 echo ""; echo -e "${BOLD}── Step 3: Application ──${NC}"; echo ""
 mkdir -p "$APP_DIR" "$APP_DIR/uploads"
 
-if [ -f "server.js" ]; then
-  cp server.js database.js package.json "$APP_DIR/"
-  cp -r routes public "$APP_DIR/"
-  [ -f "uninstall.sh" ] && cp uninstall.sh "$APP_DIR/"
-  echo -e "  ${GREEN}✓${NC} Files copied"
+if [ -f "$SRC_DIR/server.js" ]; then
+  cp "$SRC_DIR/server.js" "$SRC_DIR/database.js" "$SRC_DIR/package.json" "$APP_DIR/"
+  cp -r "$SRC_DIR/routes" "$SRC_DIR/public" "$APP_DIR/"
+  # Additive backend modules + DB migrations, so the deployment is complete.
+  # middleware/ and services/ are opt-in (see INTEGRATION.md); migrations/ is
+  # applied below and is required for the TradingView signal/webhook tables.
+  for d in middleware services migrations; do
+    [ -d "$SRC_DIR/$d" ] && cp -r "$SRC_DIR/$d" "$APP_DIR/"
+  done
+  [ -f "$SRC_DIR/uninstall.sh" ]   && cp "$SRC_DIR/uninstall.sh" "$APP_DIR/"
+  [ -f "$SRC_DIR/INTEGRATION.md" ] && cp "$SRC_DIR/INTEGRATION.md" "$APP_DIR/"
+  echo -e "  ${GREEN}✓${NC} Files copied (incl. middleware, services, migrations)"
 fi
 
 cd "$APP_DIR"
 JWT_SECRET=$(openssl rand -hex 32)
+TV_SECRET=$(openssl rand -hex 32)
 cat > .env << ENVFILE
 PORT=3000
 JWT_SECRET=$JWT_SECRET
@@ -108,10 +119,33 @@ DB_NAME=$DB_NAME
 OPENROUTER_API_KEY=${OPENROUTER_KEY:-your_openrouter_api_key_here}
 NOWPAYMENTS_API_KEY=${NP_API_KEY:-your_nowpayments_api_key_here}
 NOWPAYMENTS_IPN_SECRET=${NP_IPN_SECRET:-your_nowpayments_ipn_secret_here}
+TRADINGVIEW_WEBHOOK_SECRET=$TV_SECRET
+SIGNAL_CHANNEL_USERNAME=signals
+NODE_ENV=production
+ALLOWED_ORIGINS=https://$DOMAIN
+ACCESS_TTL=15m
+REFRESH_TTL_DAYS=30
 ENVFILE
 chmod 600 .env; echo -e "  ${GREEN}✓${NC} .env created"
 
 npm install --production 2>&1 | tail -1; echo -e "  ${GREEN}✓${NC} Dependencies installed"
+
+echo ""; echo -e "${BOLD}── Step 3b: Database schema + migrations ──${NC}"; echo ""
+echo -e "${CYAN}▸ Creating base tables...${NC}"
+node -e "require('dotenv').config(); require('./database').initDB().then(()=>process.exit(0)).catch(e=>{console.error(e);process.exit(1)})" \
+  && echo -e "  ${GREEN}✓${NC} Base schema ready" \
+  || { echo -e "${RED}✘ Base schema init failed (check DATABASE_URL / PostgreSQL)${NC}"; exit 1; }
+if ls "$APP_DIR"/migrations/*.sql >/dev/null 2>&1; then
+  echo -e "${CYAN}▸ Applying migrations...${NC}"
+  for f in $(ls "$APP_DIR"/migrations/*.sql | sort); do
+    echo -e "    ${CYAN}→${NC} $(basename "$f")"
+    sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$f" >/dev/null \
+      && echo -e "    ${GREEN}✓${NC} applied" \
+      || { echo -e "${RED}✘ Migration failed: $(basename "$f")${NC}"; exit 1; }
+  done
+else
+  echo -e "  ${YELLOW}⚠${NC} No migrations found — TradingView signal/webhook tables will be missing"
+fi
 
 echo ""; echo -e "${BOLD}── Step 4: Nginx ──${NC}"; echo ""
 cat > /etc/nginx/sites-available/drfx-quantum << NGINX
@@ -152,6 +186,27 @@ echo -ne "${YELLOW}➤ Setup SSL now? (y/n): ${NC}"; read -r SSL
 if [[ "$SSL" =~ ^[Yy]$ ]]; then
   certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$ADMIN_EMAIL" 2>&1 | tail -3 || echo -e "${YELLOW}  ⚠ Run: certbot --nginx -d $DOMAIN${NC}"
 fi
+
+echo ""; echo -e "${BOLD}── Step 7: Quantum Chat (optional) ──${NC}"; echo ""
+QC_INSTALLER="$SRC_DIR/quantum-chat/scripts/install-quantum-chat.sh"
+if [ -f "$QC_INSTALLER" ]; then
+  echo -e "  Quantum Chat is a separate DNS-based encrypted messenger. It needs a"
+  echo -e "  delegated subdomain (NS + A glue) and ${BOLD}UDP/TCP port 53${NC} reachable."
+  echo -e "  Details: quantum-chat/docs/dns-setup.md"
+  echo -ne "${YELLOW}➜ Install Quantum Chat now? (y/n): ${NC}"; read -r QC
+  if [[ "$QC" =~ ^[Yy]$ ]]; then
+    ( cd "$SRC_DIR" && bash "$QC_INSTALLER" ) \
+      || echo -e "${YELLOW}  ⚠ Quantum Chat install did not finish; run later: sudo bash $QC_INSTALLER${NC}"
+  else
+    echo -e "  ${CYAN}Skipped.${NC} Install later: ${BOLD}sudo bash $QC_INSTALLER${NC}"
+  fi
+else
+  echo -e "  ${YELLOW}⚠${NC} quantum-chat/ not found in this checkout."
+  echo -e "    If you expected it, confirm the folder was committed & pushed to GitHub."
+fi
+
+echo -e "  ${CYAN}Reminder:${NC} TradingView webhook secret is in ${APP_DIR}/.env (TRADINGVIEW_WEBHOOK_SECRET);"
+echo -e "  create a channel named 'signals' in-app so incoming signals have somewhere to post."
 
 echo ""
 echo -e "${GREEN}  ╔══════════════════════════════════════════════════╗${NC}"
