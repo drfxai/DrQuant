@@ -1,0 +1,52 @@
+[Unit]
+Description=Quantum Chat — DNS-resilient encrypted emergency messenger
+Documentation=https://github.com/drfxai/DrFXQuant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=quantum-chat
+Group=quantum-chat
+EnvironmentFile=/etc/quantum-chat/quantum-chat.env
+ExecStart=/usr/local/bin/quantum-chat
+# Verify the node answers locally right after start; fail the unit if not.
+ExecStartPost=/bin/sh -c 'sleep 1; /usr/local/bin/quantum-chat health'
+Restart=on-failure
+RestartSec=3
+
+# --- Privilege: bind :53 without running as root ---------------------------
+# CAP_NET_BIND_SERVICE lets an unprivileged user bind the privileged port 53.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+
+# --- Filesystem / kernel hardening -----------------------------------------
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# RAM mode writes nothing; if you enable durable mode + on-disk state, add a
+# ReadWritePaths= line for that directory.
+ReadOnlyPaths=/etc/quantum-chat
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# --- Resource limits --------------------------------------------------------
+LimitNOFILE=65536
+MemoryMax=512M
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target
