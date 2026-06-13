@@ -171,10 +171,52 @@ if ! ufw status | grep -q "Status: active"; then
   yes | ufw enable >/dev/null 2>&1 || true
 fi
 
-# --- 15/16. systemd-resolved can squat :53 — warn, don't auto-break SSH -----
+# --- 15/16. systemd-resolved squats 127.0.0.53:53 and blocks our bind ------
+# free_port53 disables the resolved STUB listener (not resolved itself) and
+# repoints /etc/resolv.conf at the real upstream resolvers so the box keeps
+# resolving DNS. This changes system DNS config, so it is prompted (default yes,
+# since the authoritative server cannot bind :53 otherwise). Override with
+# QC_FREE_PORT53=no to skip.
+free_port53() {
+  log "Freeing port 53 (disabling the systemd-resolved stub listener)..."
+  local rc=/etc/systemd/resolved.conf
+  # 1) Set DNSStubListener=no, handling commented / missing lines + section.
+  if [[ -f "$rc" ]] && grep -qE '^[[:space:]]*#?[[:space:]]*DNSStubListener=' "$rc"; then
+    sed -i -E 's/^[[:space:]]*#?[[:space:]]*DNSStubListener=.*/DNSStubListener=no/' "$rc"
+  elif [[ -f "$rc" ]] && grep -q '^\[Resolve\]' "$rc"; then
+    sed -i '/^\[Resolve\]/a DNSStubListener=no' "$rc"
+  else
+    printf '\n[Resolve]\nDNSStubListener=no\n' >> "$rc"
+  fi
+  # 2) Keep the host able to resolve DNS via the REAL upstreams (not the stub).
+  if [[ -e /run/systemd/resolve/resolv.conf ]]; then
+    ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+  else
+    warn "/run/systemd/resolve/resolv.conf missing; writing public resolvers to /etc/resolv.conf"
+    printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /etc/resolv.conf
+  fi
+  # 3) Restart resolved to release the socket.
+  systemctl restart systemd-resolved 2>/dev/null || true
+  sleep 1
+  # 4) Verify the port is actually free now.
+  if ss -lunp 2>/dev/null | grep -q ':53 .*systemd-resolve'; then
+    warn "systemd-resolved still appears to hold :53 — check 'systemctl status systemd-resolved'."
+  else
+    log "Port 53 is free."
+  fi
+}
+
 if ss -lunp 2>/dev/null | grep -q ':53 .*systemd-resolve'; then
-  warn "systemd-resolved is listening on :53. Free it by setting"
-  warn "  DNSStubListener=no in /etc/systemd/resolved.conf and 'systemctl restart systemd-resolved'."
+  warn "systemd-resolved is listening on 127.0.0.53:53, which blocks Quantum Chat from binding :53."
+  prompt QC_FREE_PORT53 "Free port 53 now (disable the resolved stub + repoint /etc/resolv.conf)?" "yes"
+  case "${QC_FREE_PORT53,,}" in
+    y|yes|true|1) free_port53 ;;
+    *)
+      warn "Leaving systemd-resolved as-is; the service will fail to start until :53 is free."
+      warn "  Manual fix: set DNSStubListener=no in /etc/systemd/resolved.conf, then run"
+      warn "  'sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf && sudo systemctl restart systemd-resolved'."
+      ;;
+  esac
 fi
 
 # --- 17. start + health -----------------------------------------------------
