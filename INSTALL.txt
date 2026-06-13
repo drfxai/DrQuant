@@ -1,0 +1,282 @@
+============================================================================
+ DrFX Quantum - Setup & Installation Guide
+============================================================================
+
+This repository contains TWO independent components:
+
+  1. DrFX Quantum        - the main Telegram-style trading platform
+                           (Node.js + PostgreSQL + Nginx + PM2). Installed by
+                           the top-level install.sh.
+
+  2. Quantum Chat        - a SEPARATE, optional DNS-based encrypted messenger
+                           (a Go microservice). It does NOT touch the main app
+                           and has its own installer. It needs a delegated
+                           subdomain and UDP/TCP port 53.
+
+You can install just the platform, or the platform plus Quantum Chat.
+
+
+============================================================================
+ 0. PREREQUISITES
+============================================================================
+
+For the main platform:
+  - A fresh Ubuntu/Debian server (tested on Ubuntu 24.04) with root access.
+  - A domain name with an A record pointing at the server's public IP
+    (required for HTTPS / Let's Encrypt).
+
+For Quantum Chat (only if you install it), additionally:
+  - A subdomain you are able to DELEGATE (create NS + glue A records for) at
+    the DNS host of your parent domain.
+  - The ability to open UDP *and* TCP port 53 in your hosting provider's
+    firewall (e.g. Vultr, AWS, DigitalOcean). The OS firewall (ufw) alone is
+    usually NOT sufficient - most providers have their own outer firewall.
+
+IMPORTANT - how the code reaches your server:
+  The installers run from a `git clone` of this repository. Anything that lives
+  only on a local machine reaches the server ONLY after it is committed and
+  pushed to GitHub. After pushing, run `git pull` (or re-clone) on the server
+  so it has the latest installers before running them.
+
+
+============================================================================
+ 1. INSTALL THE MAIN PLATFORM (one command)
+============================================================================
+
+  git clone https://github.com/drfxai/DrFXQuant.git
+  cd DrFXQuant
+  sudo bash install.sh
+
+install.sh is a one-shot installer. It will:
+  - Install Node.js 20, PostgreSQL, Nginx, PM2, and (optionally) certbot.
+  - Create the `drfx_quantum` PostgreSQL database and a `drfx` user.
+  - Copy the application to /var/www/drfx-quantum (including the routes,
+    public assets, middleware, services, and migrations).
+  - Generate /var/www/drfx-quantum/.env with secure random secrets
+    (JWT secret, TradingView webhook secret, etc.).
+  - Create the base database tables, then apply every migration in
+    migrations/*.sql (this creates the TradingView signal/webhook tables).
+  - Start the app under PM2 behind an Nginx reverse proxy.
+  - Optionally obtain an HTTPS certificate.
+  - Optionally chain into the Quantum Chat installer (see Section 2).
+
+Prompts it will ask:
+  - Domain (e.g. app.yourdomain.com)
+  - Admin email
+  - Admin password (min 6 chars, asked twice)
+  - OpenRouter API key            (optional - press Enter to skip)
+  - NowPayments API key           (optional - press Enter to skip)
+  - NowPayments IPN secret        (optional - press Enter to skip)
+  - Proceed? (y/n)
+  - Setup SSL now? (y/n)
+  - Install Quantum Chat now? (y/n)   <- only if quantum-chat/ is present
+
+When it finishes:
+  - The app is reachable at http://your-domain  (https if you enabled SSL).
+  - Log in with the admin email and password you entered.
+
+Post-install steps for the trading features:
+  - The TradingView webhook shared secret was auto-generated. Find it in:
+        /var/www/drfx-quantum/.env   (TRADINGVIEW_WEBHOOK_SECRET=...)
+    Use that same secret in your TradingView alert payloads.
+  - Create a channel named 'signals' inside the app so incoming webhook
+    signals have a channel to broadcast to.
+  - To enable the AI assistant, set OPENROUTER_API_KEY in the .env (re-run is
+    not needed; just edit and restart). To enable crypto payments, set the
+    NOWPAYMENTS_* values.
+
+Everyday management:
+  pm2 logs drfx-quantum            # view live logs
+  pm2 restart drfx-quantum         # restart after editing .env
+  pm2 status                       # process status
+  nano /var/www/drfx-quantum/.env  # edit configuration
+  sudo bash uninstall.sh           # remove the main app
+
+
+============================================================================
+ 2. INSTALL QUANTUM CHAT (optional)
+============================================================================
+
+Quantum Chat is a censorship-resilient, end-to-end-encrypted, text-only
+emergency messenger that works over DNS. It is a separate service from the
+trading platform. Honest expectations: it raises the cost of censorship and
+surveillance; it is NOT invisible. DNS tunneling is detectable and latency is
+high - treat it as a fallback channel, not a stealth one.
+
+You can install it two ways:
+
+  (a) During the main install, answer "y" to "Install Quantum Chat now?", or
+  (b) Standalone, at any time:
+
+        cd DrFXQuant/quantum-chat
+        sudo bash scripts/install-quantum-chat.sh
+
+The installer will:
+  - Install the Go toolchain and build the quantum-chat binary.
+  - Create a dedicated 'quantum-chat' system user.
+  - Write its config to /etc/quantum-chat/quantum-chat.env (permissions 0600).
+  - Install and enable a hardened systemd service (quantum-chat.service).
+  - Open UDP/TCP 53 and SSH in ufw.
+  - Detect whether systemd-resolved is occupying port 53 and OFFER to free it
+    automatically (see Section 3 - this is the usual reason a first start
+    fails). Default is "yes".
+  - Start the service and run a health check.
+
+Prompts it will ask (press Enter to accept the shown default):
+  - DNS subdomain to delegate to this server   (e.g. chat.yourdomain.com)
+  - Primary nameserver hostname                (e.g. ns1.chat.yourdomain.com)
+  - Public IPv4 of this server                 (auto-detected)
+  - Admin email (SOA contact)
+  - Storage mode (ram/postgres)                [ram]
+  - Redis URL (optional, for multi-node)       []
+  - Enable operational logs? (true/false)      [false]
+  - Message TTL minutes                        [1440]
+  - Free port 53 now? (y/n)                    [yes]   <- if resolved holds :53
+
+Storage modes:
+  - ram       In-memory only. Simplest. Messages are lost on restart and are
+              kept at most until their TTL. Good for a single emergency node.
+  - postgres  Durable. Stores ciphertext only (never plaintext or keys). Falls
+              back to RAM automatically if the database is unreachable.
+
+Service management:
+  systemctl status quantum-chat
+  journalctl -u quantum-chat -f
+  quantum-chat health                  # prints OK when bound and answering
+  /etc/quantum-chat/quantum-chat.env   # configuration (0600)
+  sudo bash scripts/update-quantum-chat.sh
+  sudo bash scripts/uninstall-quantum-chat.sh
+
+
+============================================================================
+ 3. FREEING PORT 53 (systemd-resolved)
+============================================================================
+
+On Ubuntu, systemd-resolved listens on 127.0.0.53:53. An authoritative DNS
+server like Quantum Chat cannot bind 0.0.0.0:53 while that stub listener is
+active, so the service fails to start on a first run.
+
+The current installer detects this and offers to fix it for you (recommended).
+If you skipped that prompt, or are fixing an already-installed service, run
+these commands manually. They disable ONLY the stub listener and repoint the
+system's resolver so the box keeps resolving DNS:
+
+  # 1. Disable the resolved stub listener
+  sudo sed -i 's/^#\?DNSStubListener=.*/DNSStubListener=no/' \
+      /etc/systemd/resolved.conf
+  grep -q '^DNSStubListener=no' /etc/systemd/resolved.conf || \
+      echo 'DNSStubListener=no' | sudo tee -a /etc/systemd/resolved.conf
+
+  # 2. Keep the host able to resolve DNS via the real upstream resolvers
+  sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+  # 3. Release port 53
+  sudo systemctl restart systemd-resolved
+
+  # 4. Verify nothing holds :53 (no output = good)
+  sudo ss -lunp | grep ':53' || echo "port 53 is free"
+
+  # 5. Start Quantum Chat and check it
+  sudo systemctl restart quantum-chat
+  sudo systemctl status quantum-chat --no-pager
+  sudo quantum-chat health
+
+Fallback: if DNS resolution on the box misbehaves afterward (e.g. apt cannot
+resolve), set a public resolver directly:
+  echo 'nameserver 1.1.1.1' | sudo tee /etc/resolv.conf
+(Quantum Chat is an AUTHORITATIVE server, not a recursive resolver, so the host
+itself must resolve via an external resolver - never via :53 on itself.)
+
+
+============================================================================
+ 4. DNS DELEGATION + PROVIDER FIREWALL (Quantum Chat only)
+============================================================================
+
+Freeing port 53 lets the service START. For it to actually be reachable from
+the internet you must also do these two things, which no installer can do for
+you:
+
+4.1  Delegate the subdomain at your parent domain's DNS host. Create:
+
+     ; 1) Glue / host record for the nameserver
+     ns1.chat        A     <YOUR_SERVER_IP>
+     ; 2) Delegate the subdomain to that nameserver
+     chat            NS    ns1.chat.yourdomain.com.
+
+     Concrete example for subdomain chat.yourdomain.com on IP 203.0.113.10:
+       ns1.chat.yourdomain.com.   A    203.0.113.10
+       chat.yourdomain.com.       NS   ns1.chat.yourdomain.com.
+
+4.2  Open UDP AND TCP port 53 to the internet in your hosting provider's
+     firewall (in addition to ufw). On Vultr/AWS/etc. this is a separate
+     firewall group from the OS firewall.
+
+Verify from a DIFFERENT machine (not the server itself):
+  dig @<YOUR_SERVER_IP> chat.yourdomain.com SOA +norecurse
+  dig +tcp @<YOUR_SERVER_IP> chat.yourdomain.com SOA
+
+You should get an SOA answer over both UDP and TCP. Once delegation has
+propagated, queries to chat.yourdomain.com will reach your node.
+
+
+============================================================================
+ 5. TROUBLESHOOTING
+============================================================================
+
+Quantum Chat service won't start:
+  sudo journalctl -u quantum-chat -n 50 --no-pager
+  - "bind: address already in use" on :53  -> systemd-resolved is holding the
+    port. Apply Section 3.
+  sudo ss -lunp | grep ':53'   # shows what currently owns port 53
+
+Can't reach Quantum Chat from outside, but the service is running:
+  - Delegation not set or not propagated yet  -> recheck Section 4.1.
+  - Provider firewall not open for UDP/TCP 53  -> recheck Section 4.2.
+  - From another host: dig @<IP> <subdomain> SOA   (times out = blocked/not
+    delegated; REFUSED/answer = reaching the node).
+
+Main app issues:
+  pm2 logs drfx-quantum            # application errors
+  - TradingView webhook returns 500  -> ensure migrations were applied
+    (install.sh "Step 3b"); the signals/webhook_logs tables must exist.
+  - Login/admin not working  -> the admin user is created/updated from
+    ADMIN_EMAIL / ADMIN_PASSWORD in /var/www/drfx-quantum/.env on each boot.
+
+PostgreSQL:
+  sudo -u postgres psql -d drfx_quantum -c "\dt"     # list tables
+
+
+============================================================================
+ 6. UPDATING
+============================================================================
+
+Main platform:
+  cd /path/to/DrFXQuant
+  git pull
+  sudo bash install.sh        # idempotent: safe to re-run; re-applies
+                              # migrations and refreshes the deployed copy
+
+Quantum Chat:
+  cd DrFXQuant/quantum-chat
+  git pull
+  sudo bash scripts/update-quantum-chat.sh
+
+
+============================================================================
+ 7. FILE / PATH REFERENCE
+============================================================================
+
+Main platform:
+  Install dir      /var/www/drfx-quantum
+  Config           /var/www/drfx-quantum/.env            (chmod 600)
+  Process manager  PM2 process name: drfx-quantum
+  Web server       Nginx, proxying to 127.0.0.1:3000
+  Database         PostgreSQL db "drfx_quantum", user "drfx"
+
+Quantum Chat:
+  Binary           /usr/local/bin/quantum-chat
+  Config           /etc/quantum-chat/quantum-chat.env    (chmod 600)
+  Service          systemd unit quantum-chat.service
+  Runs as user     quantum-chat
+
+============================================================================
