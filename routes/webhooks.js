@@ -51,6 +51,38 @@ function verifyHmac(rawBuf, headerSig) {
   return timingSafeEqual(expected, headerSig);
 }
 
+const sha256hex = (s) => crypto.createHash("sha256").update(String(s)).digest("hex");
+
+// Resolve a per-channel config from payload.channel (slug). Returns the row or
+// null. Safe if the signal_channels table doesn't exist yet (pre-migration 002).
+async function resolveChannel(pool, payload) {
+  const raw = payload && typeof payload.channel === "string" ? payload.channel : null;
+  if (!raw) return null;
+  const slug = raw.toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40);
+  if (!slug) return null;
+  try {
+    const { rows: [ch] } = await pool.query(
+      "SELECT id, chat_id, secret_hash, visibility FROM signal_channels WHERE slug=$1 AND active=TRUE",
+      [slug]
+    );
+    return ch || null;
+  } catch {
+    return null; // table missing -> fall back to the global secret path
+  }
+}
+
+// Optional timestamp-window check. Only enforced when the payload carries a
+// time/timestamp. Accepts unix seconds, unix ms, or an ISO-8601 string.
+function timestampSkewMs(payload) {
+  const ts = payload && (payload.time ?? payload.timestamp);
+  if (ts == null) return null;
+  let ms;
+  if (typeof ts === "number") ms = ts < 1e12 ? ts * 1000 : ts; // seconds vs ms
+  else ms = Date.parse(String(ts));
+  if (Number.isNaN(ms)) return null;
+  return Math.abs(Date.now() - ms);
+}
+
 // ---- strict schema validation (no external deps) --------------------------
 const SIDES = new Set(["buy", "sell", "long", "short", "close", "alert"]);
 function validateSignal(p) {
@@ -108,11 +140,25 @@ router.post("/tradingview", async (req, res) => {
     }
   }
 
-  // --- AUTH: mode B (HMAC header) if present, else mode A (body secret) -----
+  // --- CHANNEL RESOLUTION (per-channel secrets / routing) ------------------
+  // payload.channel (slug) selects a signal_channels row. If it carries a
+  // secret_hash, that per-channel secret governs; otherwise the global
+  // TRADINGVIEW_WEBHOOK_SECRET applies (back-compat / default channel).
+  const channel = await resolveChannel(pool, payload);
+
+  // --- AUTH ----------------------------------------------------------------
   const headerSig = req.get("X-Signature");
   let authed = false;
-  if (headerSig) authed = verifyHmac(raw, headerSig);
-  else if (SECRET && payload && typeof payload.secret === "string") {
+  if (channel && channel.secret_hash) {
+    // Per-channel secret: body-secret mode, compared as SHA-256 hashes so the
+    // raw token is never stored. (HMAC-header mode needs the raw key and is not
+    // offered per-channel; use the global secret for a signing proxy.)
+    if (payload && typeof payload.secret === "string") {
+      authed = timingSafeEqual(sha256hex(payload.secret), channel.secret_hash);
+    }
+  } else if (headerSig) {
+    authed = verifyHmac(raw, headerSig);
+  } else if (SECRET && payload && typeof payload.secret === "string") {
     authed = timingSafeEqual(payload.secret, SECRET);
   }
   if (!authed) {
@@ -129,6 +175,13 @@ router.post("/tradingview", async (req, res) => {
   if (verr) {
     await logHook("rejected_schema", verr);
     return res.status(400).json({ error: verr });
+  }
+
+  // --- TIMESTAMP WINDOW (replay hardening; only when a timestamp is sent) ---
+  const skew = timestampSkewMs(payload);
+  if (skew != null && skew > 300000) { // +/- 5 minutes
+    await logHook("rejected_replay", "timestamp outside window");
+    return res.status(401).json({ error: "Stale timestamp" });
   }
 
   // --- REPLAY: try to claim the dedupe key. If it already exists, drop. ----
@@ -159,20 +212,31 @@ router.post("/tradingview", async (req, res) => {
   // --- PERSIST + BROADCAST -------------------------------------------------
   try {
     const n = normalize(payload);
-    const { rows: [chan] } = await pool.query(
-      `SELECT id FROM chats WHERE username = $1 AND type = 'channel' LIMIT 1`,
-      [SIGNAL_CHANNEL_USERNAME]
-    );
+
+    // Destination chat + visibility: prefer the resolved per-channel row, else
+    // fall back to the legacy username-based lookup. channel_id references
+    // chats(id), and a channel's chat_id is exactly that, so it slots in.
+    let chatId = channel?.chat_id ?? null;
+    const broadcastGlobal = channel ? channel.visibility === "public" : true;
+    if (!chatId) {
+      const { rows: [chan] } = await pool.query(
+        `SELECT id FROM chats WHERE username = $1 AND type = 'channel' LIMIT 1`,
+        [SIGNAL_CHANNEL_USERNAME]
+      );
+      chatId = chan?.id ?? null;
+    }
+
     const { rows: [sig] } = await pool.query(
       `INSERT INTO signals (symbol, side, price, stop_loss, take_profit, timeframe, strategy, note, raw_payload, status, channel_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'published',$10) RETURNING *`,
-      [n.symbol, n.side, n.price, n.stop_loss, n.take_profit, n.timeframe, n.strategy, n.note, JSON.stringify(payload), chan?.id ?? null]
+      [n.symbol, n.side, n.price, n.stop_loss, n.take_profit, n.timeframe, n.strategy, n.note, JSON.stringify(payload), chatId]
     );
     await pool.query(`UPDATE webhook_logs SET signal_id=$1 WHERE id=$2`, [sig.id, logId]);
 
-    // Broadcast to the signal channel room and a global signals feed.
-    io.to("signals").emit("signal", sig);
-    if (chan?.id) io.to(`chat_${chan.id}`).emit("signal", sig);
+    // Private channels broadcast to members only (chat room); public channels
+    // also hit the global signals feed.
+    if (chatId) io.to(`chat_${chatId}`).emit("signal", sig);
+    if (broadcastGlobal) io.to("signals").emit("signal", sig);
 
     return res.status(201).json({ status: "published", id: sig.id });
   } catch (e) {

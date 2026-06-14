@@ -50,6 +50,7 @@ app.use("/api/chats", require("./routes/chats"));
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/payment", require("./routes/payment"));
 app.use("/api/upload", require("./routes/upload"));
+app.use("/api/manage", require("./routes/manage")); // admin/manager console (RBAC matrix)
 
 // ── Socket.io ──
 io.use((socket, next) => {
@@ -58,6 +59,15 @@ io.use((socket, next) => {
   try { socket.user = jwt.verify(token, JWT_SECRET); next(); }
   catch { next(new Error("Invalid token")); }
 });
+
+// Additive realtime layer: reactions, delivered/read receipts, chat rooms,
+// debounced typing, and optional Redis fan-out (see realtime/messaging.js).
+// Registers its own connection listener; the existing one below is unchanged.
+require("./realtime/messaging").setupRealtime(io, pool);
+
+// Optional SFU live streaming. Inert unless LIVE_SFU=on AND mediasoup is
+// installed; when disabled, the frame-relay path below remains the mechanism.
+require("./realtime/sfu").setupSfu(io, pool);
 
 const onlineUsers = new Map();
 // Live Trading state
