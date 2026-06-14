@@ -1,5 +1,5 @@
 #!/bin/bash
-# DrFX Quantum — Quick Re-deploy
+# DrFX Quant — Quick Re-deploy
 set -e
 APP_DIR="/var/www/drfx-quantum"
 cd "$APP_DIR"
@@ -9,4 +9,4 @@ echo "📦 Installing dependencies..."
 npm install --production
 echo "🔄 Restarting..."
 pm2 restart drfx-quantum
-echo "✅ DrFX Quantum v5.0 redeployed"
+echo "✅ DrFX Quant v5.0 redeployed"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  DrFX Quantum - Management & Reference Card
+#  DrFX Quant - Management & Reference Card
 #  Run any time:  sudo bash /var/www/drfx-quantum/manage.sh
 #
 #  Read-only: this script changes NOTHING. It shows the current configuration,
@@ -59,7 +59,7 @@ cmd() { printf "   ${DIM}\$${NC} %b\n" "$1"; }
 
 echo ""
 echo -e "${BLUE}  +==============================================================+${NC}"
-echo -e "${BLUE}  |${NC}   ${BOLD}DrFX Quantum - Management Reference${NC}                        ${BLUE}|${NC}"
+echo -e "${BLUE}  |${NC}   ${BOLD}DrFX Quant - Management Reference${NC}                          ${BLUE}|${NC}"
 echo -e "${BLUE}  +==============================================================+${NC}"
 
 hdr "Current configuration"

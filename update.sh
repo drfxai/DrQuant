@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  DrFX Quantum - In-place Updater
+#  DrFX Quant - In-place Updater
 #  Refreshes an EXISTING install with new code WITHOUT re-running first-time setup.
 #
 #  PRESERVES : your .env (domain, admin, secrets), the PostgreSQL database and all
@@ -27,7 +27,7 @@ PM2_NAME="drfx-quantum"
 [ "$EUID" -ne 0 ] && echo -e "${RED}X Run as root: sudo bash update.sh${NC}" && exit 1
 
 echo ""
-echo -e "${CYAN}${BOLD}  DrFX Quantum - Update${NC}"
+echo -e "${CYAN}${BOLD}  DrFX Quant - Update${NC}"
 
 # 1) Must already be installed.
 if [ ! -f "$APP_DIR/.env" ]; then

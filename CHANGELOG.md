@@ -1,5 +1,9 @@
 # Changelog
 
+## Renamed to DrFX Quant
+
+The platform's public name is now **DrFX Quant** (formerly *DrFX Quantum*). This is a branding change only: internal identifiers (the PostgreSQL database name, the PM2/systemd service name, and install paths under `/var/www/drfx-quantum`) and the GitHub repository are intentionally unchanged, so existing deployments keep working after a normal `git pull && sudo bash update.sh`. The separate **Quantum Chat** feature keeps its name.
+
 ## v5.2 — Chat Actions, Analysis Memory & Live Trading (2026-02-27)
 
 ### Chat: Full Message Actions for All Users

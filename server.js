@@ -152,7 +152,7 @@ app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.ht
     await initDB();
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);
-      console.log(`  ║  📈 DrFX Quantum v5.2 on port ${PORT}       ║`);
+      console.log(`  ║  📈 DrFX Quant v5.2 on port ${PORT}         ║`);
       console.log(`  ║  PostgreSQL ✅ · Telegram-style         ║`);
       console.log(`  ╚════════════════════════════════════════╝\n`);
     });

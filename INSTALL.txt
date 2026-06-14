@@ -1,8 +1,8 @@
 ============================================================================
- DrFX Quantum - Setup & Installation Guide
+ DrFX Quant - Setup & Installation Guide
 ============================================================================
 
-DrFX Quantum is a Telegram-style trading communication platform
+DrFX Quant is a Telegram-style trading communication platform
 (Node.js + PostgreSQL + Nginx + PM2), installed by the top-level install.sh.
 
 

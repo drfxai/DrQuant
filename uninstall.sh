@@ -1,6 +1,6 @@
 #!/bin/bash
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📈 DrFX Quantum — Uninstaller
+#  📈 DrFX Quant — Uninstaller
 #  Usage: sudo bash uninstall.sh
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -16,7 +16,7 @@ clear
 echo ""
 echo -e "${RED}  ╔════════════════════════════════════════════╗${NC}"
 echo -e "${RED}  ║                                            ║${NC}"
-echo -e "${RED}  ║   🗑️  ${BOLD}DrFX Quantum — Uninstaller${NC}${RED}            ║${NC}"
+echo -e "${RED}  ║   🗑️  ${BOLD}DrFX Quant — Uninstaller${NC}${RED}              ║${NC}"
 echo -e "${RED}  ║                                            ║${NC}"
 echo -e "${RED}  ╚════════════════════════════════════════════╝${NC}"
 echo ""
@@ -81,7 +81,7 @@ fi
 echo ""
 echo -e "${GREEN}  ╔════════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}  ║                                            ║${NC}"
-echo -e "${GREEN}  ║   ✅ DrFX Quantum uninstalled completely   ║${NC}"
+echo -e "${GREEN}  ║   ✅ DrFX Quant uninstalled completely     ║${NC}"
 echo -e "${GREEN}  ║                                            ║${NC}"
 echo -e "${GREEN}  ╚════════════════════════════════════════════╝${NC}"
 echo ""

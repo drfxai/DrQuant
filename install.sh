@@ -1,6 +1,6 @@
 #!/bin/bash
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  📈 DrFX Quantum v5.0 — Installer (PostgreSQL + Telegram-style)
+#  📈 DrFX Quant v5.0 — Installer (PostgreSQL + Telegram-style)
 #  Usage: sudo bash install.sh
 #  Uninstall: sudo bash uninstall.sh
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -17,7 +17,7 @@ clear
 echo ""
 echo -e "${CYAN}  ╔════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}  ║                                            ║${NC}"
-echo -e "${CYAN}  ║   📈 ${BOLD}DrFX Quantum${NC}${CYAN} v5.0 — Installer         ║${NC}"
+echo -e "${CYAN}  ║   📈 ${BOLD}DrFX Quant${NC}${CYAN} v5.0 — Installer           ║${NC}"
 echo -e "${CYAN}  ║   Telegram-style Trading Platform          ║${NC}"
 echo -e "${CYAN}  ║                                            ║${NC}"
 echo -e "${CYAN}  ╚════════════════════════════════════════════╝${NC}"
@@ -252,7 +252,7 @@ echo -e "  create a channel named 'signals' in-app so incoming signals have some
 
 echo ""
 echo -e "${GREEN}  ╔══════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}  ║  ✅ ${BOLD}DrFX Quantum v5.0 installed!${NC}${GREEN}                  ║${NC}"
+echo -e "${GREEN}  ║  ✅ ${BOLD}DrFX Quant v5.0 installed!${NC}  ${GREEN}                  ║${NC}"
 echo -e "${GREEN}  ╠══════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}  ║  🌐 ${BOLD}http://$DOMAIN${NC}${GREEN}"
 echo -e "${GREEN}  ║  👤 ${BOLD}$ADMIN_EMAIL${NC}${GREEN}"
