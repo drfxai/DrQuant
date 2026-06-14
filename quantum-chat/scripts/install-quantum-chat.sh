@@ -162,12 +162,18 @@ systemctl daemon-reload
 systemctl enable quantum-chat >/dev/null 2>&1 || true
 
 # --- 14. firewall -----------------------------------------------------------
-log "Configuring firewall (UDP/TCP 53 + SSH)..."
+# This node normally runs ALONGSIDE the main DrFX Quantum web platform, which
+# needs 80/443. Open them here too, so that enabling ufw can never silently cut
+# off the website (or Let's Encrypt's port-80 challenge) on a shared box. On a
+# dedicated DNS-only box these rules are harmless (nothing listens there).
+log "Configuring firewall (UDP/TCP 53 + SSH + HTTP/HTTPS)..."
 ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null 2>&1 || true
 ufw allow 53/udp >/dev/null 2>&1 || true
 ufw allow 53/tcp >/dev/null 2>&1 || true
+ufw allow 80/tcp >/dev/null 2>&1 || true
+ufw allow 443/tcp >/dev/null 2>&1 || true
 if ! ufw status | grep -q "Status: active"; then
-  warn "Enabling ufw (SSH already allowed above)."
+  warn "Enabling ufw (SSH, DNS, and HTTP/HTTPS allowed above)."
   yes | ufw enable >/dev/null 2>&1 || true
 fi
 

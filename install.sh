@@ -194,6 +194,15 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t > /dev/null 2>&1 && systemctl restart nginx
 echo -e "  ${GREEN}✓${NC} Nginx configured"
 
+# If a local firewall (ufw) is active, ensure the web ports are open — otherwise
+# the site, and Let's Encrypt's port-80 challenge in Step 6, is unreachable from
+# the internet. (Installing the Quantum Chat node enables ufw, for example.)
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+  ufw allow 80/tcp >/dev/null 2>&1 || true
+  ufw allow 443/tcp >/dev/null 2>&1 || true
+  echo -e "  ${GREEN}✓${NC} Firewall (ufw) allows HTTP/HTTPS"
+fi
+
 echo ""; echo -e "${BOLD}── Step 5: Start ──${NC}"; echo ""
 pm2 delete drfx-quantum > /dev/null 2>&1 || true
 pm2 start server.js --name drfx-quantum --cwd "$APP_DIR"
