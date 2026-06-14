@@ -122,7 +122,7 @@ function buildSidebar(){
   </div>`;
   ov.onclick=()=>ov.style.display="none";
   const nav=$("#sb-nav");
-  [{l:"👤 Profile",fn:openProfile},{l:"📊 Manual Trading",fn:openManualTrading},{l:"🔴 Live Trading",fn:openLiveTrading},{l:"⭐ Subscription",fn:openSub},{l:I.settings+" Settings",fn:openSettings}].forEach(n=>{const b=ce("button");b.className="sbtn";b.innerHTML=n.l;b.onclick=()=>{ov.style.display="none";n.fn();};nav.appendChild(b);});
+  [{l:"👤 Profile",fn:openProfile},{l:"📊 Manual Trading",fn:openManualTrading},{l:"🔴 Live Trading",fn:openLiveTrading},{l:"🛡️ Quantum Chat",fn:openQuantumChat},{l:"⭐ Subscription",fn:openSub},{l:I.settings+" Settings",fn:openSettings}].forEach(n=>{const b=ce("button");b.className="sbtn";b.innerHTML=n.l;b.onclick=()=>{ov.style.display="none";n.fn();};nav.appendChild(b);});
   if(S.user.role==="admin"){const b=ce("button");b.className="sbtn";b.innerHTML="⚙️ Admin Panel";b.onclick=()=>{ov.style.display="none";openAdmin();};nav.appendChild(b);}
   const lo=ce("button");lo.className="sbtn";lo.style.color="#ff6b6b";lo.innerHTML=I.logout+" Sign Out";lo.onclick=()=>{S.token=null;S.user=null;S.chats=[];S.activeChat=null;localStorage.removeItem("dq_t");localStorage.removeItem("dq_u");if(S.socket)S.socket.disconnect();render();};nav.appendChild(lo);
 }
@@ -275,6 +275,9 @@ function msgBubble(m){
 function showMsgMenu(msgId){
   const msg=S.chatMsgs.find(m=>m.id===msgId);if(!msg)return;
   const mine=msg.user_id===S.user.id;
+  const canModerate=["admin","manager","superadmin"].includes(S.user.role);
+  // Users can act only on their own messages; admins/managers on any message.
+  if(!mine&&!canModerate)return;
   const old=$("#ctx-menu");if(old)old.remove();
   const ov=ce("div");ov.id="ctx-menu";ov.style.cssText=`position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;animation:fi .15s`;ov.onclick=()=>ov.remove();
   const menu=ce("div");menu.style.cssText=`background:${t.ctx};border:1px solid ${t.ba};border-radius:16px;padding:8px;min-width:220px;box-shadow:${t.sh}`;menu.onclick=e=>e.stopPropagation();
@@ -782,6 +785,18 @@ function openLiveTrading(){
   };
 }
 
+function openQuantumChat(){
+  const isDark=S.theme==="dark";const bgCol=isDark?"#030812":"#f0f2f5";
+  const cardBg=isDark?"rgba(12,18,42,.95)":"rgba(255,255,255,.95)";const barBd=isDark?"rgba(100,150,255,.15)":"rgba(0,0,0,.1)";
+  const txtCol=isDark?"#e0e8ff":"#1a1a2e";const btnBg=isDark?"rgba(30,45,80,.8)":"rgba(230,235,245,.9)";
+  const ov=ce("div");ov.id="qc-overlay";
+  ov.style.cssText=`position:fixed;inset:0;z-index:5000;background:${bgCol};display:flex;flex-direction:column;animation:fi .2s`;
+  ov.innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:${cardBg};backdrop-filter:blur(20px);border-bottom:1px solid ${barBd};flex-shrink:0"><button id="qc-back" style="width:36px;height:36px;border-radius:10px;border:1px solid ${barBd};background:${btnBg};color:${txtCol};cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">←</button><span style="font-size:18px">🛡️</span><div style="flex:1;color:${txtCol};font-weight:700;font-size:15px">Quantum Chat <span style="font-weight:400;font-size:12px;opacity:.7">· encrypted emergency messenger</span></div><button id="qc-tab" style="padding:7px 12px;border-radius:8px;border:1px solid ${barBd};background:${btnBg};color:${txtCol};cursor:pointer;font-size:12px;font-family:'Outfit',sans-serif">Open in tab ↗</button></div><iframe id="qc-frame" src="/quantum-chat.html" style="flex:1;width:100%;border:none;background:${bgCol}"></iframe>`;
+  document.body.appendChild(ov);
+  ov.querySelector("#qc-back").onclick=()=>ov.remove();
+  ov.querySelector("#qc-tab").onclick=()=>window.open("/quantum-chat.html","_blank");
+}
+
 function openProfile(){modal("Profile",(body,close)=>{let newAv=S.user.avatar;body.innerHTML=`<div style="text-align:center;margin-bottom:16px"><div id="pp-av" style="display:inline-block;cursor:pointer;position:relative">${avatar(S.user.avatar||"🧑‍💻",72)}<div style="position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;background:${t.pg};display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid ${t.mod}">${I.photo}</div></div><input id="pp-fi" type="file" accept="image/*" style="display:none"/></div><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Username</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:${t.t3};font-size:14px">@</span><input id="pp-u" class="gi" value="${esc(S.user.username||"")}" style="padding-left:28px;margin-bottom:10px;font-size:14px"/></div><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Name</label><input id="pp-n" class="gi" value="${esc(S.user.name||"")}" style="margin-bottom:10px;font-size:14px"/><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Bio</label><textarea id="pp-b" class="gi" rows="3" style="resize:none;margin-bottom:10px;font-size:14px" placeholder="Tell about yourself...">${esc(S.user.bio||"")}</textarea><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Email</label><div style="padding:10px;border-radius:12px;background:${t.cd};border:1px solid ${t.bd};color:${t.t3};font-size:13px;margin-bottom:14px">${esc(S.user.email)}</div><button id="pp-save" class="pb" style="width:100%" type="button">Save</button>`;body.querySelector("#pp-av").onclick=()=>body.querySelector("#pp-fi").click();body.querySelector("#pp-fi").onchange=async function(){if(!this.files[0])return;const fd=new FormData();fd.append("file",this.files[0]);const r=await fetch("/api/upload",{method:"POST",headers:{Authorization:"Bearer "+S.token},body:fd});const d=await r.json();if(d.url){newAv=d.url;body.querySelector("#pp-av").innerHTML=avatar(newAv,72);}};body.querySelector("#pp-save").onclick=async()=>{try{const u=await api("/auth/profile",{method:"PUT",body:JSON.stringify({name:body.querySelector("#pp-n").value.trim(),bio:body.querySelector("#pp-b").value.trim(),avatar:newAv,username:body.querySelector("#pp-u").value.trim()})});S.user={...S.user,...u};localStorage.setItem("dq_u",JSON.stringify(S.user));close();renderApp();}catch(e){alert(e.error||"Error");}};});}
 
 function openSettings(){modal("Settings",(body,close)=>{body.innerHTML=`<div style="color:${t.t2};font-size:12px;font-weight:600;margin-bottom:10px">Theme</div><div id="th-c" style="display:flex;gap:10px;margin-bottom:16px"></div><div style="padding:12px;border-radius:14px;background:${t.cd};border:1px solid ${t.bd};color:${t.t3};font-size:12px;text-align:center">📈 DrFX Quantum v5.2</div>`;const tc=body.querySelector("#th-c");[{id:"dark",l:"Galaxy Dark",ic:I.moon},{id:"light",l:"Crystal Light",ic:I.sun}].forEach(th=>{const c=ce("div");c.style.cssText=`flex:1;padding:14px;border-radius:16px;border:${S.theme===th.id?`2px solid ${t.pr}`:`1px solid ${t.bd}`};background:${S.theme===th.id?t.ta:"transparent"};cursor:pointer;text-align:center`;c.innerHTML=`<div style="margin-bottom:6px;color:${S.theme===th.id?t.ac:t.t3}">${th.ic}</div><div style="color:${S.theme===th.id?t.t1:t.t3};font-size:13px;font-weight:600">${th.l}</div>`;c.onclick=()=>{close();setTheme(th.id);};tc.appendChild(c);});});}
@@ -798,7 +813,7 @@ function connectSocket(){
   S.socket.on("chat_message",msg=>{
     const ch=S.chats.find(c=>c.id===msg.chat_id);
     if(ch){ch.lastMessage=msg;if(msg.chat_id!==S.activeChat||document.hidden)ch.unread=(ch.unread||0)+1;S.chats=S.chats.filter(c=>c.id!==msg.chat_id);S.chats.unshift(ch);renderChatListItems();}else loadChats();
-    if(msg.chat_id===S.activeChat){S.chatMsgs.push(msg);const mc=$("#cv-msgs");if(mc){mc.innerHTML+=msgBubble(msg);scrollB(mc);const newEl=mc.querySelector(`[data-mid="${msg.id}"]`);if(newEl){let timer;newEl.oncontextmenu=e=>{e.preventDefault();showMsgMenu(msg.id);};newEl.ontouchstart=()=>{timer=setTimeout(()=>showMsgMenu(msg.id),500);};newEl.ontouchmove=()=>clearTimeout(timer);newEl.ontouchend=()=>clearTimeout(timer);}}api(`/chats/${msg.chat_id}/read`,{method:"POST"}).catch(()=>{});if(ch)ch.unread=0;renderChatListItems();}
+    if(msg.chat_id===S.activeChat){S.chatMsgs.push(msg);const mc=$("#cv-msgs");if(mc){mc.insertAdjacentHTML("beforeend",msgBubble(msg));scrollB(mc);const newEl=mc.querySelector(`[data-mid="${msg.id}"]`);if(newEl){let timer;newEl.oncontextmenu=e=>{e.preventDefault();showMsgMenu(msg.id);};newEl.ontouchstart=()=>{timer=setTimeout(()=>showMsgMenu(msg.id),500);};newEl.ontouchmove=()=>clearTimeout(timer);newEl.ontouchend=()=>clearTimeout(timer);}}api(`/chats/${msg.chat_id}/read`,{method:"POST"}).catch(()=>{});if(ch)ch.unread=0;renderChatListItems();}
     if(msg.user_id!==S.user.id)playNotif();
   });
   S.socket.on("message_edited",msg=>{const idx=S.chatMsgs.findIndex(m=>m.id===msg.id);if(idx>=0){S.chatMsgs[idx]=msg;const mc=$("#cv-msgs");if(mc){mc.innerHTML=S.chatMsgs.map(m=>msgBubble(m)).join("");scrollB(mc);bindMsgEvents(mc);}}});

@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<title>Quantum Chat — DrFX Quantum</title>
+<meta name="theme-color" content="#030812"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+  :root{--bg:#030812;--panel:rgba(12,18,42,.85);--card:rgba(20,30,60,.45);--bd:rgba(100,150,255,.15);--t1:#e0e8ff;--t2:#a0b4d8;--t3:#7088a8;--accent:#4a8cff;--green:#4ade80;--red:#ff6b6b;--amber:#f59e0b}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Outfit',system-ui,-apple-system,sans-serif}
+  body{background:radial-gradient(ellipse at 30% 20%,#0d1a35,#060d1f 50%,#020714);color:var(--t1);min-height:100vh}
+  .wrap{max-width:760px;margin:0 auto;padding:18px 16px 60px}
+  .card{background:var(--panel);backdrop-filter:blur(20px);border:1px solid var(--bd);border-radius:18px;padding:18px;margin-bottom:14px}
+  h1{font-size:20px;font-weight:700;display:flex;align-items:center;gap:8px}
+  h1 .sub{font-size:12px;font-weight:400;color:var(--t3)}
+  h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--t2);margin-bottom:10px}
+  label{display:block;color:var(--t2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px}
+  input,textarea{width:100%;padding:12px 14px;border-radius:11px;background:rgba(15,22,45,.7);border:1px solid var(--bd);color:var(--t1);font-size:15px;outline:none;-webkit-appearance:none}
+  input:focus,textarea:focus{border-color:rgba(100,150,255,.4)}
+  textarea{resize:none}
+  .btn{padding:11px 18px;border-radius:11px;border:none;background:linear-gradient(135deg,#3a6cdc,#2a5cc0);color:#fff;font-weight:600;font-size:14px;cursor:pointer;box-shadow:0 4px 16px rgba(58,108,220,.35)}
+  .btn:active{transform:scale(.97)}.btn:disabled{opacity:.5;cursor:wait}
+  .btn.ghost{background:rgba(30,45,80,.6);box-shadow:none;border:1px solid var(--bd)}
+  .btn.sm{padding:6px 12px;font-size:12px;border-radius:9px}
+  .row{display:flex;gap:8px;align-items:center}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:8px;background:rgba(20,30,60,.6);font-size:12px;color:var(--t2)}
+  .status{font-size:12px;color:var(--t3);padding:8px 12px;border-radius:10px;background:rgba(20,30,60,.4);border:1px solid var(--bd);margin-bottom:12px}
+  .status.ok{color:var(--green);border-color:rgba(74,222,128,.3)}
+  .status.warn{color:var(--amber);border-color:rgba(245,158,11,.3)}
+  .status.err{color:var(--red);border-color:rgba(255,107,107,.3)}
+  .contact{display:flex;align-items:center;gap:10px;padding:10px;border-radius:11px;cursor:pointer;border:1px solid transparent}
+  .contact:hover{background:var(--card)}
+  .contact.active{background:rgba(50,90,200,.18);border-color:var(--bd)}
+  .avatar{width:38px;height:38px;border-radius:50%;background:rgba(50,90,200,.25);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+  .badge{font-size:10px;padding:1px 7px;border-radius:6px;font-weight:600}
+  .badge.v{background:rgba(74,222,128,.15);color:var(--green)}
+  .badge.u{background:rgba(245,158,11,.15);color:var(--amber)}
+  .msgs{display:flex;flex-direction:column;gap:6px;max-height:42vh;overflow-y:auto;padding:6px 2px;margin-bottom:10px}
+  .msg{max-width:80%;padding:8px 12px;border-radius:13px;font-size:14px;line-height:1.45;word-break:break-word}
+  .msg.mine{align-self:flex-end;background:linear-gradient(135deg,rgba(55,100,220,.6),rgba(40,80,180,.5));border-bottom-right-radius:4px}
+  .msg.theirs{align-self:flex-start;background:rgba(25,35,70,.7);border:1px solid var(--bd);border-bottom-left-radius:4px}
+  .muted{color:var(--t3);font-size:13px}
+  .warnbar{font-size:12px;line-height:1.5;color:var(--amber);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+  a{color:var(--accent)}
+  code{background:rgba(0,0,0,.25);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script type="module">
+const $ = (s, r=document) => r.querySelector(s);
+const E = (s) => { const d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML; };
+const LS_ZONE = "dq_qc_zone";
+
+let QuantumChat;
+try {
+  ({ default: QuantumChat } = await import("/qc/quantum-chat.js"));
+} catch (err) {
+  $("#app").innerHTML = `<div class="card"><h1>🛡️ Quantum Chat</h1>
+    <div class="status err" style="margin-top:14px">Couldn't load the Quantum Chat client module from <code>/qc/quantum-chat.js</code>.<br><br>
+    This page is served by the main platform, but the browser client lives in <code>quantum-chat/web/</code> and must be deployed with it.
+    Re-run <code>install.sh</code> (it now copies <code>quantum-chat/web</code>) or copy that folder into the app directory, then reload.<br><br>
+    <span class="muted">${E(err.message)}</span></div></div>`;
+  throw err;
+}
+
+let qc = null;
+let activeId = null;
+let pollTimer = null;
+const threads = new Map();   // contactId -> [{ text, mine }]
+
+function setStatus(msg, kind) {
+  const el = $("#status");
+  if (el) { el.textContent = msg; el.className = "status " + (kind || ""); }
+}
+
+function caveatBar() {
+  return `<div class="warnbar"><b>Best-effort, not guaranteed.</b> Quantum Chat routes end-to-end-encrypted text over DNS-over-HTTPS. It works when DoH is reachable (often true even under censorship) but not if all HTTPS is blocked — that needs the native client. This browser client is reference code; identities here last for this session only. Always compare a contact's safety number out of band before trusting it.</div>`;
+}
+
+// ── Connect screen ────────────────────────────────────────────────────────
+function renderConnect() {
+  const zone = localStorage.getItem(LS_ZONE) || "";
+  $("#app").innerHTML = `
+    <div class="card">
+      <h1>🛡️ Quantum Chat <span class="sub">· encrypted emergency messenger</span></h1>
+    </div>
+    ${caveatBar()}
+    <div class="card">
+      <h2>Connect to your node</h2>
+      <label>Quantum Chat zone (the delegated subdomain of your node)</label>
+      <input id="zone" placeholder="qc.yourdomain.com" value="${E(zone)}" autocapitalize="off" autocorrect="off" spellcheck="false"/>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="connect-btn">Connect</button>
+        <span class="muted">Generates a fresh identity and registers it with the node.</span>
+      </div>
+      <div id="status" class="status" style="margin-top:12px;display:none"></div>
+    </div>`;
+  $("#connect-btn").onclick = () => connect($("#zone").value);
+  $("#zone").onkeydown = (e) => { if (e.key === "Enter") connect($("#zone").value); };
+}
+
+async function connect(zone) {
+  zone = (zone || "").trim().toLowerCase();
+  if (!zone) { alert("Enter your Quantum Chat zone (e.g. qc.yourdomain.com)"); return; }
+  localStorage.setItem(LS_ZONE, zone);
+  const btn = $("#connect-btn"); if (btn) { btn.disabled = true; btn.textContent = "Connecting…"; }
+  const st = $("#status"); if (st) st.style.display = "block";
+  setStatus("Generating identity…");
+  qc = new QuantumChat({ zone });
+  try {
+    await qc.createIdentity();
+  } catch (e) {
+    setStatus("This browser can't do the required crypto (WebCrypto Ed25519/X25519): " + e.message, "err");
+    if (btn) { btn.disabled = false; btn.textContent = "Connect"; }
+    return;
+  }
+  renderMain(zone);
+  setStatus("Registering identity with the node…");
+  try {
+    await qc.register();
+    setStatus("Connected to " + zone, "ok");
+  } catch (e) {
+    setStatus("Identity created, but the node didn't answer (" + e.message + "). Confirm the zone is delegated and the node is running, then use Re-register.", "warn");
+  }
+}
+
+// ── Main screen ───────────────────────────────────────────────────────────
+function renderMain(zone) {
+  $("#app").innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h1>🛡️ Quantum Chat</h1>
+        <label class="row" style="margin:0;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--t2)">
+          <input type="checkbox" id="emergency" style="width:auto"/> Emergency mode
+        </label>
+      </div>
+      <div id="status" class="status" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <h2>My identity</h2>
+      <label>My ID — share this so others can add you</label>
+      <div class="row"><input class="mono" id="my-id" readonly value="${E(qc.myId() || "")}"/><button class="btn ghost sm" id="copy-id">Copy</button></div>
+      <label style="margin-top:12px">Safety number — read this aloud to a contact to confirm no one is in the middle</label>
+      <div class="mono" id="my-fp" style="font-size:13px;color:var(--t2);word-break:break-word"></div>
+      <div class="row" style="margin-top:12px"><button class="btn ghost sm" id="reregister">Re-register</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Add a contact</h2>
+      <label>Their 20-character ID</label>
+      <input class="mono" id="add-id" placeholder="K8F2X9Q7L4M1T6R3Z0W2" autocapitalize="characters" autocorrect="off" spellcheck="false"/>
+      <label style="margin-top:10px">Name (only stored on this device)</label>
+      <input id="add-name" placeholder="e.g. Sam"/>
+      <div class="row" style="margin-top:12px"><button class="btn" id="add-btn">Add contact</button></div>
+      <div id="add-result" class="muted" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Contacts</h2>
+      <div id="contacts"><div class="muted">No contacts yet. Add one by ID above.</div></div>
+    </div>
+
+    <div class="card" id="convo" style="display:none">
+      <h2 id="convo-title">Conversation</h2>
+      <div class="warnbar" id="verify-note" style="display:none"></div>
+      <div class="msgs" id="msgs"></div>
+      <div class="row">
+        <textarea id="composer" rows="1" placeholder="Message…"></textarea>
+        <button class="btn" id="send-btn">Send</button>
+      </div>
+    </div>`;
+
+  $("#copy-id").onclick = () => copy(qc.myId());
+  $("#reregister").onclick = async () => { setStatus("Re-registering…"); try { await qc.register(); setStatus("Registered with " + zone, "ok"); } catch (e) { setStatus("Node didn't answer: " + e.message, "warn"); } };
+  $("#add-btn").onclick = addContact;
+  $("#add-id").onkeydown = (e) => { if (e.key === "Enter") addContact(); };
+  $("#send-btn").onclick = sendMsg;
+  $("#composer").onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } };
+  $("#emergency").onchange = (e) => toggleEmergency(e.target.checked);
+  qc.myFingerprint().then(fp => { const el = $("#my-fp"); if (el) el.textContent = fp; });
+  renderContacts();
+}
+
+async function addContact() {
+  const raw = ($("#add-id").value || "").trim();
+  const name = ($("#add-name").value || "").trim();
+  const out = $("#add-result");
+  if (!raw) { out.innerHTML = `<span style="color:var(--red)">Enter an ID.</span>`; return; }
+  out.textContent = "Looking up keys via DNS…";
+  try {
+    const { id, fingerprint } = await qc.addContact(raw, name);
+    out.innerHTML = `Added <b>${E(name || id)}</b>. Safety number:<br><span class="mono" style="color:var(--t2)">${E(fingerprint)}</span><br>Compare it with them out of band, then tap Verify.`;
+    $("#add-id").value = ""; $("#add-name").value = "";
+    renderContacts();
+  } catch (e) {
+    out.innerHTML = `<span style="color:var(--red)">${E(e.message)}</span>`;
+  }
+}
+
+function renderContacts() {
+  const box = $("#contacts");
+  const list = [...qc.contacts.entries()];
+  if (!list.length) { box.innerHTML = `<div class="muted">No contacts yet. Add one by ID above.</div>`; return; }
+  box.innerHTML = "";
+  for (const [id, c] of list) {
+    const el = document.createElement("div");
+    el.className = "contact" + (id === activeId ? " active" : "");
+    el.innerHTML = `<div class="avatar">🛡️</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${E(c.name || id)}</div>
+        <div class="mono" style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis">${E(id)}</div>
+      </div>
+      <span class="badge ${c.verified ? "v" : "u"}">${c.verified ? "verified" : "unverified"}</span>`;
+    el.onclick = () => openConvo(id);
+    box.appendChild(el);
+  }
+}
+
+function openConvo(id) {
+  activeId = id;
+  const c = qc.contacts.get(id);
+  $("#convo").style.display = "block";
+  $("#convo-title").textContent = c.name || id;
+  const vn = $("#verify-note");
+  if (!c.verified) {
+    vn.style.display = "block";
+    vn.innerHTML = `Unverified contact. Compare this safety number out of band, then verify:<br><span class="mono">${E(c.fingerprint || "")}</span><br><button class="btn sm" id="verify-btn" style="margin-top:8px">Mark verified</button>`;
+    $("#verify-btn").onclick = () => { qc.markVerified(id); renderContacts(); openConvo(id); };
+  } else { vn.style.display = "none"; }
+  renderThread();
+  renderContacts();
+  $("#convo").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function renderThread() {
+  const box = $("#msgs");
+  const items = threads.get(activeId) || [];
+  if (!items.length) { box.innerHTML = `<div class="muted">No messages yet.</div>`; return; }
+  box.innerHTML = items.map(m => `<div class="msg ${m.mine ? "mine" : "theirs"}">${E(m.text)}</div>`).join("");
+  box.scrollTop = box.scrollHeight;
+}
+
+function pushMsg(contactId, text, mine) {
+  if (!threads.has(contactId)) threads.set(contactId, []);
+  threads.get(contactId).push({ text, mine });
+  if (contactId === activeId) renderThread();
+}
+
+async function sendMsg() {
+  if (!activeId) return;
+  const ta = $("#composer");
+  const text = (ta.value || "").trim();
+  if (!text) return;
+  const btn = $("#send-btn"); btn.disabled = true;
+  try {
+    await qc.send(activeId, text);
+    pushMsg(activeId, text, true);
+    ta.value = "";
+  } catch (e) {
+    setStatus("Send failed: " + e.message, "warn");
+  } finally { btn.disabled = false; }
+}
+
+async function pollOnce() {
+  if (!qc) return;
+  try {
+    const msgs = await qc.poll();
+    for (const m of msgs) pushMsg(m.from, m.text, false);
+    if (msgs.length) setStatus(`Received ${msgs.length} message(s)`, "ok");
+  } catch (e) {
+    setStatus("Poll error: " + e.message, "warn");
+  }
+}
+
+function toggleEmergency(on) {
+  qc.setEmergencyMode(on);
+  if (on) {
+    setStatus("Emergency mode on — polling over DNS every 15s", "ok");
+    pollOnce();
+    pollTimer = setInterval(pollOnce, 15000);
+  } else {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    setStatus("Emergency mode off — not polling", "");
+  }
+}
+
+async function copy(text) {
+  try {
+    if (navigator.clipboard) await navigator.clipboard.writeText(text);
+    else { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+    setStatus("Copied to clipboard", "ok");
+  } catch { setStatus("Copy failed", "warn"); }
+}
+
+renderConnect();
+</script>
+</body>
+</html>

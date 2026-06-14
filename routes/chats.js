@@ -270,6 +270,9 @@ router.put("/:chatId/messages/:msgId", async (req, res) => {
     if (!mem) return res.status(403).json({ error: "Not a member" });
     const { rows: [msg] } = await pool.query("SELECT * FROM messages WHERE id=$1 AND chat_id=$2", [msgId, chatId]);
     if (!msg) return res.status(404).json({ error: "Not found" });
+    // Only the author may edit; admins/managers may edit anyone's message.
+    const canModerate = ["admin", "manager", "superadmin"].includes(req.user.role);
+    if (msg.user_id !== req.user.id && !canModerate) return res.status(403).json({ error: "You can only edit your own messages" });
     const { content } = req.body;
     const { rows: [updated] } = await pool.query("UPDATE messages SET content=$1,edited_at=NOW() WHERE id=$2 RETURNING *", [String(content).slice(0, 4000), msgId]);
     const { rows: [sender] } = await pool.query("SELECT name,avatar,role FROM users WHERE id=$1", [msg.user_id]);
@@ -289,6 +292,9 @@ router.delete("/:chatId/messages/:msgId", async (req, res) => {
     if (!mem) return res.status(403).json({ error: "Not a member" });
     const { rows: [msg] } = await pool.query("SELECT * FROM messages WHERE id=$1 AND chat_id=$2", [msgId, chatId]);
     if (!msg) return res.status(404).json({ error: "Not found" });
+    // Only the author may delete; admins/managers may delete anyone's message.
+    const canModerate = ["admin", "manager", "superadmin"].includes(req.user.role);
+    if (msg.user_id !== req.user.id && !canModerate) return res.status(403).json({ error: "You can only delete your own messages" });
     await pool.query("DELETE FROM messages WHERE id=$1", [msgId]);
     const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
     members.forEach(m => io.to(`user_${m.user_id}`).emit("message_deleted", { id: msgId, chat_id: chatId }));

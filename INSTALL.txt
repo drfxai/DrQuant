@@ -33,7 +33,8 @@ install.sh is a one-shot installer. It will:
   - Install Node.js 20, PostgreSQL, Nginx, PM2, and (optionally) certbot.
   - Create the `drfx_quantum` PostgreSQL database and a `drfx` user.
   - Copy the application to /var/www/drfx-quantum (including the routes,
-    public assets, middleware, services, realtime, and migrations).
+    public assets, middleware, services, realtime, migrations, and the
+    Quantum Chat browser client served at /qc).
   - Generate /var/www/drfx-quantum/.env with secure random secrets
     (JWT secret, TradingView webhook secret, etc.).
   - Create the base database tables, then apply every migration in
@@ -50,6 +51,7 @@ Prompts it will ask:
   - NowPayments IPN secret        (optional - press Enter to skip)
   - Proceed? (y/n)
   - Setup SSL now? (y/n)
+  - Install the Quantum Chat node now? (y/n)   (optional - see section 5)
 
 When it finishes:
   - The app is reachable at http://your-domain  (https if you enabled SSL).
@@ -118,5 +120,43 @@ PostgreSQL:
   Process manager  PM2 process name: drfx-quantum
   Web server       Nginx, proxying to 127.0.0.1:3000
   Database         PostgreSQL db "drfx_quantum", user "drfx"
+
+============================================================================
+ 5. QUANTUM CHAT (optional)
+============================================================================
+
+Quantum Chat is a DNS-resilient, end-to-end-encrypted "emergency" messenger.
+It is a SEPARATE service from the main platform and is designed to keep working
+even if the main site is blocked (and vice-versa). Keys, contacts, and messages
+stay in the browser; they are never sent to the Node backend or the Postgres DB.
+
+Two parts:
+
+  a) The in-app panel (always available).
+     A "Quantum Chat" item appears in the in-app menu (sidebar). It opens the
+     browser client (served by the main app at /quantum-chat.html, using the
+     module at /qc/quantum-chat.js). install.sh deploys this automatically.
+     The panel lets a user generate an ID, add/verify contacts by safety
+     number, and exchange messages - but it needs a running node to connect to.
+
+  b) The node (optional, installed separately).
+     install.sh "Step 7" offers to install the Quantum Chat node. You can also
+     run it later:
+        sudo bash quantum-chat/scripts/install-quantum-chat.sh
+
+     The node is a DNS service. It requires, OUTSIDE any installer:
+       - A subdomain delegated to this server (e.g. an NS record so that
+         qc.yourdomain.com is served by ns1.yourdomain.com, with an A record
+         for ns1 pointing at the server's public IP).
+       - Your hosting provider's firewall to allow UDP and TCP port 53.
+     The installer can free a local port 53 held by systemd-resolved, but it
+     cannot create DNS delegation or open provider-level firewalls for you.
+
+Honest status: the browser client is reference code that mirrors the verified
+Go node byte-for-byte but has not been browser-tested against a live node here;
+identities created in the panel currently last for the session only. Treat
+Emergency Mode as best-effort (it works when DNS-over-HTTPS is reachable, not
+when all HTTPS is blocked), and always compare a contact's safety number out of
+band before trusting it.
 
 ============================================================================

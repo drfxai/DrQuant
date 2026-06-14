@@ -27,6 +27,9 @@ app.use("/api/webhooks", require("./routes/webhooks"));
 app.use(express.json({ limit: "12mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/uploads", express.static(UPLOAD_DIR));
+// Quantum Chat browser client — served for the in-app /quantum-chat.html panel.
+// The canonical module lives in quantum-chat/web/ (deployed by install.sh).
+app.use("/qc", express.static(path.join(__dirname, "quantum-chat", "web")));
 
 function authMiddleware(req, res, next) {
   const h = req.headers.authorization;

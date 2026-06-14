@@ -10,7 +10,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 APP_DIR="/var/www/drfx-quantum"
 # Directory this installer (and the repo) live in — used to locate migrations
-# even after we cd into $APP_DIR.
+# and the optional Quantum Chat installer even after we cd into $APP_DIR.
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 clear
@@ -100,9 +100,15 @@ if [ -f "$SRC_DIR/server.js" ]; then
   for d in middleware services migrations realtime; do
     [ -d "$SRC_DIR/$d" ] && cp -r "$SRC_DIR/$d" "$APP_DIR/"
   done
+  # Quantum Chat browser client — served at /qc for the in-app Quantum Chat panel.
+  # Only web/ is needed by the Node app; the Go node installs separately (Step 7).
+  if [ -d "$SRC_DIR/quantum-chat/web" ]; then
+    mkdir -p "$APP_DIR/quantum-chat"
+    cp -r "$SRC_DIR/quantum-chat/web" "$APP_DIR/quantum-chat/"
+  fi
   [ -f "$SRC_DIR/uninstall.sh" ]   && cp "$SRC_DIR/uninstall.sh" "$APP_DIR/"
   [ -f "$SRC_DIR/INTEGRATION.md" ] && cp "$SRC_DIR/INTEGRATION.md" "$APP_DIR/"
-  echo -e "  ${GREEN}✓${NC} Files copied (incl. middleware, services, migrations, realtime)"
+  echo -e "  ${GREEN}✓${NC} Files copied (incl. middleware, services, migrations, realtime, quantum-chat web)"
 fi
 
 # Fail fast if a hard runtime dependency didn't make it into the deployed copy.
@@ -201,7 +207,22 @@ if [[ "$SSL" =~ ^[Yy]$ ]]; then
   certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$ADMIN_EMAIL" 2>&1 | tail -3 || echo -e "${YELLOW}  ⚠ Run: certbot --nginx -d $DOMAIN${NC}"
 fi
 
-echo ""; echo -e "${BOLD}── Step 7: Next steps ──${NC}"; echo ""
+echo ""; echo -e "${BOLD}── Step 7: Quantum Chat (optional) ──${NC}"; echo ""
+echo -e "  ${CYAN}Quantum Chat${NC} is the DNS-resilient, end-to-end-encrypted emergency messenger."
+echo -e "  It runs as a SEPARATE service (its own subdomain + DNS delegation + UDP/TCP 53)."
+echo -e "  The in-app Quantum Chat panel needs a running node to connect to."
+echo -ne "${YELLOW}➤ Install the Quantum Chat node now? (y/n): ${NC}"; read -r QC_INSTALL
+if [[ "$QC_INSTALL" =~ ^[Yy]$ ]]; then
+  if [ -f "$SRC_DIR/quantum-chat/scripts/install-quantum-chat.sh" ]; then
+    bash "$SRC_DIR/quantum-chat/scripts/install-quantum-chat.sh" || echo -e "${YELLOW}  ⚠ Quantum Chat install did not complete; the main platform is unaffected.${NC}"
+  else
+    echo -e "${YELLOW}  ⚠ quantum-chat/scripts/install-quantum-chat.sh not found in this checkout.${NC}"
+  fi
+else
+  echo -e "  ${CYAN}Skipped.${NC} Install later: sudo bash $SRC_DIR/quantum-chat/scripts/install-quantum-chat.sh"
+fi
+
+echo ""; echo -e "${BOLD}── Step 8: Next steps ──${NC}"; echo ""
 echo -e "  ${CYAN}Reminder:${NC} TradingView webhook secret is in ${APP_DIR}/.env (TRADINGVIEW_WEBHOOK_SECRET);"
 echo -e "  create a channel named 'signals' in-app so incoming signals have somewhere to post."
 
