@@ -201,10 +201,20 @@ pm2 save > /dev/null 2>&1; pm2 startup systemd -u root --hp /root > /dev/null 2>
 echo -e "  ${GREEN}✓${NC} Running with PM2"
 
 echo ""; echo -e "${BOLD}── Step 6: SSL ──${NC}"; echo ""
-command -v certbot &> /dev/null || apt install -y -qq certbot python3-certbot-nginx > /dev/null 2>&1
+# Always ensure BOTH certbot and its nginx plugin are installed. The old guard
+# `command -v certbot || apt install ...` skipped the plugin whenever certbot was
+# already present without it, so `certbot --nginx` failed with "nginx plugin does
+# not appear to be installed". apt is idempotent, so this is safe when present.
+apt install -y -qq certbot python3-certbot-nginx > /dev/null 2>&1 || true
 echo -ne "${YELLOW}➤ Setup SSL now? (y/n): ${NC}"; read -r SSL
 if [[ "$SSL" =~ ^[Yy]$ ]]; then
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$ADMIN_EMAIL" 2>&1 | tail -3 || echo -e "${YELLOW}  ⚠ Run: certbot --nginx -d $DOMAIN${NC}"
+  if certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$ADMIN_EMAIL"; then
+    echo -e "  ${GREEN}✓${NC} HTTPS enabled — https://$DOMAIN"
+  else
+    echo -e "${YELLOW}  ⚠ SSL setup did not complete; the app still works over HTTP.${NC}"
+    echo -e "${YELLOW}    Retry: sudo apt install -y python3-certbot-nginx && sudo certbot --nginx -d $DOMAIN${NC}"
+    echo -e "${YELLOW}    (If certbot was installed via snap: sudo snap install --classic certbot)${NC}"
+  fi
 fi
 
 echo ""; echo -e "${BOLD}── Step 7: Quantum Chat (optional) ──${NC}"; echo ""
