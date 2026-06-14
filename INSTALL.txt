@@ -68,6 +68,8 @@ Post-install steps for the trading features:
     NOWPAYMENTS_* values.
 
 Everyday management:
+  sudo bash /var/www/drfx-quantum/manage.sh   # reference card: current config,
+                                   # live resource usage, how to change each part
   pm2 logs drfx-quantum            # view live logs
   pm2 restart drfx-quantum         # restart after editing .env
   pm2 status                       # process status
@@ -102,13 +104,25 @@ PostgreSQL:
 
 
 ============================================================================
- 3. UPDATING
+ 3. UPDATING (in place, no full reinstall)
 ============================================================================
 
   cd /path/to/DrFXQuant
-  git pull
-  sudo bash install.sh        # idempotent: safe to re-run; re-applies
-                              # migrations and refreshes the deployed copy
+  git pull                    # fetch the new version (update.sh also tries this)
+  sudo bash update.sh
+
+  update.sh refreshes an existing install WITHOUT re-running first-time setup:
+    - Preserves your .env (domain, admin, secrets), the database + all data,
+      and the uploads/ folder.
+    - Refreshes the application code and Node dependencies.
+    - Applies only NEW database migrations (tracked in a schema_migrations
+      table; already-applied ones are skipped). On a migration error it stops
+      BEFORE restarting, so the currently-running version keeps serving.
+    - Backs up .env first, then restarts the app under PM2.
+    - Prints the management reference card at the end.
+
+  Re-running install.sh also works and is idempotent, but it re-prompts for
+  first-time configuration; update.sh is the quicker path for upgrades.
 
 
 ============================================================================

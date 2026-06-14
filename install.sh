@@ -106,8 +106,9 @@ if [ -f "$SRC_DIR/server.js" ]; then
     mkdir -p "$APP_DIR/quantum-chat"
     cp -r "$SRC_DIR/quantum-chat/web" "$APP_DIR/quantum-chat/"
   fi
-  [ -f "$SRC_DIR/uninstall.sh" ]   && cp "$SRC_DIR/uninstall.sh" "$APP_DIR/"
-  [ -f "$SRC_DIR/INTEGRATION.md" ] && cp "$SRC_DIR/INTEGRATION.md" "$APP_DIR/"
+  for f in uninstall.sh update.sh manage.sh INTEGRATION.md; do
+    [ -f "$SRC_DIR/$f" ] && cp "$SRC_DIR/$f" "$APP_DIR/"
+  done
   echo -e "  ${GREEN}✓${NC} Files copied (incl. middleware, services, migrations, realtime, quantum-chat web)"
 fi
 
@@ -142,6 +143,7 @@ NOWPAYMENTS_IPN_SECRET=${NP_IPN_SECRET:-your_nowpayments_ipn_secret_here}
 TRADINGVIEW_WEBHOOK_SECRET=$TV_SECRET
 SIGNAL_CHANNEL_USERNAME=signals
 NODE_ENV=production
+DOMAIN=$DOMAIN
 ALLOWED_ORIGINS=https://$DOMAIN
 ACCESS_TTL=15m
 REFRESH_TTL_DAYS=30
@@ -244,6 +246,9 @@ fi
 echo ""; echo -e "${BOLD}── Step 8: Next steps ──${NC}"; echo ""
 echo -e "  ${CYAN}Reminder:${NC} TradingView webhook secret is in ${APP_DIR}/.env (TRADINGVIEW_WEBHOOK_SECRET);"
 echo -e "  create a channel named 'signals' in-app so incoming signals have somewhere to post."
+
+# Print the full management reference card (current config + how to change each part).
+[ -f "$SRC_DIR/manage.sh" ] && bash "$SRC_DIR/manage.sh"
 
 echo ""
 echo -e "${GREEN}  ╔══════════════════════════════════════════════════╗${NC}"
