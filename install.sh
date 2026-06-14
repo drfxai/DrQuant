@@ -94,12 +94,26 @@ if [ -f "$SRC_DIR/server.js" ]; then
   # Additive backend modules + DB migrations, so the deployment is complete.
   # middleware/ and services/ are opt-in (see INTEGRATION.md); migrations/ is
   # applied below and is required for the TradingView signal/webhook tables.
-  for d in middleware services migrations; do
+  # NOTE: every new top-level runtime directory that server.js require()s MUST
+  # be added here, or the deployed copy will be missing it (realtime/ is such a
+  # dependency — its omission caused a MODULE_NOT_FOUND crash loop once).
+  for d in middleware services migrations realtime; do
     [ -d "$SRC_DIR/$d" ] && cp -r "$SRC_DIR/$d" "$APP_DIR/"
   done
   [ -f "$SRC_DIR/uninstall.sh" ]   && cp "$SRC_DIR/uninstall.sh" "$APP_DIR/"
   [ -f "$SRC_DIR/INTEGRATION.md" ] && cp "$SRC_DIR/INTEGRATION.md" "$APP_DIR/"
-  echo -e "  ${GREEN}✓${NC} Files copied (incl. middleware, services, migrations)"
+  echo -e "  ${GREEN}✓${NC} Files copied (incl. middleware, services, migrations, realtime)"
+fi
+
+# Fail fast if a hard runtime dependency didn't make it into the deployed copy.
+# server.js require()s ./realtime/* at startup; an explicit error here is far
+# better than a MODULE_NOT_FOUND crash loop under PM2 (which surfaces as a 502).
+if [ ! -f "$APP_DIR/realtime/messaging.js" ]; then
+  echo -e "${RED}✘ realtime/ modules are missing from $APP_DIR.${NC}"
+  echo -e "${YELLOW}  server.js depends on them. Ensure the realtime/ directory exists in this${NC}"
+  echo -e "${YELLOW}  checkout (commit & push it to GitHub if you deploy via git clone), then${NC}"
+  echo -e "${YELLOW}  re-run this installer.${NC}"
+  exit 1
 fi
 
 cd "$APP_DIR"
