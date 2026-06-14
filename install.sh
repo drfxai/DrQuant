@@ -10,7 +10,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 APP_DIR="/var/www/drfx-quantum"
 # Directory this installer (and the repo) live in — used to locate migrations
-# and the optional Quantum Chat installer even after we cd into $APP_DIR.
+# even after we cd into $APP_DIR.
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 clear
@@ -201,24 +201,7 @@ if [[ "$SSL" =~ ^[Yy]$ ]]; then
   certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$ADMIN_EMAIL" 2>&1 | tail -3 || echo -e "${YELLOW}  ⚠ Run: certbot --nginx -d $DOMAIN${NC}"
 fi
 
-echo ""; echo -e "${BOLD}── Step 7: Quantum Chat (optional) ──${NC}"; echo ""
-QC_INSTALLER="$SRC_DIR/quantum-chat/scripts/install-quantum-chat.sh"
-if [ -f "$QC_INSTALLER" ]; then
-  echo -e "  Quantum Chat is a separate DNS-based encrypted messenger. It needs a"
-  echo -e "  delegated subdomain (NS + A glue) and ${BOLD}UDP/TCP port 53${NC} reachable."
-  echo -e "  Details: quantum-chat/docs/dns-setup.md"
-  echo -ne "${YELLOW}➜ Install Quantum Chat now? (y/n): ${NC}"; read -r QC
-  if [[ "$QC" =~ ^[Yy]$ ]]; then
-    ( cd "$SRC_DIR" && bash "$QC_INSTALLER" ) \
-      || echo -e "${YELLOW}  ⚠ Quantum Chat install did not finish; run later: sudo bash $QC_INSTALLER${NC}"
-  else
-    echo -e "  ${CYAN}Skipped.${NC} Install later: ${BOLD}sudo bash $QC_INSTALLER${NC}"
-  fi
-else
-  echo -e "  ${YELLOW}⚠${NC} quantum-chat/ not found in this checkout."
-  echo -e "    If you expected it, confirm the folder was committed & pushed to GitHub."
-fi
-
+echo ""; echo -e "${BOLD}── Step 7: Next steps ──${NC}"; echo ""
 echo -e "  ${CYAN}Reminder:${NC} TradingView webhook secret is in ${APP_DIR}/.env (TRADINGVIEW_WEBHOOK_SECRET);"
 echo -e "  create a channel named 'signals' in-app so incoming signals have somewhere to post."
 
