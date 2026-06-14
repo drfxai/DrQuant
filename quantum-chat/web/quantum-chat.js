@@ -221,7 +221,8 @@ export class QuantumChat {
     const names = chunkUpstream(txid, this.zone, payload, "r");
     let last;
     for (const n of names) last = await dohTXT(n, this.resolvers);
-    if (!last || !/^OK /.test(last[0] || "")) throw new Error("register failed: " + (last && last[0]));
+    if (!last || !last.length) throw new Error("no answer from the node — is the zone delegated to a running Quantum Chat node?");
+    if (!/^OK /.test(last[0] || "")) throw new Error("node rejected registration: " + last[0]);
     return id;
   }
 
@@ -229,7 +230,8 @@ export class QuantumChat {
   async addContact(rawId, displayName) {
     const id = rawId.toUpperCase().replace(/[-\s]/g, "");
     const res = await dohTXT(`${rnd()}.${id}.k.${this.zone}`, this.resolvers);
-    if (!res.length || res[0] === "NF") throw new Error("unknown ID");
+    if (!res.length) throw new Error("no answer from the node — is the zone delegated and the node running?");
+    if (res[0] === "NF") throw new Error("that ID is not registered on this node yet");
     const keys = b64urlDecode(res.join(""));
     if (keys.length !== 64) throw new Error("bad key blob");
     const signPub = keys.slice(0, 32), dhPub = keys.slice(32, 64);
@@ -250,7 +252,8 @@ export class QuantumChat {
     const names = chunkUpstream(txid, this.zone, env, "s");
     let last;
     for (const n of names) last = await dohTXT(n, this.resolvers);
-    if (!last || !/^(DONE|DUP) /.test(last[0] || "")) throw new Error("send failed: " + (last && last[0]));
+    if (!last || !last.length) throw new Error("no answer from the node");
+    if (!/^(DONE|DUP) /.test(last[0] || "")) throw new Error("node rejected the message: " + last[0]);
     return txid;
   }
 

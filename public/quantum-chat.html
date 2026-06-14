@@ -45,6 +45,13 @@
   .warnbar{font-size:12px;line-height:1.5;color:var(--amber);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:12px;padding:10px 12px;margin-bottom:14px}
   a{color:var(--accent)}
   code{background:rgba(0,0,0,.25);padding:1px 6px;border-radius:5px;font-size:12px}
+  .switch{position:relative;display:inline-block;width:48px;height:27px;flex-shrink:0;cursor:pointer}
+  .switch input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer;z-index:2}
+  .switch .track{position:absolute;inset:0;border-radius:27px;background:rgba(255,107,107,.22);border:1px solid rgba(255,107,107,.45);transition:.2s}
+  .switch .knob{position:absolute;height:21px;width:21px;left:2px;top:2px;border-radius:50%;background:#ff8a8a;transition:.2s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  .switch input:checked ~ .track{background:rgba(74,222,128,.28);border-color:rgba(74,222,128,.6)}
+  .switch input:checked ~ .track .knob{transform:translateX(21px);background:var(--green)}
+  .em-state{font-size:11px;font-weight:700;letter-spacing:.5px}
 </style>
 </head>
 <body>
@@ -134,9 +141,13 @@ function renderMain(zone) {
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <h1>🛡️ Quantum Chat</h1>
-        <label class="row" style="margin:0;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:13px;color:var(--t2)">
-          <input type="checkbox" id="emergency" style="width:auto"/> Emergency mode
-        </label>
+        <div class="row" style="gap:10px">
+          <div style="text-align:right;line-height:1.25">
+            <div style="font-size:12px;color:var(--t2)">Emergency mode</div>
+            <div id="em-state" class="em-state" style="color:var(--red)">OFF</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="emergency"/><span class="track"><span class="knob"></span></span></label>
+        </div>
       </div>
       <div id="status" class="status" style="margin-top:12px"></div>
     </div>
@@ -279,6 +290,8 @@ async function pollOnce() {
 
 function toggleEmergency(on) {
   qc.setEmergencyMode(on);
+  const st = $("#em-state");
+  if (st) { st.textContent = on ? "ON" : "OFF"; st.style.color = on ? "var(--green)" : "var(--red)"; }
   if (on) {
     setStatus("Emergency mode on — polling over DNS every 15s", "ok");
     pollOnce();
