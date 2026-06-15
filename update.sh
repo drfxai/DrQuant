@@ -116,6 +116,21 @@ if ls "$APP_DIR"/migrations/*.sql >/dev/null 2>&1; then
   [ "$APPLIED_ANY" -eq 0 ] && echo -e "  ${GREEN}OK${NC} No new migrations" || echo -e "  ${GREEN}OK${NC} New migrations applied"
 fi
 
+# 7b) Grant the app's DB user access to every table/sequence. Migrations run as
+#     the postgres superuser, so tables they create (signals, webhook_logs, ...)
+#     end up owned by postgres and the app - which connects as DB_USER - then
+#     gets "permission denied for table ...". Idempotent; safe to run every time.
+DB_USER="$(grep -E '^DB_USER=' .env | head -1 | cut -d= -f2-)"; DB_USER="${DB_USER:-drfx}"
+echo -e "${CYAN}> Ensuring table privileges for ${DB_USER}...${NC}"
+if sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL
+GRANT USAGE ON SCHEMA public TO ${DB_USER};
+GRANT ALL ON ALL TABLES IN SCHEMA public TO ${DB_USER};
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO ${DB_USER};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${DB_USER};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${DB_USER};
+SQL
+then echo -e "  ${GREEN}OK${NC} Privileges ensured"; else echo -e "${YELLOW}  ! grant step had warnings (check DB_USER in .env)${NC}"; fi
+
 # 8) Restart (zero new config; just reload the new code + env).
 echo -e "${CYAN}> Restarting service...${NC}"
 pm2 restart "$PM2_NAME" --update-env 2>/dev/null || pm2 start server.js --name "$PM2_NAME" --cwd "$APP_DIR"

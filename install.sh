@@ -169,6 +169,20 @@ else
   echo -e "  ${YELLOW}⚠${NC} No migrations found — TradingView signal/webhook tables will be missing"
 fi
 
+# Grant the app user access to the migration-created tables. Migrations run as
+# the postgres superuser, so without this the app (which connects as $DB_USER)
+# hits "permission denied for table ..." on signals/webhook_logs. The Step 2
+# grant is DATABASE-level only and does NOT cover tables owned by postgres.
+echo -e "${CYAN}▸ Granting table privileges to $DB_USER...${NC}"
+if sudo -u postgres psql -d "$DB_NAME" >/dev/null 2>&1 <<SQL
+GRANT USAGE ON SCHEMA public TO $DB_USER;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO $DB_USER;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO $DB_USER;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO $DB_USER;
+SQL
+then echo -e "  ${GREEN}✓${NC} Table privileges granted"; else echo -e "  ${YELLOW}⚠${NC} Grant step had warnings"; fi
+
 echo ""; echo -e "${BOLD}── Step 4: Nginx ──${NC}"; echo ""
 cat > /etc/nginx/sites-available/drfx-quantum << NGINX
 server {
