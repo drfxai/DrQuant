@@ -21,12 +21,13 @@ const ic=(d,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="no
 const I={send:ic('<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>'),search:ic('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),menu:ic('<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>'),close:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),back:ic('<polyline points="15 18 9 12 15 6"/>'),dbl:ic('<polyline points="18 6 7 17 2 12"/><polyline points="24 6 13 17 10 14"/>',16),smile:ic('<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>'),settings:ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',18),sun:ic('<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>',18),moon:ic('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',18),logout:ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',18),eye:ic('<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',18),eyeOff:ic('<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',18),photo:ic('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',18),edit:ic('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',18),plus:ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),info:ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',18),users:ic('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',18),channel:ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',16),trash:ic('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',18),user:ic('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',18)};
 
 // ━━━ STATE ━━━
-const S={token:localStorage.getItem("dq_t"),user:null,theme:localStorage.getItem("dq_th")||"dark",chats:[],activeChat:null,chatMsgs:[],chatInfo:null,showInfo:false,mobileView:"list",onlineUsers:[],socket:null,replyTo:null,pinnedMsgs:[],pinIndex:0};
+const S={token:localStorage.getItem("dq_t"),user:null,theme:localStorage.getItem("dq_th")||"dark",chats:[],activeChat:null,chatMsgs:[],chatInfo:null,showInfo:false,mobileView:"list",onlineUsers:[],socket:null,replyTo:null,pinnedMsgs:[],pinIndex:0,pendingImage:null};
 let t=TH[S.theme];try{S.user=JSON.parse(localStorage.getItem("dq_u"));}catch{}
 
 function esc(s){if(!s)return"";const d=ce("div");d.textContent=s;return d.innerHTML;}
 function fmtTime(d){if(!d)return"";const dt=new Date(d),now=new Date(),diff=now-dt;if(isNaN(diff))return"";if(diff<60000)return"now";if(diff<3600000)return Math.floor(diff/60000)+"m";if(diff<86400000)return dt.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});return dt.toLocaleDateString([],{month:"short",day:"numeric"});}
-function fmtMsg(x){let h=esc(x);h=h.replace(/```(\w*)\n?([\s\S]*?)```/g,'<pre style="background:rgba(0,0,0,.3);padding:8px;border-radius:8px;overflow-x:auto;margin:4px 0;white-space:pre-wrap;font-size:12px"><code>$2</code></pre>');h=h.replace(/`([^`]+)`/g,'<code style="background:rgba(0,0,0,.2);padding:2px 5px;border-radius:4px;font-size:12px">$1</code>');h=h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');h=h.replace(/\*(.+?)\*/g,'<em>$1</em>');h=h.replace(/\n/g,'<br>');return h;}
+function fmtMsg(x){let h=esc(x);h=h.replace(/```(\w*)\n?([\s\S]*?)```/g,'<pre style="background:rgba(0,0,0,.3);padding:8px;border-radius:8px;overflow-x:auto;margin:4px 0;white-space:pre-wrap;font-size:12px"><code>$2</code></pre>');h=h.replace(/`([^`]+)`/g,'<code style="background:rgba(0,0,0,.2);padding:2px 5px;border-radius:4px;font-size:12px">$1</code>');h=h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');h=h.replace(/\*(.+?)\*/g,'<em>$1</em>');h=h.replace(/\n/g,'<br>');h=linkify(h);return h;}
+function linkify(h){return h.replace(/(\bhttps?:\/\/[^\s<"]+|\bwww\.[^\s<"]+)/g,function(u){var trail="";var mp=u.match(/[.,;:!?]+$/);if(mp){trail=mp[0];u=u.slice(0,-mp[0].length);}if(u.slice(-1)===")"&&u.indexOf("(")===-1){trail=")"+trail;u=u.slice(0,-1);}if(!u)return trail;var href=/^https?:\/\//i.test(u)?u:"https://"+u;return '<a href="'+href+'" target="_blank" rel="noopener noreferrer" style="color:'+t.ac+';text-decoration:underline;word-break:break-all">'+u+'</a>'+trail;});}
 async function api(p,o={}){const h={"Content-Type":"application/json"};if(S.token)h.Authorization="Bearer "+S.token;const r=await fetch("/api"+p,{...o,headers:{...h,...(o.headers||{})}});const d=await r.json();if(!r.ok)throw d;return d;}
 function setTheme(n){S.theme=n;t=TH[n];localStorage.setItem("dq_th",n);applyCSS();renderApp();}
 function scrollB(el){if(el)requestAnimationFrame(()=>{el.scrollTop=el.scrollHeight;});}
@@ -329,14 +330,34 @@ function showMsgMenu(msgId){
   const db=ce("button");db.className="sbtn";db.style.color="#ef4444";db.innerHTML=`${I.trash} Delete Message`;db.onclick=async()=>{ov.remove();try{await api(`/chats/${msg.chat_id}/messages/${msg.id}`,{method:"DELETE"});}catch(e){alert(e.error||"Error");}};menu.appendChild(db);
   ov.appendChild(menu);document.body.appendChild(ov);
 }
+function inputExtras(){
+  const bar=$("#cv-bar");if(!bar)return null;
+  bar.style.position="relative";
+  let ex=$("#cv-extras");
+  if(!ex){ex=ce("div");ex.id="cv-extras";ex.style.cssText=`position:absolute;bottom:100%;left:0;right:0;display:flex;flex-direction:column`;bar.insertBefore(ex,bar.firstChild);}
+  return ex;
+}
+function extrasCleanup(){const ex=$("#cv-extras");if(ex&&!ex.children.length)ex.remove();}
 function renderReplyPreview(){
   const old=$("#reply-bar");if(old)old.remove();
-  if(!S.replyTo)return;
-  const bar=$("#cv-bar");if(!bar)return;
-  const rp=ce("div");rp.id="reply-bar";rp.style.cssText=`display:flex;align-items:center;gap:8px;padding:6px 12px;background:${t.cd};border-left:3px solid ${t.ac};border-radius:0 8px 8px 0;margin-bottom:4px;position:absolute;bottom:100%;left:0;right:0`;
+  if(!S.replyTo){extrasCleanup();return;}
+  const ex=inputExtras();if(!ex)return;
+  const rp=ce("div");rp.id="reply-bar";rp.style.cssText=`display:flex;align-items:center;gap:8px;padding:6px 12px;background:${t.cd};border-left:3px solid ${t.ac};border-radius:0 8px 8px 0;margin-bottom:4px`;
   rp.innerHTML=`<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;color:${t.ac}">↩️ ${esc(S.replyTo.sender_name)}</div><div style="font-size:12px;color:${t.t3};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc((S.replyTo.content||"").slice(0,60))}</div></div>`;
-  const cb=ce("button");cb.type="button";cb.className="ib";cb.style.cssText+="width:28px;height:28px;flex-shrink:0";cb.innerHTML=I.close;cb.onclick=()=>{S.replyTo=null;rp.remove();};rp.appendChild(cb);
-  bar.style.position="relative";bar.insertBefore(rp,bar.firstChild);
+  const cb=ce("button");cb.type="button";cb.className="ib";cb.style.cssText+="width:28px;height:28px;flex-shrink:0";cb.innerHTML=I.close;cb.onclick=()=>{S.replyTo=null;rp.remove();extrasCleanup();};rp.appendChild(cb);
+  ex.insertBefore(rp,ex.firstChild);
+}
+function renderImagePreview(){
+  const old=$("#img-preview");if(old)old.remove();
+  const ta=$("#cv-ta");
+  if(!S.pendingImage){if(ta)ta.placeholder="Message...";extrasCleanup();return;}
+  const ex=inputExtras();if(!ex)return;
+  const uploading=S.pendingImage==="__uploading__";
+  if(ta)ta.placeholder=uploading?"Message...":"Add a caption…";
+  const ip=ce("div");ip.id="img-preview";ip.style.cssText=`display:flex;align-items:center;gap:10px;padding:8px 12px;background:${t.cd};border-left:3px solid ${t.ac};border-radius:0 8px 8px 0;margin-bottom:4px`;
+  ip.innerHTML=`${uploading?`<div style="width:42px;height:42px;border-radius:8px;background:${t.ta};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;animation:pu 1.5s infinite">📷</div>`:`<img src="${esc(S.pendingImage)}" style="width:42px;height:42px;border-radius:8px;object-fit:cover;flex-shrink:0"/>`}<div style="flex:1;min-width:0"><div style="font-size:11px;font-weight:600;color:${t.ac}">📷 Photo</div><div style="font-size:12px;color:${t.t3}">${uploading?"Uploading…":"Add a caption or hit send"}</div></div>`;
+  const cb=ce("button");cb.type="button";cb.className="ib";cb.style.cssText+="width:28px;height:28px;flex-shrink:0";cb.innerHTML=I.close;cb.onclick=()=>{S.pendingImage=null;renderImagePreview();};ip.appendChild(cb);
+  ex.appendChild(ip);
 }
 function editMsgPrompt(msg){modal("Edit Message",(body,close)=>{body.innerHTML=`<textarea id="em-ta" class="gi" rows="4" style="resize:none;margin-bottom:14px;font-size:14px">${esc(msg.content)}</textarea><button id="em-save" class="pb" style="width:100%">Save</button>`;setTimeout(()=>{const ta=body.querySelector("#em-ta");if(ta)ta.focus();},100);body.querySelector("#em-save").onclick=async()=>{const v=body.querySelector("#em-ta").value.trim();if(!v)return;try{await api(`/chats/${msg.chat_id}/messages/${msg.id}`,{method:"PUT",body:JSON.stringify({content:v})});close();}catch(e){alert(e.error||"Error");}};});}
 
@@ -348,7 +369,7 @@ function buildInputBar(){
   bar.appendChild(ep);
   const eb=ce("button");eb.type="button";eb.className="ib";eb.style.cssText+=";width:36px;height:36px;margin-bottom:1px";eb.innerHTML=I.smile;eb.onclick=()=>{ep.style.display=ep.style.display==="grid"?"none":"grid";};bar.appendChild(eb);
   // Image upload
-  const fi=ce("input");fi.type="file";fi.accept="image/*";fi.style.display="none";fi.onchange=async()=>{if(!fi.files[0])return;const fd=new FormData();fd.append("file",fi.files[0]);try{const r=await fetch("/api/upload",{method:"POST",headers:{Authorization:"Bearer "+S.token},body:fd});const d=await r.json();if(d.url)await api(`/chats/${S.activeChat}/messages`,{method:"POST",body:JSON.stringify({image:d.url})});}catch(e){console.error("Upload:",e);}fi.value="";};
+  const fi=ce("input");fi.type="file";fi.accept="image/*";fi.style.display="none";fi.onchange=async()=>{if(!fi.files[0])return;S.pendingImage="__uploading__";renderImagePreview();const fd=new FormData();fd.append("file",fi.files[0]);try{const r=await fetch("/api/upload",{method:"POST",headers:{Authorization:"Bearer "+S.token},body:fd});const d=await r.json();S.pendingImage=d.url||null;}catch(e){console.error("Upload:",e);S.pendingImage=null;}renderImagePreview();const ta=$("#cv-ta");if(ta)ta.focus();fi.value="";};
   bar.appendChild(fi);
   const pb2=ce("button");pb2.type="button";pb2.className="ib";pb2.style.cssText+=";width:36px;height:36px;margin-bottom:1px";pb2.innerHTML=I.photo;pb2.onclick=()=>fi.click();bar.appendChild(pb2);
   // Text input — use input[type=text] on mobile for reliable keyboard, textarea on desktop
@@ -369,10 +390,12 @@ function buildInputBar(){
   tw.appendChild(ta);bar.appendChild(tw);
   // Send button
   const sb=ce("button");sb.type="button";sb.style.cssText=`width:40px;height:40px;border-radius:50%;border:none;background:${t.pg};color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-bottom:0;box-shadow:0 2px 12px ${t.pgw};flex-shrink:0;-webkit-tap-highlight-color:transparent;-webkit-appearance:none`;sb.innerHTML=I.send;sb.onclick=sendMsg;bar.appendChild(sb);
+  if(S.replyTo)renderReplyPreview();
+  if(S.pendingImage)renderImagePreview();
   // Auto-focus on desktop only
   if(window.innerWidth>768)setTimeout(()=>ta.focus(),100);
 }
-async function sendMsg(){const ta=$("#cv-ta");if(!ta)return;const text=ta.value.trim();if(!text)return;ta.value="";ta.style.height="auto";const replyId=S.replyTo?.id||null;S.replyTo=null;const rb=$("#reply-bar");if(rb)rb.remove();try{await api(`/chats/${S.activeChat}/messages`,{method:"POST",body:JSON.stringify({content:text,reply_to:replyId})});}catch(e){console.error("Send:",e);}ta.focus();}
+async function sendMsg(){const ta=$("#cv-ta");if(!ta)return;const text=ta.value.trim();const img=(S.pendingImage&&S.pendingImage!=="__uploading__")?S.pendingImage:null;if(!text&&!img)return;ta.value="";ta.style.height="auto";ta.placeholder="Message...";const replyId=S.replyTo?.id||null;S.replyTo=null;S.pendingImage=null;const ex=$("#cv-extras");if(ex)ex.remove();try{await api(`/chats/${S.activeChat}/messages`,{method:"POST",body:JSON.stringify({content:text||undefined,image:img||undefined,reply_to:replyId})});}catch(e){console.error("Send:",e);}ta.focus();}
 
 function webhookSectionHTML(info){
   const url=location.origin+"/api/webhooks/tradingview/"+info.webhook_token;
