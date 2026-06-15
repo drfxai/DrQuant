@@ -21,7 +21,7 @@ const ic=(d,s=20)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="no
 const I={send:ic('<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>'),search:ic('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),menu:ic('<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>'),close:ic('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),back:ic('<polyline points="15 18 9 12 15 6"/>'),dbl:ic('<polyline points="18 6 7 17 2 12"/><polyline points="24 6 13 17 10 14"/>',16),smile:ic('<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>'),settings:ic('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',18),sun:ic('<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>',18),moon:ic('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',18),logout:ic('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',18),eye:ic('<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',18),eyeOff:ic('<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>',18),photo:ic('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',18),edit:ic('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',18),plus:ic('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),info:ic('<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',18),users:ic('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',18),channel:ic('<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',16),trash:ic('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>',18),user:ic('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',18)};
 
 // ━━━ STATE ━━━
-const S={token:localStorage.getItem("dq_t"),user:null,theme:localStorage.getItem("dq_th")||"dark",chats:[],activeChat:null,chatMsgs:[],chatInfo:null,showInfo:false,mobileView:"list",onlineUsers:[],socket:null,replyTo:null};
+const S={token:localStorage.getItem("dq_t"),user:null,theme:localStorage.getItem("dq_th")||"dark",chats:[],activeChat:null,chatMsgs:[],chatInfo:null,showInfo:false,mobileView:"list",onlineUsers:[],socket:null,replyTo:null,pinnedMsgs:[],pinIndex:0};
 let t=TH[S.theme];try{S.user=JSON.parse(localStorage.getItem("dq_u"));}catch{}
 
 function esc(s){if(!s)return"";const d=ce("div");d.textContent=s;return d.innerHTML;}
@@ -171,7 +171,7 @@ function renderChatListItems(){
 }
 
 async function openChat(id,skipSwitch){
-  S.activeChat=id;S.mobileView="chat";S.showInfo=false;
+  S.activeChat=id;S.mobileView="chat";S.showInfo=false;S.pinnedMsgs=[];S.pinIndex=0;
   if(!skipSwitch&&window.innerWidth<=768){const lp=$("#lp"),rp=$("#rp");if(lp)lp.style.display="none";if(rp)rp.style.display="flex";}
   renderChatListItems();
   const rp=$("#rp");if(!rp)return;
@@ -187,6 +187,7 @@ async function openChat(id,skipSwitch){
     }
     const msgs=await api(`/chats/${id}/messages`);
     S.chatMsgs=msgs;
+    S.pinnedMsgs=await api(`/chats/${id}/pins`).catch(()=>[]);S.pinIndex=0;
     api(`/chats/${id}/read`,{method:"POST"}).catch(()=>{});
     const ch=S.chats.find(c=>c.id===id);if(ch)ch.unread=0;renderChatListItems();
     renderChatView();
@@ -223,6 +224,7 @@ function renderJoinPreview(info){
       // Now open as a member
       const[msgs,freshInfo]=await Promise.all([api(`/chats/${info.id}/messages`),api(`/chats/${info.id}`)]);
       S.chatMsgs=msgs;S.chatInfo=freshInfo;
+      S.pinnedMsgs=await api(`/chats/${info.id}/pins`).catch(()=>[]);S.pinIndex=0;
       api(`/chats/${info.id}/read`,{method:"POST"}).catch(()=>{});
       renderChatView();
     }catch(e){jb.disabled=false;jb.textContent="Join "+info.type;alert(e.error||"Cannot join");}
@@ -240,6 +242,7 @@ function renderChatView(){
   // Use height:100% + flex for proper mobile keyboard handling
   rp.innerHTML=`<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
   <div style="padding:8px 12px;display:flex;align-items:center;gap:10px;background:${t.ch};backdrop-filter:blur(20px);border-bottom:1px solid ${t.bd};flex-shrink:0">${isMob?`<button class="ib" id="cv-back" type="button">${I.back}</button>`:""}${avatar(av,38)}<div style="flex:1;cursor:pointer;min-width:0" id="cv-title"><div style="color:${t.t1};font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}</div><div id="cv-sub" style="color:${t.t3};font-size:11px">${esc(sub)}</div></div>${info.type!=="dm"?`<button class="ib" id="cv-info" type="button">${I.info}</button>`:""}</div>
+  <div id="pin-bar" style="display:none;align-items:center;gap:8px;padding:6px 12px;background:${t.ch};border-bottom:1px solid ${t.bd};cursor:pointer;flex-shrink:0"></div>
   <div id="cv-msgs" style="flex:1;overflow-y:auto;padding:12px 0;-webkit-overflow-scrolling:touch;min-height:0"></div>
   ${canPost?`<div id="cv-bar" style="padding:8px 10px;display:flex;align-items:flex-end;gap:6px;background:${t.ch};backdrop-filter:blur(20px);border-top:1px solid ${t.bd};flex-shrink:0;padding-bottom:max(8px,env(safe-area-inset-bottom))"></div>`:`<div style="padding:12px;text-align:center;color:${t.t3};font-size:13px;border-top:1px solid ${t.bd};flex-shrink:0;padding-bottom:max(12px,env(safe-area-inset-bottom))">🔒 Only admins can post</div>`}
   </div>`;
@@ -249,6 +252,7 @@ function renderChatView(){
   else{const tt=$("#cv-title");if(tt)tt.onclick=()=>openDMProfile();}
   const mc=$("#cv-msgs");mc.innerHTML=S.chatMsgs.map(m=>msgBubble(m)).join("");scrollB(mc);
   bindMsgEvents(mc);
+  updatePinBar();
   if(canPost)buildInputBar();
   if(S.showInfo&&info.type!=="dm")renderInfoPanel();
 }
@@ -274,12 +278,42 @@ function msgBubble(m){
   return`<div data-mid="${m.id}" style="display:flex;justify-content:${mine?"flex-end":"flex-start"};margin-bottom:3px;padding:0 12px;animation:fm .15s ease;-webkit-user-select:none;user-select:none"><div style="max-width:78%;min-width:70px">${senderLine}<div style="padding:7px 12px;border-radius:${mine?"14px 14px 4px 14px":"14px 14px 14px 4px"};background:${mine?t.bm:t.bo};border:1px solid ${mine?t.bmb:t.bob};backdrop-filter:blur(10px)">${replyHtml}${imgHtml}${textHtml}<div style="display:flex;justify-content:flex-end;align-items:center;gap:3px;margin-top:2px">${edited}<span style="font-size:10px;color:${lc?"rgba(255,255,255,.6)":t.t4}">${fmtTime(m.created_at)}</span>${mine?`<span style="color:${lc?"rgba(255,255,255,.6)":t.pr+"99"}">${I.dbl}</span>`:""}</div></div></div></div>`;
 }
 
+function canManagePins(){
+  const info=S.chatInfo;if(!info)return false;
+  if(info.type==="dm")return true;
+  return info.myRole==="admin"||["admin","manager","superadmin"].includes(S.user.role);
+}
+function pinSnippet(m){
+  if(m.image&&!(m.content&&m.content.trim()))return"📷 Photo";
+  return (m.content||"").replace(/\s+/g," ").trim().slice(0,90);
+}
+function jumpToMessage(mid){
+  const mc=$("#cv-msgs");if(!mc)return;
+  const el=mc.querySelector(`[data-mid="${mid}"]`);if(!el)return;
+  el.scrollIntoView({behavior:"smooth",block:"center"});
+  el.style.transition="background .3s";el.style.background=t.ta;
+  setTimeout(()=>{el.style.background="transparent";},1100);
+}
+function updatePinBar(){
+  const bar=$("#pin-bar");if(!bar)return;
+  const pins=S.pinnedMsgs||[];
+  if(!pins.length){bar.style.display="none";bar.innerHTML="";return;}
+  if(S.pinIndex>=pins.length)S.pinIndex=0;
+  const m=pins[S.pinIndex],multi=pins.length>1,manage=canManagePins();
+  bar.style.display="flex";
+  bar.innerHTML=`<div style="width:3px;height:30px;border-radius:2px;background:${t.pr};flex-shrink:0"></div><div style="flex:1;min-width:0"><div style="color:${t.ac};font-size:11px;font-weight:600">📌 Pinned${multi?` <span style="color:${t.t4};font-weight:400">${S.pinIndex+1}/${pins.length}</span>`:""}</div><div style="color:${t.t2};font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pinSnippet(m))}</div></div>${manage?`<button id="pin-x" type="button" class="ib" style="width:28px;height:28px;flex-shrink:0" title="Unpin">${I.close}</button>`:""}`;
+  bar.onclick=()=>{jumpToMessage(m.id);if(multi){S.pinIndex=(S.pinIndex+1)%pins.length;updatePinBar();}};
+  const xb=bar.querySelector("#pin-x");
+  if(xb)xb.onclick=async(e)=>{e.stopPropagation();try{await api(`/chats/${S.activeChat}/messages/${m.id}/pin`,{method:"DELETE"});}catch(err){alert(err.error||"Error");}};
+}
+
 function showMsgMenu(msgId){
   const msg=S.chatMsgs.find(m=>m.id===msgId);if(!msg)return;
   const mine=msg.user_id===S.user.id;
   const canModerate=["admin","manager","superadmin"].includes(S.user.role);
-  // Users can act only on their own messages; admins/managers on any message.
-  if(!mine&&!canModerate)return;
+  // Users can act on their own messages; admins/managers on any message; anyone
+  // who can manage pins can open the menu (to pin/unpin).
+  if(!mine&&!canModerate&&!canManagePins())return;
   const old=$("#ctx-menu");if(old)old.remove();
   const ov=ce("div");ov.id="ctx-menu";ov.style.cssText=`position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;animation:fi .15s`;ov.onclick=()=>ov.remove();
   const menu=ce("div");menu.style.cssText=`background:${t.ctx};border:1px solid ${t.ba};border-radius:16px;padding:8px;min-width:220px;box-shadow:${t.sh}`;menu.onclick=e=>e.stopPropagation();
@@ -289,6 +323,8 @@ function showMsgMenu(msgId){
   if(msg.content){const cb=ce("button");cb.className="sbtn";cb.innerHTML="📋 Copy Text";cb.onclick=()=>{navigator.clipboard?.writeText(msg.content).catch(()=>{});ov.remove();};menu.appendChild(cb);}
   // Edit
   if(msg.content){const eb=ce("button");eb.className="sbtn";eb.innerHTML=`${I.edit} Edit Message`;eb.onclick=()=>{ov.remove();editMsgPrompt(msg);};menu.appendChild(eb);}
+  // Pin / Unpin
+  if(canManagePins()){const pb=ce("button");pb.className="sbtn";pb.innerHTML=msg.pinned?"📌 Unpin Message":"📌 Pin Message";pb.onclick=async()=>{ov.remove();try{await api(`/chats/${msg.chat_id}/messages/${msg.id}/pin`,{method:msg.pinned?"DELETE":"POST"});}catch(e){alert(e.error||"Error");}};menu.appendChild(pb);}
   // Delete
   const db=ce("button");db.className="sbtn";db.style.color="#ef4444";db.innerHTML=`${I.trash} Delete Message`;db.onclick=async()=>{ov.remove();try{await api(`/chats/${msg.chat_id}/messages/${msg.id}`,{method:"DELETE"});}catch(e){alert(e.error||"Error");}};menu.appendChild(db);
   ov.appendChild(menu);document.body.appendChild(ov);
@@ -860,8 +896,18 @@ function connectSocket(){
     if(msg.chat_id===S.activeChat){S.chatMsgs.push(msg);const mc=$("#cv-msgs");if(mc){mc.insertAdjacentHTML("beforeend",msgBubble(msg));scrollB(mc);const newEl=mc.querySelector(`[data-mid="${msg.id}"]`);if(newEl){let timer;newEl.oncontextmenu=e=>{e.preventDefault();showMsgMenu(msg.id);};newEl.ontouchstart=()=>{timer=setTimeout(()=>showMsgMenu(msg.id),500);};newEl.ontouchmove=()=>clearTimeout(timer);newEl.ontouchend=()=>clearTimeout(timer);}}api(`/chats/${msg.chat_id}/read`,{method:"POST"}).catch(()=>{});if(ch)ch.unread=0;renderChatListItems();}
     if(msg.user_id!==S.user.id)playNotif();
   });
-  S.socket.on("message_edited",msg=>{const idx=S.chatMsgs.findIndex(m=>m.id===msg.id);if(idx>=0){S.chatMsgs[idx]=msg;const mc=$("#cv-msgs");if(mc){mc.innerHTML=S.chatMsgs.map(m=>msgBubble(m)).join("");scrollB(mc);bindMsgEvents(mc);}}});
-  S.socket.on("message_deleted",({id,chat_id})=>{S.chatMsgs=S.chatMsgs.filter(m=>m.id!==id);if(chat_id===S.activeChat){const mc=$("#cv-msgs");if(mc){const el=mc.querySelector(`[data-mid="${id}"]`);if(el)el.remove();}}});
+  S.socket.on("message_edited",msg=>{const idx=S.chatMsgs.findIndex(m=>m.id===msg.id);if(idx>=0){S.chatMsgs[idx]=msg;const mc=$("#cv-msgs");if(mc){mc.innerHTML=S.chatMsgs.map(m=>msgBubble(m)).join("");scrollB(mc);bindMsgEvents(mc);}}const pi=(S.pinnedMsgs||[]).findIndex(p=>p.id===msg.id);if(pi>=0){S.pinnedMsgs[pi]={...S.pinnedMsgs[pi],content:msg.content,image:msg.image};updatePinBar();}});
+  S.socket.on("message_deleted",({id,chat_id})=>{S.chatMsgs=S.chatMsgs.filter(m=>m.id!==id);if(chat_id===S.activeChat){const mc=$("#cv-msgs");if(mc){const el=mc.querySelector(`[data-mid="${id}"]`);if(el)el.remove();}if((S.pinnedMsgs||[]).some(p=>p.id===id)){S.pinnedMsgs=S.pinnedMsgs.filter(p=>p.id!==id);if(S.pinIndex>=S.pinnedMsgs.length)S.pinIndex=0;updatePinBar();}}});
+  S.socket.on("message_pinned",msg=>{
+    if(msg.chat_id!==S.activeChat)return;
+    const i=S.chatMsgs.findIndex(m=>m.id===msg.id);if(i>=0)S.chatMsgs[i].pinned=true;
+    S.pinnedMsgs=[msg,...(S.pinnedMsgs||[]).filter(p=>p.id!==msg.id)];S.pinIndex=0;updatePinBar();
+  });
+  S.socket.on("message_unpinned",({id,chat_id})=>{
+    if(chat_id!==S.activeChat)return;
+    const i=S.chatMsgs.findIndex(m=>m.id===id);if(i>=0)S.chatMsgs[i].pinned=false;
+    S.pinnedMsgs=(S.pinnedMsgs||[]).filter(p=>p.id!==id);if(S.pinIndex>=S.pinnedMsgs.length)S.pinIndex=0;updatePinBar();
+  });
   S.socket.on("typing",data=>{if(data.chatId===S.activeChat){const el=$("#cv-sub");if(el){el.textContent="typing...";clearTimeout(el._t);el._t=setTimeout(()=>{el.textContent=S.chatInfo?.type==="dm"?"":`${S.chatInfo?.member_count||S.chatInfo?.members?.length||""} members`;},2000);}}});
 }
 

@@ -6,6 +6,19 @@ const AI_SYSTEM = `You are DrFX Quant AI, a professional trading assistant by Dr
 
 router.use((req, res, next) => { req.app.get("authMiddleware")(req, res, next); });
 
+// Pin permission: in a DM either participant may pin; in a group/channel only a
+// chat admin (or a global admin/manager/superadmin) may pin/unpin.
+async function pinPermission(pool, chatId, user) {
+  const { rows: [chat] } = await pool.query("SELECT type FROM chats WHERE id=$1", [chatId]);
+  if (!chat) return { ok: false, code: 404, error: "Chat not found" };
+  const { rows: [mem] } = await pool.query("SELECT role FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, user.id]);
+  if (!mem) return { ok: false, code: 403, error: "Not a member" };
+  if (chat.type === "dm") return { ok: true };
+  const isAdmin = mem.role === "admin" || ["admin", "manager", "superadmin"].includes(user.role);
+  if (!isAdmin) return { ok: false, code: 403, error: "Only admins can pin in groups and channels" };
+  return { ok: true };
+}
+
 // List chats
 router.get("/", async (req, res) => {
   const pool = req.app.get("pool");
@@ -301,6 +314,61 @@ router.delete("/:chatId/messages/:msgId", async (req, res) => {
     const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
     members.forEach(m => io.to(`user_${m.user_id}`).emit("message_deleted", { id: msgId, chat_id: chatId }));
     res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+// Pin a message
+router.post("/:chatId/messages/:msgId/pin", async (req, res) => {
+  const pool = req.app.get("pool"), io = req.app.get("io");
+  try {
+    const chatId = parseInt(req.params.chatId), msgId = parseInt(req.params.msgId);
+    const perm = await pinPermission(pool, chatId, req.user);
+    if (!perm.ok) return res.status(perm.code).json({ error: perm.error });
+    const { rows: [updated] } = await pool.query(
+      "UPDATE messages SET pinned=TRUE, pinned_at=NOW(), pinned_by=$3 WHERE id=$1 AND chat_id=$2 RETURNING *",
+      [msgId, chatId, req.user.id]
+    );
+    if (!updated) return res.status(404).json({ error: "Message not found" });
+    const { rows: [s] } = await pool.query("SELECT name,avatar,role FROM users WHERE id=$1", [updated.user_id]);
+    const payload = { ...updated, sender_name: s && s.name, sender_avatar: s && s.avatar, sender_role: s && s.role };
+    const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
+    members.forEach(m => io.to(`user_${m.user_id}`).emit("message_pinned", payload));
+    res.json(payload);
+  } catch (err) { console.error("Pin:", err); res.status(500).json({ error: "Server error" }); }
+});
+
+// Unpin a message
+router.delete("/:chatId/messages/:msgId/pin", async (req, res) => {
+  const pool = req.app.get("pool"), io = req.app.get("io");
+  try {
+    const chatId = parseInt(req.params.chatId), msgId = parseInt(req.params.msgId);
+    const perm = await pinPermission(pool, chatId, req.user);
+    if (!perm.ok) return res.status(perm.code).json({ error: perm.error });
+    const { rows: [updated] } = await pool.query(
+      "UPDATE messages SET pinned=FALSE, pinned_at=NULL, pinned_by=NULL WHERE id=$1 AND chat_id=$2 RETURNING id",
+      [msgId, chatId]
+    );
+    if (!updated) return res.status(404).json({ error: "Message not found" });
+    const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
+    members.forEach(m => io.to(`user_${m.user_id}`).emit("message_unpinned", { id: msgId, chat_id: chatId }));
+    res.json({ ok: true });
+  } catch (err) { console.error("Unpin:", err); res.status(500).json({ error: "Server error" }); }
+});
+
+// Pinned messages for a chat (most-recent first)
+router.get("/:id/pins", async (req, res) => {
+  const pool = req.app.get("pool");
+  try {
+    const chatId = parseInt(req.params.id);
+    const { rows: [mem] } = await pool.query("SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
+    if (!mem) return res.status(403).json({ error: "Not a member" });
+    const { rows } = await pool.query(
+      `SELECT m.*,u.name AS sender_name,u.avatar AS sender_avatar,u.role AS sender_role
+       FROM messages m JOIN users u ON m.user_id=u.id
+       WHERE m.chat_id=$1 AND m.pinned=TRUE ORDER BY m.pinned_at DESC`,
+      [chatId]
+    );
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 

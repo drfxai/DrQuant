@@ -97,11 +97,15 @@ async function initDB() {
       ["chats", "webhook_token", "TEXT"],
       ["messages", "edited_at", "TIMESTAMPTZ"],
       ["messages", "reply_to", "INTEGER REFERENCES messages(id) ON DELETE SET NULL"],
+      ["messages", "pinned", "BOOLEAN DEFAULT FALSE"],
+      ["messages", "pinned_at", "TIMESTAMPTZ"],
+      ["messages", "pinned_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL"],
     ];
     for (const [tbl, col, def] of cols) {
       await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS ${col} ${def}`).catch(() => {});
     }
     await client.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_webhook_token ON chats(webhook_token) WHERE webhook_token IS NOT NULL").catch(() => {});
+    await client.query("CREATE INDEX IF NOT EXISTS idx_messages_pinned ON messages(chat_id) WHERE pinned=TRUE").catch(() => {});
 
     // AI Bot
     const { rows: [botExists] } = await client.query("SELECT id FROM users WHERE role='bot' LIMIT 1");
