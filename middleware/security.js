@@ -31,14 +31,16 @@ const corsOptions = {
   origin(origin, cb) {
     // Allow same-origin / curl / server-to-server (no Origin header).
     if (!origin) return cb(null, true);
+    // Deny cross-origin GRACEFULLY (cb(null,false)) rather than throwing — a
+    // thrown error becomes a 500. With a graceful deny the disallowed origin
+    // simply gets no CORS header (the browser blocks it), while SAME-origin
+    // requests are unaffected (the browser never enforces CORS on them), so
+    // the SPA keeps working regardless of how the allowlist is configured.
     if (ALLOWED.length === 0) {
-      // Dev fallback: allow localhost only. NEVER ship with empty allowlist.
       if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return cb(null, true);
-      return cb(new Error("CORS: origin not allowed"));
+      return cb(null, false);
     }
-    return ALLOWED.includes(origin)
-      ? cb(null, true)
-      : cb(new Error("CORS: origin not allowed"));
+    return cb(null, ALLOWED.includes(origin));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -51,25 +53,29 @@ function applySecurity(app) {
 
   app.use(
     helmet({
+      // The SPA loads external scripts (TradingView, the socket.io CDN), Google
+      // Fonts, and relies on inline scripts/handlers — a strict default-src CSP
+      // would break all of that. So we ship a MINIMAL but meaningful CSP that
+      // still blocks the highest-value vectors — clickjacking (frame-ancestors),
+      // plugin/object injection, and <base> hijacking — WITHOUT restricting
+      // script/style/img origins. Output-encoding (esc()) is the primary XSS
+      // defense; a full strict CSP is a recommended follow-up (see SECURITY.md).
+      // frame-ancestors is 'self' (not 'none') so the in-app Quantum Chat
+      // iframe (same-origin) keeps working while cross-site framing is blocked.
       contentSecurityPolicy: {
-        useDefaults: true,
+        useDefaults: false,
         directives: {
-          "default-src": ["'self'"],
-          // Tighten as you extract inline JS from index.html. 'unsafe-inline'
-          // is a temporary concession for the current single-file SPA.
-          "script-src": ["'self'", "'unsafe-inline'"],
-          "style-src": ["'self'", "'unsafe-inline'"],
-          "img-src": ["'self'", "data:", "blob:"],
-          "media-src": ["'self'", "blob:"],
-          "connect-src": ["'self'", "wss:", "https:"],
-          "frame-ancestors": ["'none'"],
+          "frame-ancestors": ["'self'"],
           "object-src": ["'none'"],
           "base-uri": ["'self'"],
         },
       },
       crossOriginResourcePolicy: { policy: "same-site" },
+      crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
-      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+      // No includeSubDomains/preload: other subdomains (e.g. the Quantum Chat
+      // node) may not all be HTTPS, and we must not force-upgrade them.
+      hsts: { maxAge: 15552000, includeSubDomains: false },
     })
   );
 }

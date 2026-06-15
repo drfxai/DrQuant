@@ -97,6 +97,9 @@ router.put("/profile", async (req, res) => {
       const { name, bio, avatar, username } = req.body;
       const updates = [], vals = [];
       let i = 1;
+      // Reject avatars carrying markup / inline handlers / script URLs (the
+      // client renders avatars safely too — this is defense-in-depth).
+      if (avatar !== undefined && (/[<>"'()]/.test(String(avatar)) || /^\s*(javascript|data|vbscript):/i.test(String(avatar)))) return res.status(400).json({ error: "Invalid avatar" });
       if (name !== undefined) { updates.push(`name=$${i++}`); vals.push(String(name).slice(0, 50)); }
       if (bio !== undefined) { updates.push(`bio=$${i++}`); vals.push(String(bio).slice(0, 200)); }
       if (avatar !== undefined) { updates.push(`avatar=$${i++}`); vals.push(String(avatar).slice(0, 500)); }

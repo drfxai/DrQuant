@@ -6,6 +6,17 @@ const AI_SYSTEM = `You are DrFX Quant AI, a professional trading assistant by Dr
 
 router.use((req, res, next) => { req.app.get("authMiddleware")(req, res, next); });
 
+// Avatars may be a short emoji or an uploaded path — never markup, inline event
+// handlers, or javascript:/data: URLs. Defense-in-depth alongside client-side
+// output encoding.
+function badAvatar(a) {
+  const s = String(a);
+  if (s.length > 500) return true;
+  if (/[<>"'()]/.test(s)) return true;
+  if (/^\s*(javascript|data|vbscript):/i.test(s)) return true;
+  return false;
+}
+
 // Pin permission: in a DM either participant may pin; in a group/channel only a
 // chat admin (or a global admin/manager/superadmin) may pin/unpin.
 async function pinPermission(pool, chatId, user) {
@@ -50,6 +61,7 @@ router.post("/", async (req, res) => {
   try {
     const { type, name, bio, avatar, visibility, members, username } = req.body;
     if (!type || !["dm", "group", "channel"].includes(type)) return res.status(400).json({ error: "Invalid type" });
+    if (avatar && badAvatar(avatar)) return res.status(400).json({ error: "Invalid avatar" });
     // Only admin creates groups/channels
     if ((type === "group" || type === "channel") && req.user.role !== "admin")
       return res.status(403).json({ error: "Only admin can create groups and channels" });
@@ -126,7 +138,7 @@ router.put("/:id", async (req, res) => {
     const u = [], v = []; let i = 1;
     if (name !== undefined) { u.push(`name=$${i++}`); v.push(String(name).slice(0, 100)); }
     if (bio !== undefined) { u.push(`bio=$${i++}`); v.push(String(bio).slice(0, 500)); }
-    if (avatar !== undefined) { u.push(`avatar=$${i++}`); v.push(String(avatar).slice(0, 500)); }
+    if (avatar !== undefined) { if (badAvatar(avatar)) return res.status(400).json({ error: "Invalid avatar" }); u.push(`avatar=$${i++}`); v.push(String(avatar).slice(0, 500)); }
     if (visibility !== undefined) { u.push(`visibility=$${i++}`); v.push(visibility === "private" ? "private" : "public"); }
     if (username !== undefined) {
       const un = String(username).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30);
@@ -226,6 +238,9 @@ router.post("/:id/messages", async (req, res) => {
     const chatId = parseInt(req.params.id);
     const { content, image, reply_to } = req.body;
     if (!content?.trim() && !image) return res.status(400).json({ error: "Message required" });
+    // image must be an uploaded path from /api/upload — reject arbitrary or
+    // javascript:/attribute-injection values before they reach other clients.
+    if (image && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(String(image))) return res.status(400).json({ error: "Invalid image" });
     const { rows: [mem] } = await pool.query("SELECT cm.role AS chat_role FROM chat_members cm WHERE cm.chat_id=$1 AND cm.user_id=$2", [chatId, req.user.id]);
     if (!mem) return res.status(403).json({ error: "Not a member" });
     const { rows: [chat] } = await pool.query("SELECT type FROM chats WHERE id=$1", [chatId]);

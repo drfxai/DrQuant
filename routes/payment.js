@@ -24,17 +24,27 @@ router.post("/create", (req, res) => {
 router.post("/webhook", express.raw({ type: "application/json" }), async (req, res) => {
   const pool = req.app.get("pool");
   try {
-    if (IPN_SECRET) {
-      const sig = req.headers["x-nowpayments-sig"];
-      if (sig) {
-        const body = typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-        const parsed = JSON.parse(body);
-        const sorted = Object.keys(parsed).sort().reduce((r, k) => { r[k] = parsed[k]; return r; }, {});
-        const hash = crypto.createHmac("sha512", IPN_SECRET).update(JSON.stringify(sorted)).digest("hex");
-        if (hash !== sig) return res.status(403).json({ error: "Bad signature" });
-      }
+    // Verified IPN ONLY. Previously, if the signature header was simply omitted
+    // the check was skipped entirely — letting anyone POST a "finished" callback
+    // and grant themselves a paid subscription. Require the secret AND a
+    // matching signature (constant-time compare), parsing the raw body properly.
+    if (!IPN_SECRET) {
+      console.warn("[payment] webhook hit but NOWPAYMENTS_IPN_SECRET is not set — refusing to grant.");
+      return res.status(503).json({ error: "Webhook not configured" });
     }
-    const data = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const rawBody = Buffer.isBuffer(req.body) ? req.body.toString("utf8")
+      : (typeof req.body === "string" ? req.body : JSON.stringify(req.body));
+    {
+      const sig = req.headers["x-nowpayments-sig"];
+      if (!sig) return res.status(401).json({ error: "Missing signature" });
+      let parsed;
+      try { parsed = JSON.parse(rawBody); } catch { return res.status(400).json({ error: "Bad body" }); }
+      const sorted = Object.keys(parsed).sort().reduce((r, k) => { r[k] = parsed[k]; return r; }, {});
+      const hash = crypto.createHmac("sha512", IPN_SECRET).update(JSON.stringify(sorted)).digest("hex");
+      const a = Buffer.from(hash, "utf8"), b = Buffer.from(String(sig), "utf8");
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return res.status(403).json({ error: "Bad signature" });
+    }
+    const data = JSON.parse(rawBody);
     const { payment_status, order_id, payment_id } = data;
     if (!order_id?.startsWith("drfx_")) return res.status(400).json({ error: "Bad order" });
     const userId = parseInt(order_id.split("_")[1]);

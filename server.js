@@ -7,35 +7,77 @@ const path = require("path");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const { pool, initDB } = require("./database");
+const { applySecurity, corsOptions, globalLimiter, makeLimiter, ALLOWED } = require("./middleware/security");
+
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET;
+// Fail fast on a missing/placeholder secret rather than silently signing tokens
+// with a guessable key — that would let anyone forge admin sessions.
+if (!JWT_SECRET || JWT_SECRET.length < 16 || JWT_SECRET === "change_me") {
+  console.error("\n❌ FATAL: JWT_SECRET is unset, too short, or still the placeholder.");
+  console.error("   Set a long random value in .env (e.g. `openssl rand -hex 32`).\n");
+  process.exit(1);
+}
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" }, maxHttpBufferSize: 15e6 });
+// Socket.io: restrict the handshake Origin to the same allowlist as the REST
+// API. The JWT in handshake.auth is still the real gate; this is one more layer.
+const io = new Server(server, {
+  cors: { origin: ALLOWED.length ? ALLOWED : true, methods: ["GET", "POST"] },
+  maxHttpBufferSize: 4e6, // was 15e6 — live frames are < ~300KB; cap abuse headroom
+});
 
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "change_me";
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-app.set("trust proxy", 1); // correct client IP behind Nginx (needed for webhook IP logging & rate limiting)
-app.use(cors());
+// ── HTTP hardening: helmet (CSP, HSTS, nosniff, frame-deny…), strict-but-
+//    graceful CORS, and rate limiting. Replaces the old wide-open cors()/no-
+//    headers setup. applySecurity() also sets `trust proxy`.
+applySecurity(app);
+app.use(cors(corsOptions));
 
 // TradingView webhook — mounted BEFORE express.json() because it parses its own
-// raw body for signature verification. Router only matches /api/webhooks/*.
+// raw body for signature verification. It self-protects (token + dedupe + flood
+// cap), so it sits ahead of the global API rate limiter.
 app.use("/api/webhooks", require("./routes/webhooks"));
 
 app.use(express.json({ limit: "12mb" }));
+// Uploaded files are user-controlled: force the browser to honor the declared
+// type (no MIME sniffing) and sandbox anything navigated to directly, so a file
+// that slips through the filter can't execute as a document (stored-XSS guard).
+app.use("/uploads", express.static(UPLOAD_DIR, {
+  setHeaders: (res) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'; img-src 'self'; sandbox");
+  },
+}));
 app.use(express.static(path.join(__dirname, "public")));
-app.use("/uploads", express.static(UPLOAD_DIR));
 // Quantum Chat browser client — served for the in-app /quantum-chat.html panel.
 // The canonical module lives in quantum-chat/web/ (deployed by install.sh).
 app.use("/qc", express.static(path.join(__dirname, "quantum-chat", "web")));
 
-function authMiddleware(req, res, next) {
+// Global API rate limit + stricter limits on the auth endpoints (brute force).
+app.use("/api", globalLimiter);
+app.use("/api/auth/login", makeLimiter({ windowMs: 15 * 60 * 1000, max: 10 }));
+app.use("/api/auth/register", makeLimiter({ windowMs: 60 * 60 * 1000, max: 20 }));
+
+async function authMiddleware(req, res, next) {
   const h = req.headers.authorization;
   if (!h || !h.startsWith("Bearer ")) return res.status(401).json({ error: "No token" });
-  try { req.user = jwt.verify(h.split(" ")[1], JWT_SECRET); next(); }
+  let payload;
+  try { payload = jwt.verify(h.split(" ")[1], JWT_SECRET); }
   catch { return res.status(401).json({ error: "Invalid token" }); }
+  // Re-check the account on EVERY request so bans and role changes take effect
+  // immediately instead of lingering until the 30-day token expires. The DB
+  // role is authoritative — the token's embedded role may be stale.
+  try {
+    const { rows: [u] } = await pool.query("SELECT role, blocked FROM users WHERE id=$1", [payload.id]);
+    if (!u) return res.status(401).json({ error: "Invalid token" });
+    if (u.blocked) return res.status(403).json({ error: "Account suspended" });
+    req.user = { id: payload.id, email: payload.email, role: u.role };
+    next();
+  } catch { return res.status(503).json({ error: "Auth unavailable" }); }
 }
 function adminMiddleware(req, res, next) {
   if (!req.user || req.user.role !== "admin") return res.status(403).json({ error: "Admin required" });
@@ -56,11 +98,20 @@ app.use("/api/upload", require("./routes/upload"));
 app.use("/api/manage", require("./routes/manage")); // admin/manager console (RBAC matrix)
 
 // ── Socket.io ──
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token;
   if (!token) return next(new Error("Auth required"));
-  try { socket.user = jwt.verify(token, JWT_SECRET); next(); }
-  catch { next(new Error("Invalid token")); }
+  let payload;
+  try { payload = jwt.verify(token, JWT_SECRET); }
+  catch { return next(new Error("Invalid token")); }
+  // Same per-connection re-check as the REST guard: reject blocked accounts and
+  // pull the live role/name from the DB rather than trusting the token.
+  try {
+    const { rows: [u] } = await pool.query("SELECT role, blocked, name FROM users WHERE id=$1", [payload.id]);
+    if (!u || u.blocked) return next(new Error("Unauthorized"));
+    socket.user = { id: payload.id, email: payload.email, role: u.role, name: u.name };
+    next();
+  } catch { next(new Error("Auth unavailable")); }
 });
 
 // Additive realtime layer: reactions, delivered/read receipts, chat rooms,
