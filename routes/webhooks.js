@@ -110,6 +110,30 @@ function normalize(p) {
   };
 }
 
+// Map common TradingView payload shapes onto our canonical signal fields, so a
+// stricter or looser alert message still works: symbol|ticker, side|action,
+// price|close, sl|stop_loss, tp|take_profit, timeframe|interval, and so on.
+function coerceSignal(p) {
+  if (!p || typeof p !== "object") return p;
+  const pick = (...keys) => { for (const k of keys) if (p[k] != null && p[k] !== "") return p[k]; return undefined; };
+  let side = pick("side", "action", "order_action");
+  if (typeof side === "string") {
+    const m = { b: "buy", buy: "buy", long: "long", s: "sell", sell: "sell", short: "short", close: "close", exit: "close", flat: "close", alert: "alert" };
+    const k = side.toLowerCase().trim();
+    side = m[k] || k;
+  }
+  return {
+    symbol: pick("symbol", "ticker"),
+    side,
+    price: pick("price", "close", "entry"),
+    stop_loss: pick("stop_loss", "sl", "stop"),
+    take_profit: pick("take_profit", "tp", "target"),
+    timeframe: pick("timeframe", "interval", "tf"),
+    strategy: pick("strategy", "strategy_name"),
+    note: pick("note", "comment", "message", "text"),
+  };
+}
+
 // Format a normalized signal as a readable channel message (markdown + emoji).
 function formatSignalMessage(n) {
   const sideEmoji = { buy: "🟢", long: "🟢", sell: "🔴", short: "🔴", close: "⚪", alert: "🔔" }[n.side] || "📊";
@@ -169,6 +193,14 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
       tokenChatId = c?.id ?? null;
     } catch { tokenChatId = null; }
   }
+  // A token was supplied but matched no channel -> clear, distinct error so a
+  // stale or mistyped webhook URL doesn't look like an auth failure.
+  if (req.params.token && !tokenChatId) {
+    return res.status(404).json({ error: "Unknown webhook token. Re-copy the URL from the Dr Signal channel info panel." });
+  }
+
+  // Canonical signal fields, tolerant of common TradingView key variants.
+  const fields = payload ? coerceSignal(payload) : null;
 
   // dedupe/replay key: hash of body + a coarse 60s time bucket so identical
   // alerts fired seconds apart are treated as one. The UNIQUE index on
@@ -181,6 +213,7 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
     .digest("hex");
 
   async function logHook(status, reason, signalId = null) {
+    if (status !== "accepted") console.warn(`[webhook] rejected (${status}): ${reason || ""}`);
     try {
       await pool.query(
         `INSERT INTO webhook_logs (source, ip, signature_ok, dedupe_key, status, reason, payload, signal_id)
@@ -226,7 +259,7 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
     await logHook("rejected_schema", "invalid JSON");
     return res.status(400).json({ error: "Invalid JSON" });
   }
-  const verr = validateSignal(payload);
+  const verr = validateSignal(fields);
   if (verr) {
     await logHook("rejected_schema", verr);
     return res.status(400).json({ error: verr });
@@ -240,13 +273,19 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
   }
 
   // --- REPLAY: try to claim the dedupe key. If it already exists, drop. ----
-  const claim = await pool.query(
-    `INSERT INTO webhook_logs (source, ip, signature_ok, dedupe_key, status)
-     VALUES ('tradingview',$1,true,$2,'accepted')
-     ON CONFLICT (dedupe_key) DO NOTHING
-     RETURNING id`,
-    [ip, dedupeKey]
-  );
+  let claim;
+  try {
+    claim = await pool.query(
+      `INSERT INTO webhook_logs (source, ip, signature_ok, dedupe_key, status)
+       VALUES ('tradingview',$1,true,$2,'accepted')
+       ON CONFLICT (dedupe_key) DO NOTHING
+       RETURNING id`,
+      [ip, dedupeKey]
+    );
+  } catch (e) {
+    console.error("[webhook] webhook_logs insert failed — are migrations applied?:", e.message);
+    return res.status(500).json({ error: "Webhook storage not ready (run migrations)" });
+  }
   if (claim.rowCount === 0) {
     // Already seen this body within the window.
     return res.status(202).json({ status: "duplicate_ignored" });
@@ -257,7 +296,7 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
   const { rows: [{ c }] } = await pool.query(
     `SELECT COUNT(*)::int AS c FROM signals
       WHERE symbol = $1 AND created_at > NOW() - INTERVAL '1 minute'`,
-    [String(payload.symbol).toUpperCase()]
+    [String(fields.symbol).toUpperCase()]
   );
   if (c >= 10) {
     await pool.query(`UPDATE webhook_logs SET status='rate_limited', reason='symbol flood' WHERE id=$1`, [logId]);
@@ -266,7 +305,7 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
 
   // --- PERSIST + BROADCAST -------------------------------------------------
   try {
-    const n = normalize(payload);
+    const n = normalize(fields);
 
     // Destination chat + visibility: prefer the resolved per-channel row, else
     // fall back to the legacy username-based lookup. channel_id references
