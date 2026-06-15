@@ -51,25 +51,26 @@ const corsOptions = {
 function applySecurity(app) {
   app.set("trust proxy", 1); // behind Nginx — needed for correct client IPs & rate limiting
 
+  // Minimal CSP, set as a RAW header. helmet's CSP validator insists on a
+  // default-src; we deliberately OMIT default-src so script/style/img stay
+  // unrestricted for the SPA's external deps (TradingView, the socket.io CDN,
+  // Google Fonts) and its inline handlers — while still blocking the highest-
+  // value vectors: cross-site framing (clickjacking), plugin/object injection,
+  // and <base> hijacking. Browsers do NOT require default-src, so a raw header
+  // is valid even though helmet refuses to emit one. frame-ancestors 'self'
+  // keeps the same-origin Quantum Chat iframe working. (esc() is the primary
+  // XSS defense; a full strict CSP is a recommended follow-up — see SECURITY.md.)
+  app.use((req, res, next) => {
+    res.setHeader(
+      "Content-Security-Policy",
+      "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+    );
+    next();
+  });
+
   app.use(
     helmet({
-      // The SPA loads external scripts (TradingView, the socket.io CDN), Google
-      // Fonts, and relies on inline scripts/handlers — a strict default-src CSP
-      // would break all of that. So we ship a MINIMAL but meaningful CSP that
-      // still blocks the highest-value vectors — clickjacking (frame-ancestors),
-      // plugin/object injection, and <base> hijacking — WITHOUT restricting
-      // script/style/img origins. Output-encoding (esc()) is the primary XSS
-      // defense; a full strict CSP is a recommended follow-up (see SECURITY.md).
-      // frame-ancestors is 'self' (not 'none') so the in-app Quantum Chat
-      // iframe (same-origin) keeps working while cross-site framing is blocked.
-      contentSecurityPolicy: {
-        useDefaults: false,
-        directives: {
-          "frame-ancestors": ["'self'"],
-          "object-src": ["'none'"],
-          "base-uri": ["'self'"],
-        },
-      },
+      contentSecurityPolicy: false, // replaced by the minimal raw header above
       crossOriginResourcePolicy: { policy: "same-site" },
       crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
