@@ -246,6 +246,7 @@ function renderChatView(){
 
   if(isMob){const bb=$("#cv-back");if(bb)bb.onclick=goBack;}
   if(info.type!=="dm"){const ib=$("#cv-info");if(ib)ib.onclick=()=>{S.showInfo=!S.showInfo;renderChatView();};const tt=$("#cv-title");if(tt)tt.onclick=()=>{S.showInfo=true;renderChatView();};}
+  else{const tt=$("#cv-title");if(tt)tt.onclick=()=>openDMProfile();}
   const mc=$("#cv-msgs");mc.innerHTML=S.chatMsgs.map(m=>msgBubble(m)).join("");scrollB(mc);
   bindMsgEvents(mc);
   if(canPost)buildInputBar();
@@ -337,6 +338,26 @@ function buildInputBar(){
 }
 async function sendMsg(){const ta=$("#cv-ta");if(!ta)return;const text=ta.value.trim();if(!text)return;ta.value="";ta.style.height="auto";const replyId=S.replyTo?.id||null;S.replyTo=null;const rb=$("#reply-bar");if(rb)rb.remove();try{await api(`/chats/${S.activeChat}/messages`,{method:"POST",body:JSON.stringify({content:text,reply_to:replyId})});}catch(e){console.error("Send:",e);}ta.focus();}
 
+function webhookSectionHTML(info){
+  const url=location.origin+"/api/webhooks/tradingview/"+info.webhook_token;
+  const sample=`{
+  "symbol": "{{ticker}}",
+  "side": "buy",
+  "price": {{close}},
+  "timeframe": "{{interval}}"
+}`;
+  return `<div style="margin:4px 0 14px;padding:12px;border-radius:12px;background:${t.cd};border:1px solid ${t.bd}">
+    <div style="color:${t.t1};font-size:12px;font-weight:700;margin-bottom:5px">📡 TradingView Webhook</div>
+    <div style="color:${t.t3};font-size:11px;line-height:1.5;margin-bottom:9px">Admin only. In TradingView open your alert → <b>Notifications</b> → tick <b>Webhook URL</b> and paste the URL below, then paste the JSON into the alert's <b>Message</b> box.</div>
+    <div style="color:${t.t4};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Webhook URL</div>
+    <div style="display:flex;gap:6px;margin-bottom:10px"><input id="wh-url" readonly value="${esc(url)}" style="flex:1;min-width:0;padding:8px 10px;border-radius:9px;background:${t.inp};border:1px solid ${t.bl};color:${t.t1};font-size:11px;font-family:ui-monospace,monospace;outline:none"/><button id="wh-copy-url" class="pb" type="button" style="padding:8px 12px;font-size:12px;flex-shrink:0">Copy</button></div>
+    <div style="color:${t.t4};font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Alert message (JSON)</div>
+    <textarea id="wh-msg" readonly rows="6" style="width:100%;padding:8px 10px;border-radius:9px;background:${t.inp};border:1px solid ${t.bl};color:${t.t1};font-size:11px;font-family:ui-monospace,monospace;outline:none;resize:none">${esc(sample)}</textarea>
+    <button id="wh-copy-msg" class="pb" type="button" style="width:100%;margin-top:6px;padding:8px;font-size:12px">Copy message</button>
+    <div style="color:${t.t4};font-size:10px;margin-top:8px;line-height:1.5">Signals received here are posted automatically and are visible to everyone in this channel.</div>
+  </div>`;
+}
+
 // Info Panel
 function renderInfoPanel(){
   const rp=$("#rp"),info=S.chatInfo;if(!rp||!info)return;
@@ -345,6 +366,7 @@ function renderInfoPanel(){
   panel.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3 style="color:${t.t1};font-size:16px;font-weight:600">Chat Info</h3><button class="ib" id="ip-close" type="button">${I.close}</button></div>
   <div style="text-align:center;margin-bottom:16px">${avatar(info.avatar||(info.type==="channel"?"📢":"👥"),72)}<div style="color:${t.t1};font-size:17px;font-weight:700;margin-top:8px">${esc(info.name)}</div>${info.username?`<div style="color:${t.ac};font-size:13px;margin-top:3px">@${esc(info.username)}</div>`:""}<div style="color:${t.t3};font-size:12px;margin-top:3px">${esc(info.bio||"")}</div><div style="display:inline-flex;gap:6px;margin-top:6px"><span style="color:${t.t4};font-size:11px;background:${t.ta};padding:2px 8px;border-radius:8px">${info.type}</span><span style="color:${t.t4};font-size:11px;background:${t.ta};padding:2px 8px;border-radius:8px">${info.visibility}</span></div></div>
   ${isAdm?`<button id="ip-edit" class="pb" style="width:100%;margin-bottom:14px;padding:9px;font-size:13px" type="button">${I.edit} Edit</button>`:""}
+  ${(info.type==="channel"&&info.webhook_token)?webhookSectionHTML(info):""}
   <div style="color:${t.t2};font-size:12px;font-weight:600;margin-bottom:8px">Members (${Array.isArray(info.members)?info.members.length:info.members?.[0]?.count||"?"})</div><div id="ip-members"></div>
   ${isAdm?`<button id="ip-add" class="sbtn" style="margin-top:6px;color:${t.ac}" type="button">${I.plus} Add Member</button>`:""}
   <button id="ip-leave" class="sbtn" style="margin-top:12px;color:#ff6b6b" type="button">${I.logout} Leave</button>
@@ -352,9 +374,11 @@ function renderInfoPanel(){
   rp.appendChild(panel);
   panel.querySelector("#ip-close").onclick=()=>{S.showInfo=false;panel.remove();};
   const ml=panel.querySelector("#ip-members");
-  if(Array.isArray(info.members)&&info.members[0]?.id){info.members.forEach(m=>{const d=ce("div");d.style.cssText="display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px";d.innerHTML=`${avatar(m.avatar||"💬",30)}<div style="flex:1"><span style="color:${t.t1};font-size:13px">${esc(m.name||m.email)}</span>${m.username?` <span style="color:${t.t3};font-size:11px">@${esc(m.username)}</span>`:""}${m.chat_role==="admin"?`<span style="color:#f59e0b;font-size:10px;margin-left:4px">admin</span>`:""}</div>`;ml.appendChild(d);});}
+  if(Array.isArray(info.members)&&info.members[0]?.id){info.members.forEach(m=>{const d=ce("div");d.style.cssText="display:flex;align-items:center;gap:8px;padding:6px;border-radius:8px;cursor:pointer";d.onclick=()=>openUserProfile(m);d.innerHTML=`${avatar(m.avatar||"💬",30)}<div style="flex:1"><span style="color:${t.t1};font-size:13px">${esc(m.name||m.email)}</span>${m.username?` <span style="color:${t.t3};font-size:11px">@${esc(m.username)}</span>`:""}${m.chat_role==="admin"?`<span style="color:#f59e0b;font-size:10px;margin-left:4px">admin</span>`:""}</div>`;ml.appendChild(d);});}
   else ml.innerHTML=`<div style="color:${t.t3};font-size:13px;padding:6px">🔒 Private</div>`;
   const ebt=panel.querySelector("#ip-edit");if(ebt)ebt.onclick=()=>{panel.remove();openEditChat(info);};
+  const whu=panel.querySelector("#wh-copy-url");if(whu)whu.onclick=()=>{const el=panel.querySelector("#wh-url");el.select();navigator.clipboard?.writeText(el.value).catch(()=>{});whu.textContent="Copied!";setTimeout(()=>{whu.textContent="Copy";},1500);};
+  const whm=panel.querySelector("#wh-copy-msg");if(whm)whm.onclick=()=>{const el=panel.querySelector("#wh-msg");el.select();navigator.clipboard?.writeText(el.value).catch(()=>{});whm.textContent="Copied!";setTimeout(()=>{whm.textContent="Copy message";},1500);};
   const ab=panel.querySelector("#ip-add");if(ab)ab.onclick=()=>{panel.remove();openAddMember(info);};
   panel.querySelector("#ip-leave").onclick=async()=>{if(!confirm("Leave?"))return;await api(`/chats/${info.id}/members/${S.user.id}`,{method:"DELETE"});S.activeChat=null;S.mobileView="list";loadChats();renderApp();};
   const db=panel.querySelector("#ip-del");if(db)db.onclick=async()=>{if(!confirm("Delete permanently?"))return;await api(`/chats/${info.id}`,{method:"DELETE"});S.activeChat=null;S.mobileView="list";loadChats();renderApp();};
@@ -796,6 +820,25 @@ function openQuantumChat(){
   document.body.appendChild(ov);
   ov.querySelector("#qc-back").onclick=()=>ov.remove();
   ov.querySelector("#qc-tab").onclick=()=>window.open("/quantum-chat.html","_blank");
+}
+
+function openUserProfile(u){
+  if(!u)return;
+  const role=u.role||u.user_role||"user";
+  const badge=role==="bot"?`<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(74,222,128,.15);color:#4ade80;margin-left:6px">🤖 bot</span>`:role==="admin"?`<span style="font-size:11px;padding:2px 8px;border-radius:6px;background:rgba(245,158,11,.15);color:#f59e0b;margin-left:6px">admin</span>`:"";
+  modal("Profile",(body,close)=>{
+    body.innerHTML=`<div style="text-align:center">${avatar(u.avatar||"💬",80)}
+      <div style="color:${t.t1};font-size:18px;font-weight:700;margin-top:10px">${esc(u.name||u.email||"User")}${badge}</div>
+      ${u.username?`<div style="color:${t.ac};font-size:13px;margin-top:3px">@${esc(u.username)}</div>`:""}
+      ${u.email&&role!=="bot"?`<div style="color:${t.t3};font-size:12px;margin-top:3px">${esc(u.email)}</div>`:""}</div>
+      <div style="margin-top:16px"><div style="color:${t.t2};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Bio</div>
+      <div style="color:${u.bio?t.t1:t.t4};font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word">${u.bio?esc(u.bio):"No bio yet."}</div></div>`;
+  });
+}
+function openDMProfile(){
+  const info=S.chatInfo;if(!info)return;
+  const partner=(info.members||[]).find(m=>m.id!==S.user.id)||(S.chats.find(c=>c.id===S.activeChat)||{}).partner;
+  if(partner)openUserProfile(partner);
 }
 
 function openProfile(){modal("Profile",(body,close)=>{let newAv=S.user.avatar;body.innerHTML=`<div style="text-align:center;margin-bottom:16px"><div id="pp-av" style="display:inline-block;cursor:pointer;position:relative">${avatar(S.user.avatar||"🧑‍💻",72)}<div style="position:absolute;bottom:0;right:0;width:26px;height:26px;border-radius:50%;background:${t.pg};display:flex;align-items:center;justify-content:center;font-size:11px;border:2px solid ${t.mod}">${I.photo}</div></div><input id="pp-fi" type="file" accept="image/*" style="display:none"/></div><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Username</label><div style="position:relative"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:${t.t3};font-size:14px">@</span><input id="pp-u" class="gi" value="${esc(S.user.username||"")}" style="padding-left:28px;margin-bottom:10px;font-size:14px"/></div><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Name</label><input id="pp-n" class="gi" value="${esc(S.user.name||"")}" style="margin-bottom:10px;font-size:14px"/><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Bio</label><textarea id="pp-b" class="gi" rows="3" style="resize:none;margin-bottom:10px;font-size:14px" placeholder="Tell about yourself...">${esc(S.user.bio||"")}</textarea><label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Email</label><div style="padding:10px;border-radius:12px;background:${t.cd};border:1px solid ${t.bd};color:${t.t3};font-size:13px;margin-bottom:14px">${esc(S.user.email)}</div><button id="pp-save" class="pb" style="width:100%" type="button">Save</button>`;body.querySelector("#pp-av").onclick=()=>body.querySelector("#pp-fi").click();body.querySelector("#pp-fi").onchange=async function(){if(!this.files[0])return;const fd=new FormData();fd.append("file",this.files[0]);const r=await fetch("/api/upload",{method:"POST",headers:{Authorization:"Bearer "+S.token},body:fd});const d=await r.json();if(d.url){newAv=d.url;body.querySelector("#pp-av").innerHTML=avatar(newAv,72);}};body.querySelector("#pp-save").onclick=async()=>{try{const u=await api("/auth/profile",{method:"PUT",body:JSON.stringify({name:body.querySelector("#pp-n").value.trim(),bio:body.querySelector("#pp-b").value.trim(),avatar:newAv,username:body.querySelector("#pp-u").value.trim()})});S.user={...S.user,...u};localStorage.setItem("dq_u",JSON.stringify(S.user));close();renderApp();}catch(e){alert(e.error||"Error");}};});}

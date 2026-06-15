@@ -1,5 +1,6 @@
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL ||
@@ -93,12 +94,14 @@ async function initDB() {
     const cols = [
       ["users", "username", "TEXT UNIQUE"],
       ["chats", "username", "TEXT UNIQUE"],
+      ["chats", "webhook_token", "TEXT"],
       ["messages", "edited_at", "TIMESTAMPTZ"],
       ["messages", "reply_to", "INTEGER REFERENCES messages(id) ON DELETE SET NULL"],
     ];
     for (const [tbl, col, def] of cols) {
       await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS ${col} ${def}`).catch(() => {});
     }
+    await client.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_chats_webhook_token ON chats(webhook_token) WHERE webhook_token IS NOT NULL").catch(() => {});
 
     // AI Bot
     const { rows: [botExists] } = await client.query("SELECT id FROM users WHERE role='bot' LIMIT 1");
@@ -127,6 +130,45 @@ async function initDB() {
       await client.query("UPDATE users SET password_hash=$1, role='admin' WHERE email=$2", [h, adminEmail]);
       console.log(`✅ Admin synced: ${adminEmail}`);
     }
+
+    // ── Default broadcast channels: DrFX + Dr Signal ──────────────────────
+    // Like the AI assistant DM, these exist for everyone: every non-bot user is
+    // auto-joined. They are private, channel-type (admin-post-only) chats. The
+    // Dr Signal channel carries a webhook_token used to route TradingView alerts.
+    const { rows: [adminRow] } = await client.query("SELECT id FROM users WHERE email=$1", [adminEmail]);
+    const adminId = adminRow?.id;
+    if (adminId) {
+      const signalUsername =
+        (process.env.SIGNAL_CHANNEL_USERNAME || "signals").toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30) || "signals";
+      const ensureChannel = async (uname, name, bio, avatar, withToken) => {
+        let { rows: [ch] } = await client.query("SELECT id, webhook_token FROM chats WHERE username=$1", [uname]);
+        if (!ch) {
+          const token = withToken ? crypto.randomBytes(24).toString("hex") : null;
+          const { rows: [created] } = await client.query(
+            "INSERT INTO chats (type,username,name,bio,avatar,visibility,created_by,webhook_token) VALUES ('channel',$1,$2,$3,$4,'private',$5,$6) RETURNING id",
+            [uname, name, bio, avatar, adminId, token]
+          );
+          ch = created;
+        } else if (withToken && !ch.webhook_token) {
+          await client.query("UPDATE chats SET webhook_token=$1 WHERE id=$2", [crypto.randomBytes(24).toString("hex"), ch.id]);
+        }
+        // Admin owns the channel; everyone else is a plain member. Backfills users
+        // created before the channel existed (idempotent on every boot).
+        await client.query(
+          "INSERT INTO chat_members (chat_id,user_id,role) VALUES ($1,$2,'admin') ON CONFLICT (chat_id,user_id) DO UPDATE SET role='admin'",
+          [ch.id, adminId]
+        );
+        await client.query(
+          "INSERT INTO chat_members (chat_id,user_id) SELECT $1, id FROM users WHERE role <> 'bot' ON CONFLICT (chat_id,user_id) DO NOTHING",
+          [ch.id]
+        );
+        return ch.id;
+      };
+      await ensureChannel("drfx", "DrFX", "Official DrFX channel — announcements and updates from the team.", "📈", false);
+      await ensureChannel(signalUsername, "Dr Signal", "Automated trading signals delivered from TradingView. Only admins post here.", "📊", true);
+      console.log("✅ Default channels ready (DrFX, Dr Signal)");
+    }
+
     console.log("✅ PostgreSQL ready");
   } finally { client.release(); }
 }

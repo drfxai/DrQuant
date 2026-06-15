@@ -24,8 +24,16 @@ router.post("/register", async (req, res) => {
     if (bot) {
       const { rows: [chat] } = await pool.query("INSERT INTO chats (type,created_by) VALUES ('dm',$1) RETURNING id", [u.id]);
       await pool.query("INSERT INTO chat_members (chat_id,user_id,role) VALUES ($1,$2,'member'),($1,$3,'member')", [chat.id, u.id, bot.id]);
-      await pool.query("INSERT INTO messages (chat_id,user_id,content) VALUES ($1,$2,$3)", [chat.id, bot.id, "👋 Welcome to DrFX Quantum!\n\nI'm your AI trading assistant. Ask me about:\n• Technical analysis & chart patterns\n• Trading strategies & risk management\n• Forex, Crypto, Stocks, Gold\n• Pine Script development\n\nHow can I help?"]);
+      await pool.query("INSERT INTO messages (chat_id,user_id,content) VALUES ($1,$2,$3)", [chat.id, bot.id, "👋 Welcome to DrFX Quant!\n\nI'm your AI trading assistant. Ask me about:\n• Technical analysis & chart patterns\n• Trading strategies & risk management\n• Forex, Crypto, Stocks, Gold\n• Pine Script development\n\nHow can I help?"]);
     }
+    // Auto-join the default broadcast channels (DrFX + Dr Signal), like the AI DM.
+    try {
+      const sigU = (process.env.SIGNAL_CHANNEL_USERNAME || "signals").toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30) || "signals";
+      await pool.query(
+        "INSERT INTO chat_members (chat_id,user_id) SELECT id, $1 FROM chats WHERE type='channel' AND username = ANY($2::text[]) ON CONFLICT DO NOTHING",
+        [u.id, ["drfx", sigU]]
+      );
+    } catch (e) { console.error("Default channel join:", e.message); }
     const token = jwt.sign({ id: u.id, email: u.email, role: u.role }, JWT_SECRET, { expiresIn: "30d" });
     res.status(201).json({ token, user: u });
   } catch (err) { console.error("Register:", err); res.status(500).json({ error: "Server error" }); }

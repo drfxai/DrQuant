@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 const FREE_DAILY_LIMIT = 5;
-const AI_SYSTEM = `You are DrFX Quantum AI, a professional trading assistant by Dr. Pouria. Help with technical analysis, trading strategies, risk management, Forex/Crypto/Stocks/Gold, and Pine Script. Be concise and actionable. Remind users trading involves risk.`;
+const AI_SYSTEM = `You are DrFX Quant AI, a professional trading assistant by Dr. Pouria. Help with technical analysis, trading strategies, risk management, Forex/Crypto/Stocks/Gold, and Pine Script. Be concise and actionable. Remind users trading involves risk.`;
 
 router.use((req, res, next) => { req.app.get("authMiddleware")(req, res, next); });
 
@@ -22,7 +22,7 @@ router.get("/", async (req, res) => {
       const { rows: [lastMsg] } = await pool.query("SELECT m.*,u.name AS sender_name FROM messages m JOIN users u ON m.user_id=u.id WHERE m.chat_id=$1 ORDER BY m.created_at DESC LIMIT 1", [ch.id]);
       let partner = null;
       if (ch.type === "dm") {
-        const { rows: [p] } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.avatar,u.role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 AND cm.user_id!=$2 LIMIT 1", [ch.id, req.user.id]);
+        const { rows: [p] } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 AND cm.user_id!=$2 LIMIT 1", [ch.id, req.user.id]);
         partner = p || null;
       }
       result.push({ ...ch, lastMessage: lastMsg || null, partner });
@@ -83,7 +83,7 @@ router.get("/:id", async (req, res) => {
     if (!mem) {
       if (chat.type !== "dm" && chat.visibility === "public") {
         const { rows: [ct] } = await pool.query("SELECT COUNT(*)::int AS c FROM chat_members WHERE chat_id=$1", [chatId]);
-        return res.json({ ...chat, myRole: null, isMember: false, member_count: ct.c, members: [] });
+        return res.json({ ...chat, webhook_token: undefined, myRole: null, isMember: false, member_count: ct.c, members: [] });
       }
       return res.status(403).json({ error: "Not a member" });
     }
@@ -93,10 +93,12 @@ router.get("/:id", async (req, res) => {
       const { rows: [ct] } = await pool.query("SELECT COUNT(*)::int AS c FROM chat_members WHERE chat_id=$1", [chatId]);
       members = [{ count: ct.c }];
     } else {
-      const { rows } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.avatar,u.role AS user_role,cm.role AS chat_role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 ORDER BY cm.role DESC,cm.joined_at", [chatId]);
+      const { rows } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role AS user_role,cm.role AS chat_role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 ORDER BY cm.role DESC,cm.joined_at", [chatId]);
       members = rows;
     }
-    res.json({ ...chat, myRole: mem.role, isMember: true, members });
+    const resp = { ...chat, myRole: mem.role, isMember: true, members };
+    if (!isAdmin) delete resp.webhook_token;
+    res.json(resp);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
 

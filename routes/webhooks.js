@@ -110,12 +110,65 @@ function normalize(p) {
   };
 }
 
-router.post("/tradingview", async (req, res) => {
+// Format a normalized signal as a readable channel message (markdown + emoji).
+function formatSignalMessage(n) {
+  const sideEmoji = { buy: "🟢", long: "🟢", sell: "🔴", short: "🔴", close: "⚪", alert: "🔔" }[n.side] || "📊";
+  const lines = ["📡 **TradingView Signal**", `${sideEmoji} **${n.side.toUpperCase()}**  ${n.symbol}`];
+  const px = [];
+  if (n.price != null) px.push(`Entry: ${n.price}`);
+  if (n.stop_loss != null) px.push(`SL: ${n.stop_loss}`);
+  if (n.take_profit != null) px.push(`TP: ${n.take_profit}`);
+  if (px.length) lines.push(px.join("  ·  "));
+  const meta = [];
+  if (n.timeframe) meta.push(`TF ${n.timeframe}`);
+  if (n.strategy) meta.push(n.strategy);
+  if (meta.length) lines.push(meta.join("  ·  "));
+  if (n.note) lines.push(n.note);
+  return lines.join("\n");
+}
+
+// Post a signal into a channel as a NORMAL chat message, so members see it in
+// the chat UI. The SPA renders `messages` and listens on per-user rooms for
+// `chat_message`; it does not render raw `signal` events. Mirrors the broadcast
+// shape used by routes/chats.js exactly.
+async function postSignalToChannel(pool, io, chatId, n) {
+  const { rows: [chat] } = await pool.query("SELECT created_by FROM chats WHERE id=$1", [chatId]);
+  let authorId = chat?.created_by || null;
+  if (!authorId) {
+    const { rows: [adm] } = await pool.query("SELECT id FROM users WHERE role IN ('admin','superadmin') ORDER BY id LIMIT 1");
+    authorId = adm?.id || null;
+  }
+  if (!authorId) return; // no valid author -> skip the message (signal still persisted/emitted)
+  const { rows: [msg] } = await pool.query(
+    "INSERT INTO messages (chat_id,user_id,content) VALUES ($1,$2,$3) RETURNING *",
+    [chatId, authorId, formatSignalMessage(n)]
+  );
+  const { rows: [sender] } = await pool.query("SELECT name,avatar,role FROM users WHERE id=$1", [authorId]);
+  const payload = { ...msg, sender_name: sender?.name || "Dr Signal", sender_avatar: sender?.avatar || "📊", sender_role: sender?.role || "admin" };
+  const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
+  members.forEach((m) => io.to(`user_${m.user_id}`).emit("chat_message", payload));
+}
+
+router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
   const pool = req.app.get("pool");
   const io = req.app.get("io");
   const ip = req.ip;
   const raw = req.rawBody || Buffer.from("");
   const payload = req.json;
+
+  // URL-token routing: /tradingview/<token> binds directly to a channel's chat.
+  // Possessing the token authorizes posting to that channel (no body secret),
+  // which is what makes it copy-paste friendly for TradingView alerts.
+  let tokenChatId = null;
+  if (req.params.token) {
+    try {
+      const { rows: [c] } = await pool.query(
+        "SELECT id FROM chats WHERE webhook_token=$1 AND type='channel' LIMIT 1",
+        [req.params.token]
+      );
+      tokenChatId = c?.id ?? null;
+    } catch { tokenChatId = null; }
+  }
 
   // dedupe/replay key: hash of body + a coarse 60s time bucket so identical
   // alerts fired seconds apart are treated as one. The UNIQUE index on
@@ -149,7 +202,9 @@ router.post("/tradingview", async (req, res) => {
   // --- AUTH ----------------------------------------------------------------
   const headerSig = req.get("X-Signature");
   let authed = false;
-  if (channel && channel.secret_hash) {
+  if (tokenChatId) {
+    authed = true; // the URL token is the credential
+  } else if (channel && channel.secret_hash) {
     // Per-channel secret: body-secret mode, compared as SHA-256 hashes so the
     // raw token is never stored. (HMAC-header mode needs the raw key and is not
     // offered per-channel; use the global secret for a signing proxy.)
@@ -216,8 +271,8 @@ router.post("/tradingview", async (req, res) => {
     // Destination chat + visibility: prefer the resolved per-channel row, else
     // fall back to the legacy username-based lookup. channel_id references
     // chats(id), and a channel's chat_id is exactly that, so it slots in.
-    let chatId = channel?.chat_id ?? null;
-    const broadcastGlobal = channel ? channel.visibility === "public" : true;
+    let chatId = tokenChatId ?? channel?.chat_id ?? null;
+    const broadcastGlobal = tokenChatId ? false : (channel ? channel.visibility === "public" : true);
     if (!chatId) {
       const { rows: [chan] } = await pool.query(
         `SELECT id FROM chats WHERE username = $1 AND type = 'channel' LIMIT 1`,
@@ -232,6 +287,13 @@ router.post("/tradingview", async (req, res) => {
       [n.symbol, n.side, n.price, n.stop_loss, n.take_profit, n.timeframe, n.strategy, n.note, JSON.stringify(payload), chatId]
     );
     await pool.query(`UPDATE webhook_logs SET signal_id=$1 WHERE id=$2`, [sig.id, logId]);
+
+    // Post the signal into the channel as a normal chat message so every member
+    // sees it in the chat UI (raw `signal` events are not rendered by the SPA).
+    if (chatId) {
+      try { await postSignalToChannel(pool, io, chatId, n); }
+      catch (e) { console.error("[webhook] channel post error:", e.message); }
+    }
 
     // Private channels broadcast to members only (chat room); public channels
     // also hit the global signals feed.
