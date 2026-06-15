@@ -173,6 +173,31 @@ async function postSignalToChannel(pool, io, chatId, n) {
   members.forEach((m) => io.to(`user_${m.user_id}`).emit("chat_message", payload));
 }
 
+// Post a pre-formatted text body into a channel VERBATIM, as a normal chat
+// message. Used for alerts that already carry their own fully-formatted body
+// (e.g. Pine alert() output from the GOD MODE indicator), so the channel shows
+// EXACTLY what the indicator sent instead of a re-formatted summary. Mirrors
+// the broadcast shape used by postSignalToChannel / routes/chats.js.
+async function postRawTextToChannel(pool, io, chatId, text) {
+  const body = String(text).replace(/\r\n/g, "\n").trim().slice(0, 4000);
+  if (!body) return;
+  const { rows: [chat] } = await pool.query("SELECT created_by FROM chats WHERE id=$1", [chatId]);
+  let authorId = chat?.created_by || null;
+  if (!authorId) {
+    const { rows: [adm] } = await pool.query("SELECT id FROM users WHERE role IN ('admin','superadmin') ORDER BY id LIMIT 1");
+    authorId = adm?.id || null;
+  }
+  if (!authorId) return;
+  const { rows: [msg] } = await pool.query(
+    "INSERT INTO messages (chat_id,user_id,content) VALUES ($1,$2,$3) RETURNING *",
+    [chatId, authorId, body]
+  );
+  const { rows: [sender] } = await pool.query("SELECT name,avatar,role FROM users WHERE id=$1", [authorId]);
+  const payload = { ...msg, sender_name: sender?.name || "Dr Signal", sender_avatar: sender?.avatar || "📊", sender_role: sender?.role || "admin" };
+  const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
+  members.forEach((m) => io.to(`user_${m.user_id}`).emit("chat_message", payload));
+}
+
 router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
   const pool = req.app.get("pool");
   const io = req.app.get("io");
@@ -252,6 +277,47 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
   if (!authed) {
     await logHook("rejected_signature", "bad or missing secret");
     return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  // --- RAW-TEXT PASSTHROUGH (token routes only) ----------------------------
+  // Pine indicators (e.g. GOD MODE) fire alert() with a fully-formatted text
+  // body, not a JSON signal. When the request is routed by a channel token
+  // (the token already authorized it above) and the body is NOT a structured
+  // JSON signal, post the text VERBATIM so the channel shows it exactly as the
+  // indicator formatted it. Structured JSON (symbol/ticker present) continues
+  // through the normalize/validate/format path below, unchanged.
+  if (tokenChatId) {
+    const looksStructured = !!(payload && (payload.symbol || payload.ticker));
+    if (!looksStructured) {
+      const msgField = payload ? (payload.message ?? payload.text) : null;
+      const ptext = (typeof msgField === "string" && msgField.trim())
+        ? msgField
+        : raw.toString("utf8");
+      if (ptext && ptext.trim()) {
+        let claimP;
+        try {
+          claimP = await pool.query(
+            `INSERT INTO webhook_logs (source, ip, signature_ok, dedupe_key, status)
+             VALUES ('tradingview',$1,true,$2,'accepted')
+             ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+             RETURNING id`,
+            [ip, dedupeKey]
+          );
+        } catch (e) {
+          console.error("[webhook] webhook_logs insert failed — are migrations applied?:", e.message);
+          return res.status(500).json({ error: "Webhook storage not ready (run migrations)" });
+        }
+        if (claimP.rowCount === 0) return res.status(202).json({ status: "duplicate_ignored" });
+        try {
+          await postRawTextToChannel(pool, io, tokenChatId, ptext);
+          return res.status(201).json({ status: "published", mode: "passthrough" });
+        } catch (e) {
+          console.error("[webhook] passthrough post error:", e.message);
+          await pool.query(`UPDATE webhook_logs SET status='error', reason=$2 WHERE id=$1`, [claimP.rows[0].id, e.message]).catch(() => {});
+          return res.status(500).json({ error: "Processing failed" });
+        }
+      }
+    }
   }
 
   // --- SCHEMA --------------------------------------------------------------
