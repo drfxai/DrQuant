@@ -218,7 +218,7 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
       await pool.query(
         `INSERT INTO webhook_logs (source, ip, signature_ok, dedupe_key, status, reason, payload, signal_id)
          VALUES ('tradingview',$1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT (dedupe_key) DO NOTHING`,
+         ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING`,
         [ip, status === "accepted", status === "rejected_replay" ? null : dedupeKey, status, reason || null, payload ? JSON.stringify(payload) : null, signalId]
       );
     } catch (e) {
@@ -278,7 +278,7 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
     claim = await pool.query(
       `INSERT INTO webhook_logs (source, ip, signature_ok, dedupe_key, status)
        VALUES ('tradingview',$1,true,$2,'accepted')
-       ON CONFLICT (dedupe_key) DO NOTHING
+       ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
        RETURNING id`,
       [ip, dedupeKey]
     );
