@@ -102,10 +102,53 @@ function renderLogin(){
   const doAuth=async()=>{const btn=$("#l-btn"),err=$("#l-err"),em=$("#l-em")?.value?.trim(),pw=$("#l-pw")?.value,nm=$("#l-name")?.value?.trim();
     if(!em||!pw){err.innerHTML=`<div style="padding:12px 16px;border-radius:12px;background:rgba(255,100,100,.08);border:1px solid rgba(255,100,100,.15);color:#ff6b6b;font-size:13px;margin-bottom:16px">Please fill all fields</div>`;return;}
     btn.disabled=true;btn.textContent="Please wait...";
-    try{const d=await api("/auth/"+loginTab,{method:"POST",body:JSON.stringify({email:em,password:pw,name:nm||undefined})});S.token=d.token;S.user=d.user;localStorage.setItem("dq_t",d.token);localStorage.setItem("dq_u",JSON.stringify(d.user));connectSocket();render();}
+    try{const d=await api("/auth/"+loginTab,{method:"POST",body:JSON.stringify({email:em,password:pw,name:nm||undefined})});
+      if(loginTab==="register"&&d&&d.pending){renderOtp(d.email);return;}
+      S.token=d.token;S.user=d.user;localStorage.setItem("dq_t",d.token);localStorage.setItem("dq_u",JSON.stringify(d.user));connectSocket();render();}
     catch(e){err.innerHTML=`<div style="padding:12px 16px;border-radius:12px;background:rgba(255,100,100,.08);border:1px solid rgba(255,100,100,.15);color:#ff6b6b;font-size:13px;margin-bottom:16px">${esc(e.error||"Error")}</div>`;btn.disabled=false;btn.textContent=loginTab==="login"?"Sign In":"Create Account";}};
   $("#l-btn").onclick=doAuth;
   ["l-em","l-pw","l-name"].forEach(id=>{const el=$("#"+id);if(el)el.onkeydown=e=>{if(e.key==="Enter")doAuth();};});
+}
+
+// ✉️ Email confirmation code screen (shown after register when SMTP is configured)
+function renderOtp(email){
+  const fs=`background:rgba(15,22,45,.7);border:1px solid rgba(100,150,255,.15);color:#e0e8ff;font-family:'Outfit',sans-serif;font-size:16px;outline:none;-webkit-appearance:none;-moz-appearance:none;appearance:none;touch-action:auto`;
+  $("#app").innerHTML=`<div style="width:100vw;height:calc(var(--vh,1vh)*100);display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 30% 30%,#0d1a35,#060d1f 50%,#020714);position:relative;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px">
+  <div style="width:420px;max-width:100%;animation:si .4s ease">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="width:80px;height:80px;border-radius:22px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(20,30,65,.9),rgba(15,22,50,.95));border:1px solid rgba(100,150,255,.2);box-shadow:0 8px 32px rgba(0,0,0,.3),inset 0 1px rgba(255,255,255,.05);font-size:36px">✉️</div>
+      <h1 style="color:#e0e8ff;font-size:24px;font-weight:700;margin:0;letter-spacing:-.3px">Check your email</h1>
+      <p style="color:#8090b5;font-size:13px;margin:8px 0 0;line-height:1.6">We sent a 6-digit code to<br><span style="color:#8cc4ff;font-weight:600">${esc(email)}</span></p>
+    </div>
+    <div style="background:rgba(12,18,42,.8);backdrop-filter:blur(30px);border:1px solid rgba(100,150,255,.12);border-radius:24px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div id="otp-err"></div>
+      <div style="color:#a0b4d8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">CONFIRMATION CODE</div>
+      <input id="otp-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="------" style="width:100%;padding:14px 16px;border-radius:12px;${fs};text-align:center;letter-spacing:14px;font-size:28px;font-weight:700;margin-bottom:20px"/>
+      <button id="otp-go" type="button" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,#3a6cdc,#2a5cc0);color:#fff;font-weight:700;font-size:15px;cursor:pointer;font-family:'Outfit',sans-serif;box-shadow:0 4px 20px rgba(58,108,220,.4);letter-spacing:.3px;-webkit-appearance:none">Verify &amp; Continue</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:18px">
+        <button id="otp-back" type="button" style="background:none;border:none;color:#607090;font-size:13px;cursor:pointer;font-family:'Outfit',sans-serif">&larr; Back</button>
+        <button id="otp-resend" type="button" style="background:none;border:none;color:#8cc4ff;font-size:13px;cursor:pointer;font-family:'Outfit',sans-serif">Resend code</button>
+      </div>
+    </div>
+    <p style="color:#506080;font-size:12px;text-align:center;margin-top:18px;line-height:1.6">The code expires in 10 minutes.<br>Check your spam folder if you don't see it.</p>
+  </div></div>`;
+  const errEl=$("#otp-err"),codeEl=$("#otp-code");
+  const note=(bg,bd,col,m)=>`<div style="padding:12px 16px;border-radius:12px;background:${bg};border:1px solid ${bd};color:${col};font-size:13px;margin-bottom:16px">${esc(m)}</div>`;
+  const showErr=m=>{errEl.innerHTML=note("rgba(255,100,100,.08)","rgba(255,100,100,.15)","#ff6b6b",m);};
+  const showOk=m=>{errEl.innerHTML=note("rgba(74,222,128,.1)","rgba(74,222,128,.2)","#4ade80",m);};
+  codeEl.oninput=()=>{codeEl.value=codeEl.value.replace(/[^0-9]/g,"").slice(0,6);};
+  const doVerify=async()=>{
+    const code=(codeEl.value||"").trim();
+    if(code.length<6){showErr("Enter the 6-digit code");return;}
+    const b=$("#otp-go");b.disabled=true;b.textContent="Verifying...";
+    try{const d=await api("/auth/verify",{method:"POST",body:JSON.stringify({email,code})});S.token=d.token;S.user=d.user;localStorage.setItem("dq_t",d.token);localStorage.setItem("dq_u",JSON.stringify(d.user));connectSocket();render();}
+    catch(e){showErr(e.error||"Verification failed");b.disabled=false;b.textContent="Verify & Continue";}
+  };
+  $("#otp-go").onclick=doVerify;
+  codeEl.onkeydown=e=>{if(e.key==="Enter")doVerify();};
+  $("#otp-back").onclick=()=>{loginTab="register";renderLogin();};
+  $("#otp-resend").onclick=async()=>{const r=$("#otp-resend");r.disabled=true;r.textContent="Sending...";try{await api("/auth/resend",{method:"POST",body:JSON.stringify({email})});showOk("A new code is on its way.");}catch(e){showErr(e.error||"Could not resend");}r.disabled=false;r.textContent="Resend code";};
+  setTimeout(()=>{codeEl&&codeEl.focus();},80);
 }
 
 // ━━━ MAIN APP ━━━

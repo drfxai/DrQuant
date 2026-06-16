@@ -1,138 +1,305 @@
 #!/bin/bash
 # ============================================================================
-#  DrFX Quant - Management & Reference Card
-#  Run any time:  sudo bash /var/www/drfx-quantum/manage.sh
+#  DrFX Quant — Management Console
+#  Run:  sudo bash /var/www/drfx-quantum/manage.sh
 #
-#  Read-only: this script changes NOTHING. It shows the current configuration,
-#  live resource usage, and the exact commands to change each part of the
-#  deployment (domain, admin, ports, database, SSL, firewall, updates, logs).
+#  Interactive console to VIEW and EDIT the live configuration:
+#    • Admin email / password
+#    • NowPayments API key + IPN secret
+#    • OpenRouter API key (AI assistant)
+#    • Email (SMTP) settings used for sign-up confirmation codes
+#  …plus restart, status, logs, and a quick command-reference card.
+#
+#  Every edit writes to $APP_DIR/.env (kept at 0600) and offers to restart the
+#  app. Nothing changes unless you choose it.
 # ============================================================================
-GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'
-BOLD='\033[1m'; DIM='\033[2m'; NC='\033[0m'
+
+# ---- colours ---------------------------------------------------------------
+R=$'\033[0;31m'; G=$'\033[0;32m'; Y=$'\033[1;33m'; B=$'\033[0;34m'; C=$'\033[0;36m'
+M=$'\033[0;35m'; W=$'\033[1;37m'; BOLD=$'\033[1m'; DIM=$'\033[2m'; NC=$'\033[0m'
 
 APP_DIR="${APP_DIR:-/var/www/drfx-quantum}"
 ENV_FILE="$APP_DIR/.env"
 NGINX_SITE="/etc/nginx/sites-available/drfx-quantum"
 PM2_NAME="drfx-quantum"
+WIDTH=64
 
+# ---- env helpers -----------------------------------------------------------
 getenv() { [ -f "$ENV_FILE" ] && grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true; }
 
-# ---- current configuration -------------------------------------------------
-PORT="$(getenv PORT)"; PORT="${PORT:-3000}"
-ADMIN_EMAIL="$(getenv ADMIN_EMAIL)"; ADMIN_EMAIL="${ADMIN_EMAIL:-(unknown)}"
-DB_NAME="$(getenv DB_NAME)"; DB_NAME="${DB_NAME:-drfx_quantum}"
-DB_USER="$(getenv DB_USER)"; DB_USER="${DB_USER:-drfx}"
-DOMAIN="$(getenv DOMAIN)"
-[ -z "$DOMAIN" ] && DOMAIN="$(getenv ALLOWED_ORIGINS | sed -E 's#https?://##; s#,.*##')"
-if [ -z "$DOMAIN" ] && [ -f "$NGINX_SITE" ]; then
-  DOMAIN="$(grep -m1 -E '^[[:space:]]*server_name' "$NGINX_SITE" 2>/dev/null | awk '{print $2}' | tr -d ';')"
-fi
-[ -z "$DOMAIN" ] && DOMAIN="(unknown)"
+set_env() {
+  # set_env KEY VALUE — safely upsert a key in .env without disturbing the rest.
+  local key="$1"; local val="$2"; local tmp
+  if ! touch "$ENV_FILE" 2>/dev/null; then
+    echo -e "${R}  ✘ Cannot write $ENV_FILE — re-run with: sudo bash $0${NC}"; return 1
+  fi
+  tmp="$(mktemp)" || return 1
+  grep -vE "^${key}=" "$ENV_FILE" > "$tmp" 2>/dev/null || true
+  printf '%s=%s\n' "$key" "$val" >> "$tmp"
+  cat "$tmp" > "$ENV_FILE"; rm -f "$tmp"
+  chmod 600 "$ENV_FILE" 2>/dev/null || true
+  return 0
+}
 
-SCHEME="http"
-[ -f "$NGINX_SITE" ] && grep -q "listen 443" "$NGINX_SITE" 2>/dev/null && SCHEME="https"
+is_placeholder() {
+  case "$1" in
+    ""|your_*|generate_with_*|*_here|password|change_me|your_secure_password) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+mask() {
+  local v="$1"; local n=${#v}
+  if   [ "$n" -eq 0 ]; then printf '%s' "(not set)"
+  elif [ "$n" -le 8 ]; then printf '********'
+  else printf '%s…%s  %s(%s chars)%s' "${v:0:4}" "${v: -4}" "$DIM" "$n" "$NC"; fi
+}
+
+dot() { if is_placeholder "$1"; then printf '%s○%s' "$Y" "$NC"; else printf '%s●%s' "$G" "$NC"; fi; }
+
+# ---- ui helpers ------------------------------------------------------------
+rule()  { printf "  ${B}"; printf '─%.0s' $(seq 1 "$WIDTH"); printf "${NC}\n"; }
+top()   { printf "  ${B}╔"; printf '═%.0s' $(seq 1 "$WIDTH"); printf "╗${NC}\n"; }
+bot()   { printf "  ${B}╚"; printf '═%.0s' $(seq 1 "$WIDTH"); printf "╝${NC}\n"; }
+ctr()   { # centered title line inside the box
+  local s="$1"; local len=${#s}; local pad=$(( (WIDTH - len) / 2 ))
+  printf "  ${B}║${NC}%*s${BOLD}%s${NC}%*s${B}║${NC}\n" "$pad" "" "$s" "$(( WIDTH - len - pad ))" ""
+}
+pause() { echo ""; read -rsp "$(printf '%s  Press Enter to continue…%s' "$DIM" "$NC")" _; echo ""; }
+
+banner() {
+  clear 2>/dev/null || true
+  echo ""
+  top; ctr "DrFX Quant — Management Console"; bot
+}
 
 # ---- live status -----------------------------------------------------------
-APP_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | head -1 | tr -dc '0-9')"
-if [ -n "$APP_PID" ] && ps -p "$APP_PID" >/dev/null 2>&1; then
-  PM2_STATE="${GREEN}online${NC}"
-  APP_RSS_KB="$(ps -o rss= -p "$APP_PID" 2>/dev/null | tr -dc '0-9')"
-  [ -n "$APP_RSS_KB" ] && APP_MEM="$(( APP_RSS_KB / 1024 )) MB" || APP_MEM="?"
-else
-  PM2_STATE="${YELLOW}stopped${NC}"; APP_MEM="(not running)"
+read_status() {
+  PORT="$(getenv PORT)"; PORT="${PORT:-3000}"
+  DOMAIN="$(getenv DOMAIN)"
+  [ -z "$DOMAIN" ] && DOMAIN="$(getenv ALLOWED_ORIGINS | sed -E 's#https?://##; s#,.*##')"
+  if [ -z "$DOMAIN" ] && [ -f "$NGINX_SITE" ]; then
+    DOMAIN="$(grep -m1 -E '^[[:space:]]*server_name' "$NGINX_SITE" 2>/dev/null | awk '{print $2}' | tr -d ';')"
+  fi
+  [ -z "$DOMAIN" ] && DOMAIN="(unknown)"
+  SCHEME="http"; [ -f "$NGINX_SITE" ] && grep -q "listen 443" "$NGINX_SITE" 2>/dev/null && SCHEME="https"
+
+  APP_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | head -1 | tr -dc '0-9')"
+  if [ -n "$APP_PID" ] && ps -p "$APP_PID" >/dev/null 2>&1; then
+    PM2_STATE="${G}online${NC}"
+    local rss; rss="$(ps -o rss= -p "$APP_PID" 2>/dev/null | tr -dc '0-9')"
+    [ -n "$rss" ] && APP_MEM="$(( rss / 1024 )) MB" || APP_MEM="?"
+  else
+    PM2_STATE="${Y}stopped${NC}"; APP_MEM="(not running)"
+  fi
+}
+
+dashboard() {
+  read_status
+  local adm pw np ipn or smtp_h
+  adm="$(getenv ADMIN_EMAIL)"; pw="$(getenv ADMIN_PASSWORD)"
+  np="$(getenv NOWPAYMENTS_API_KEY)"; ipn="$(getenv NOWPAYMENTS_IPN_SECRET)"
+  or="$(getenv OPENROUTER_API_KEY)"; smtp_h="$(getenv SMTP_HOST)"
+
+  echo ""
+  printf "   ${C}%-13s${NC} %b\n" "URL"      "${BOLD}${SCHEME}://${DOMAIN}${NC}"
+  printf "   ${C}%-13s${NC} %b\n" "Service"  "${PM2_NAME}  [${PM2_STATE}]   ${DIM}${APP_MEM}${NC}"
+  printf "   ${C}%-13s${NC} %b\n" "App dir"  "${APP_DIR}"
+  printf "   ${C}%-13s${NC} %b\n" "Config"   "${ENV_FILE} ${DIM}(0600)${NC}"
+  echo ""
+  printf "   ${BOLD}%s${NC}\n" "Editable settings"
+  rule
+  printf "    ${BOLD}#  Setting${NC}                    ${BOLD}Value${NC}\n"
+  printf "    %b 1) %-22s %b\n" "$(dot "$adm")"  "Admin email"            "${adm:-${Y}(not set)${NC}}"
+  printf "    %b 2) %-22s %b\n" "$(dot "$pw")"   "Admin password"         "$([ -n "$pw" ] && printf '********  %s(re-synced on restart)%s' "$DIM" "$NC" || printf '%s(not set)%s' "$Y" "$NC")"
+  printf "    %b 3) %-22s %b\n" "$(dot "$np")"   "NowPayments API key"    "$(mask "$np")"
+  printf "    %b 4) %-22s %b\n" "$(dot "$ipn")"  "NowPayments IPN secret" "$(mask "$ipn")"
+  printf "    %b 5) %-22s %b\n" "$(dot "$or")"   "OpenRouter API key"     "$(mask "$or")"
+  printf "    %b 6) %-22s %b\n" "$(dot "$smtp_h")" "Email / SMTP"         "$([ -n "$smtp_h" ] && printf '%s  %s(sign-up codes ON)%s' "$smtp_h" "$G" "$NC" || printf '%s(not set — sign-up codes OFF)%s' "$Y" "$NC")"
+  rule
+  printf "    ${DIM}●%s set   ${Y}○%s not set${NC}\n" "$NC" "$DIM"
+}
+
+menu() {
+  echo ""
+  printf "   ${BOLD}Actions${NC}\n"
+  printf "    ${C}1${NC}-${C}5${NC}) edit a setting        ${C}6${NC}) Email / SMTP settings  ▸\n"
+  printf "    ${C}7${NC})   restart app           ${C}8${NC}) status & resources\n"
+  printf "    ${C}9${NC})   live logs (Ctrl-C)    ${C}r${NC}) command reference\n"
+  printf "    ${C}q${NC})   quit\n"
+  echo ""
+}
+
+# ---- edit primitives -------------------------------------------------------
+do_restart() {
+  echo ""; echo -e "${C}  Restarting ${PM2_NAME}…${NC}"
+  if pm2 restart "$PM2_NAME" --update-env >/dev/null 2>&1; then
+    echo -e "${G}  ✔ Restarted.${NC}"
+  else
+    pm2 start "$APP_DIR/server.js" --name "$PM2_NAME" --cwd "$APP_DIR" >/dev/null 2>&1 \
+      && echo -e "${G}  ✔ Started.${NC}" \
+      || echo -e "${R}  ✘ Could not (re)start. Check:  pm2 logs ${PM2_NAME}${NC}"
+  fi
+  pm2 save >/dev/null 2>&1 || true
+}
+
+offer_restart() {
+  echo ""
+  read -rp "$(printf '%s  Restart the app now so changes take effect? [y/N]: %s' "$Y" "$NC")" yn
+  case "$yn" in [Yy]*) do_restart ;; *) echo -e "${DIM}  Skipped — use option [7] later to restart.${NC}" ;; esac
+}
+
+edit_value() {
+  # edit_value KEY "Label" "hint" secret(0/1)
+  local key="$1" label="$2" hint="$3" secret="$4" cur val
+  cur="$(getenv "$key")"
+  banner
+  echo ""; echo -e "  ${BOLD}Edit ${label}${NC}"
+  [ -n "$hint" ] && echo -e "  ${DIM}${hint}${NC}"
+  if [ -n "$cur" ]; then
+    echo -e "  Current: ${C}$( [ "$secret" = "1" ] && mask "$cur" || printf '%s' "$cur")${NC}"
+  else
+    echo -e "  Current: ${Y}(not set)${NC}"
+  fi
+  echo ""
+  if [ "$secret" = "1" ]; then read -rsp "  New value (blank = keep): " val; echo; else read -rp "  New value (blank = keep): " val; fi
+  if [ -z "$val" ]; then echo -e "  ${DIM}Unchanged.${NC}"; pause; return; fi
+  if set_env "$key" "$val"; then echo -e "  ${G}✔ Saved ${key}.${NC}"; offer_restart; fi
+  pause
+}
+
+edit_admin_password() {
+  local p1 p2
+  banner
+  echo ""; echo -e "  ${BOLD}Change admin password${NC}"
+  echo -e "  ${DIM}Stored in .env; the app re-hashes and re-syncs the admin on restart.${NC}"
+  echo ""
+  read -rsp "  New password (min 6 chars): " p1; echo
+  if [ -z "$p1" ]; then echo -e "  ${DIM}Unchanged.${NC}"; pause; return; fi
+  if [ "${#p1}" -lt 6 ]; then echo -e "  ${R}✘ Too short (min 6).${NC}"; pause; return; fi
+  read -rsp "  Confirm password: " p2; echo
+  if [ "$p1" != "$p2" ]; then echo -e "  ${R}✘ Passwords do not match.${NC}"; pause; return; fi
+  if set_env ADMIN_PASSWORD "$p1"; then echo -e "  ${G}✔ Admin password saved.${NC}"; offer_restart; fi
+  pause
+}
+
+smtp_menu() {
+  while true; do
+    banner
+    local h p s u pw f
+    h="$(getenv SMTP_HOST)"; p="$(getenv SMTP_PORT)"; s="$(getenv SMTP_SECURE)"
+    u="$(getenv SMTP_USER)"; pw="$(getenv SMTP_PASS)"; f="$(getenv SMTP_FROM)"
+    echo ""
+    printf "   ${BOLD}Email / SMTP — sign-up confirmation codes${NC}\n"
+    echo -e "   ${DIM}When a host is set, new sign-ups must confirm a 6-digit code emailed to them.${NC}"
+    echo -e "   ${DIM}Leave host blank to disable (instant sign-up). Works with Resend, SendGrid,${NC}"
+    echo -e "   ${DIM}Gmail (app password), Supabase SMTP, Mailgun, etc.${NC}"
+    rule
+    printf "    ${C}1${NC}) %-14s %b\n" "Host"    "${h:-${Y}(not set)${NC}}"
+    printf "    ${C}2${NC}) %-14s %b\n" "Port"    "${p:-${DIM}587${NC}}"
+    printf "    ${C}3${NC}) %-14s %b\n" "Secure"  "${s:-${DIM}false${NC}}  ${DIM}(true=465/SSL, false=587/STARTTLS)${NC}"
+    printf "    ${C}4${NC}) %-14s %b\n" "Username" "${u:-${Y}(not set)${NC}}"
+    printf "    ${C}5${NC}) %-14s %b\n" "Password" "$(mask "$pw")"
+    printf "    ${C}6${NC}) %-14s %b\n" "From"    "${f:-${Y}(not set)${NC}}"
+    rule
+    printf "    ${C}7${NC}) send a test email      ${C}b${NC}) back\n"
+    echo ""
+    read -rp "  Select: " ch
+    case "$ch" in
+      1) edit_value SMTP_HOST   "SMTP host"     "e.g. smtp.resend.com  /  smtp.gmail.com  /  smtp.sendgrid.net" 0 ;;
+      2) edit_value SMTP_PORT   "SMTP port"     "587 for STARTTLS (most common), 465 for SSL" 0 ;;
+      3) edit_value SMTP_SECURE "SMTP secure"   "type 'true' for port 465, 'false' for port 587" 0 ;;
+      4) edit_value SMTP_USER   "SMTP username" "usually your full email or API key id" 0 ;;
+      5) edit_value SMTP_PASS   "SMTP password" "SMTP password / API key (hidden input)" 1 ;;
+      6) edit_value SMTP_FROM   "From address"  "e.g.  DrFX Quant <no-reply@yourdomain.com>" 0 ;;
+      7) smtp_test ;;
+      b|B|"") return ;;
+      *) ;;
+    esac
+  done
+}
+
+smtp_test() {
+  local to
+  banner
+  echo ""; echo -e "  ${BOLD}Send a test email${NC}"
+  if [ -z "$(getenv SMTP_HOST)" ]; then echo -e "  ${Y}Set the SMTP host first.${NC}"; pause; return; fi
+  read -rp "  Send test to which address? " to
+  [ -z "$to" ] && { echo -e "  ${DIM}Cancelled.${NC}"; pause; return; }
+  echo -e "  ${C}Sending…${NC}"
+  if ( cd "$APP_DIR" && node -e "require('dotenv').config(); require('./services/email').sendTestEmail(process.argv[1]).then(()=>{console.log('ok')}).catch(e=>{console.error(e.message);process.exit(1)})" "$to" ) 2>/tmp/drfx_mailtest.log; then
+    echo -e "  ${G}✔ Sent. Check the inbox (and spam) for ${to}.${NC}"
+  else
+    echo -e "  ${R}✘ Failed:${NC} $(tr -d '\n' < /tmp/drfx_mailtest.log 2>/dev/null)"
+    echo -e "  ${DIM}Double-check host/port/secure/username/password.${NC}"
+  fi
+  rm -f /tmp/drfx_mailtest.log
+  pause
+}
+
+show_status() {
+  banner
+  read_status
+  echo ""
+  printf "   ${C}%-14s${NC} %b\n" "Service"   "${PM2_NAME}  [${PM2_STATE}]   ${DIM}${APP_MEM}${NC}"
+  printf "   ${C}%-14s${NC} %b\n" "RAM"        "$(free -h 2>/dev/null | awk '/^Mem:/{print $3" used / "$2" total ("$7" avail)"}')"
+  printf "   ${C}%-14s${NC} %b\n" "Swap"       "$(free -h 2>/dev/null | awk '/^Swap:/{print $3" / "$2}')"
+  printf "   ${C}%-14s${NC} %b\n" "Disk (/)"   "$(df -h / 2>/dev/null | awk 'NR==2{print $3" used / "$2" ("$5" full)"}')"
+  printf "   ${C}%-14s${NC} %b\n" "Load"       "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)"
+  echo ""
+  echo -e "   ${DIM}Live monitor:  pm2 monit${NC}"
+  pause
+}
+
+reference() {
+  banner
+  echo ""
+  echo -e "   ${BOLD}Command reference${NC} ${DIM}(copy/paste)${NC}"
+  rule
+  echo -e "   ${BOLD}Service${NC}"
+  echo -e "    ${DIM}\$${NC} pm2 status            ${DIM}# all processes + memory${NC}"
+  echo -e "    ${DIM}\$${NC} pm2 logs ${PM2_NAME}"
+  echo -e "    ${DIM}\$${NC} pm2 restart ${PM2_NAME} --update-env"
+  echo ""
+  echo -e "   ${BOLD}Domain / SSL${NC}"
+  echo -e "    ${DIM}\$${NC} sudo nano ${NGINX_SITE}     ${DIM}# server_name + proxy_pass${NC}"
+  echo -e "    ${DIM}\$${NC} sudo nginx -t && sudo systemctl reload nginx"
+  echo -e "    ${DIM}\$${NC} sudo certbot --nginx -d yourdomain.com"
+  echo ""
+  echo -e "   ${BOLD}Database${NC}"
+  local dbn; dbn="$(getenv DB_NAME)"; dbn="${dbn:-drfx_quantum}"
+  echo -e "    ${DIM}\$${NC} sudo -u postgres psql -d ${dbn}"
+  echo -e "    ${DIM}\$${NC} sudo -u postgres pg_dump ${dbn} > backup_\$(date +%F).sql"
+  echo ""
+  echo -e "   ${BOLD}Update to a new version${NC}"
+  echo -e "    ${DIM}\$${NC} cd <your DrFXQuant checkout> && git pull && sudo bash update.sh"
+  pause
+}
+
+# ---- main loop -------------------------------------------------------------
+if [ "$(id -u)" -ne 0 ]; then
+  echo -e "${Y}  ⚠ Not running as root — editing config and restarting need:  sudo bash $0${NC}"
+  sleep 1
 fi
+[ ! -f "$ENV_FILE" ] && echo -e "${Y}  ⚠ $ENV_FILE not found. Are you on the server? (APP_DIR=$APP_DIR)${NC}" && sleep 1
 
-MEM_TOTAL="$(free -h 2>/dev/null | awk '/^Mem:/{print $2}')"
-MEM_USED="$(free -h 2>/dev/null | awk '/^Mem:/{print $3}')"
-MEM_AVAIL="$(free -h 2>/dev/null | awk '/^Mem:/{print $7}')"
-SWAP_TOTAL="$(free -h 2>/dev/null | awk '/^Swap:/{print $2}')"
-SWAP_USED="$(free -h 2>/dev/null | awk '/^Swap:/{print $3}')"
-DISK="$(df -h / 2>/dev/null | awk 'NR==2{print $3" used / "$2"  ("$5" full)"}')"
-LOAD="$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)"
-
-QC_INSTALLED=0
-[ -f /etc/systemd/system/quantum-chat.service ] && QC_INSTALLED=1
-
-hdr() { echo ""; echo -e "${BOLD}-- $1 --${NC}"; }
-row() { printf "   ${CYAN}%-15s${NC} %b\n" "$1" "$2"; }
-cmd() { printf "   ${DIM}\$${NC} %b\n" "$1"; }
-
-echo ""
-echo -e "${BLUE}  +==============================================================+${NC}"
-echo -e "${BLUE}  |${NC}   ${BOLD}DrFX Quant - Management Reference${NC}                          ${BLUE}|${NC}"
-echo -e "${BLUE}  +==============================================================+${NC}"
-
-hdr "Current configuration"
-row "URL"          "${BOLD}${SCHEME}://${DOMAIN}${NC}"
-row "Admin login"  "${ADMIN_EMAIL}"
-row "App port"     "${PORT}   ${DIM}(nginx proxies :80/:443 -> 127.0.0.1:${PORT})${NC}"
-row "App directory" "${APP_DIR}"
-row "Config file"  "${ENV_FILE}   ${DIM}(0600)${NC}"
-row "Database"     "PostgreSQL   db=${DB_NAME}   user=${DB_USER}"
-row "Service"      "${PM2_NAME}   [${PM2_STATE}]"
-[ "$QC_INSTALLED" -eq 1 ] && row "Quantum Chat" "${GREEN}node installed${NC} (systemd: quantum-chat)"
-
-hdr "Live resource usage"
-row "RAM"          "${MEM_USED:-?} used / ${MEM_TOTAL:-?} total   ${DIM}(${MEM_AVAIL:-?} available)${NC}"
-row "Swap"         "${SWAP_USED:-?} used / ${SWAP_TOTAL:-?}"
-row "Disk (/)"     "${DISK:-?}"
-row "App memory"   "${APP_MEM}"
-row "Load (1/5/15)" "${LOAD:-?}"
-echo -e "   ${DIM}live monitor: pm2 monit   |   full RAM: free -h   |   disk: df -h${NC}"
-
-hdr "Service control"
-cmd "pm2 status                      ${DIM}# all processes + memory${NC}"
-cmd "pm2 logs ${PM2_NAME}            ${DIM}# live logs${NC}"
-cmd "pm2 restart ${PM2_NAME}         ${DIM}# restart the app${NC}"
-cmd "pm2 stop ${PM2_NAME}   ${DIM}|${NC}   pm2 start ${PM2_NAME}"
-
-hdr "Change the ADMIN email or password"
-cmd "nano ${ENV_FILE}                ${DIM}# edit ADMIN_EMAIL / ADMIN_PASSWORD${NC}"
-cmd "pm2 restart ${PM2_NAME}         ${DIM}# admin is re-synced from .env on every boot${NC}"
-
-hdr "Change the DOMAIN"
-cmd "nano ${ENV_FILE}                ${DIM}# set DOMAIN= and ALLOWED_ORIGINS=https://NEWDOMAIN${NC}"
-cmd "sudo nano ${NGINX_SITE}         ${DIM}# set: server_name NEWDOMAIN;${NC}"
-cmd "sudo nginx -t && sudo systemctl reload nginx"
-cmd "sudo certbot --nginx -d NEWDOMAIN          ${DIM}# issue SSL for the new domain${NC}"
-cmd "pm2 restart ${PM2_NAME}"
-
-hdr "Change the PORT"
-cmd "nano ${ENV_FILE}                ${DIM}# set PORT=NEWPORT${NC}"
-cmd "sudo nano ${NGINX_SITE}         ${DIM}# proxy_pass http://127.0.0.1:NEWPORT;${NC}"
-cmd "sudo nginx -t && sudo systemctl reload nginx"
-cmd "pm2 restart ${PM2_NAME} --update-env"
-
-hdr "Database"
-cmd "sudo -u postgres psql -d ${DB_NAME}                       ${DIM}# open a SQL shell${NC}"
-cmd "sudo -u postgres pg_dump ${DB_NAME} > backup_\$(date +%F).sql   ${DIM}# backup${NC}"
-cmd "sudo -u postgres psql -d ${DB_NAME} < backup.sql              ${DIM}# restore${NC}"
-
-hdr "SSL / HTTPS"
-cmd "sudo certbot certificates       ${DIM}# status + expiry${NC}"
-cmd "sudo certbot renew              ${DIM}# renew now (auto-renew already scheduled)${NC}"
-
-hdr "Firewall (ufw)"
-cmd "sudo ufw status"
-cmd "sudo ufw allow 80/tcp && sudo ufw allow 443/tcp   ${DIM}# web${NC}"
-[ "$QC_INSTALLED" -eq 1 ] && cmd "sudo ufw allow 53/udp && sudo ufw allow 53/tcp     ${DIM}# Quantum Chat DNS${NC}"
-
-hdr "Update to a new version (no full reinstall)"
-cmd "cd <your DrFXQuant checkout> && git pull"
-cmd "sudo bash update.sh"
-
-hdr "Logs & diagnostics"
-cmd "pm2 logs ${PM2_NAME}                        ${DIM}# app${NC}"
-cmd "sudo tail -f /var/log/nginx/error.log       ${DIM}# nginx errors${NC}"
-cmd "sudo tail -f /var/log/nginx/access.log      ${DIM}# nginx access${NC}"
-
-if [ "$QC_INSTALLED" -eq 1 ]; then
-hdr "Quantum Chat node"
-cmd "systemctl status quantum-chat"
-cmd "journalctl -u quantum-chat -f"
-cmd "quantum-chat health"
-fi
-
-echo ""
-echo -e "   ${DIM}Show this card again any time:  sudo bash ${APP_DIR}/manage.sh${NC}"
-echo ""
+while true; do
+  banner
+  dashboard
+  menu
+  read -rp "  Select: " choice
+  case "$choice" in
+    1) edit_value ADMIN_EMAIL "admin email" "Note: changing this to a NEW address creates a new admin on next restart; the old one stays admin too." 0 ;;
+    2) edit_admin_password ;;
+    3) edit_value NOWPAYMENTS_API_KEY "NowPayments API key" "From nowpayments.io → Settings → API keys." 1 ;;
+    4) edit_value NOWPAYMENTS_IPN_SECRET "NowPayments IPN secret" "From nowpayments.io → Settings → IPN. Required to confirm payments." 1 ;;
+    5) edit_value OPENROUTER_API_KEY "OpenRouter API key" "From openrouter.ai → Keys. Powers the AI assistant." 1 ;;
+    6) smtp_menu ;;
+    7) do_restart; pause ;;
+    8) show_status ;;
+    9) banner; echo ""; echo -e "  ${DIM}Streaming logs — press Ctrl-C to return…${NC}"; echo ""; pm2 logs "$PM2_NAME" ;;
+    r|R) reference ;;
+    q|Q|0) echo ""; echo -e "  ${DIM}Bye.${NC}"; echo ""; exit 0 ;;
+    *) ;;
+  esac
+done

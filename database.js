@@ -80,6 +80,16 @@ async function initDB() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      CREATE TABLE IF NOT EXISTS email_verifications (
+        email TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        name TEXT DEFAULT '',
+        password_hash TEXT NOT NULL,
+        attempts INTEGER DEFAULT 0,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
       CREATE INDEX IF NOT EXISTS idx_chat_members_user ON chat_members(user_id);
       CREATE INDEX IF NOT EXISTS idx_chat_members_chat ON chat_members(chat_id);
       CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id, created_at);
