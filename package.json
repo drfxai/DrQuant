@@ -43,6 +43,9 @@
     "pg": "^8.13.1",
     "socket.io": "^4.7.5"
   },
+  "optionalDependencies": {
+    "mediasoup": "^3.13.0"
+  },
   "engines": {
     "node": ">=18.0.0"
   }

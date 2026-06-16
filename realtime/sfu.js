@@ -16,12 +16,12 @@
 //   the live-streaming mechanism. This code has NOT been run in this
 //   environment; treat it as a reviewed starting point, not a tested service.
 //
-// Enable:
-//   1) npm i mediasoup
-//   2) install + run coturn; share its secret with the CLIENT ice config
-//   3) set env: LIVE_SFU=on  SFU_ANNOUNCED_IP=<public IPv4>
-//      optional: SFU_RTC_MIN_PORT, SFU_RTC_MAX_PORT
-//   4) it is wired in server.js as: require("./realtime/sfu").setupSfu(io, pool)
+// Enable (automated): run  sudo bash setup-live-sfu.sh  on the server. It
+// installs mediasoup (now declared as an optionalDependency, so normal deploys
+// build it where a toolchain exists and skip it gracefully where it doesn't) and
+// coturn, writes the TURN config, sets the env (LIVE_SFU=on, SFU_ANNOUNCED_IP,
+// SFU_RTC_MIN_PORT/MAX_PORT, TURN_HOST/TURN_SECRET), and opens the firewall.
+// Wired in server.js as: require("./realtime/sfu").setupSfu(io, pool)
 //
 // Signaling events (all carry { sessionId }), matching the doc:
 //   live:get-rtp-capabilities  -> router.rtpCapabilities
