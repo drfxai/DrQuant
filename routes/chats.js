@@ -123,7 +123,16 @@ router.get("/:id", async (req, res) => {
       const { rows } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role AS user_role,cm.role AS chat_role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 ORDER BY cm.role DESC,cm.joined_at", [chatId]);
       members = rows;
     }
-    const resp = { ...chat, myRole: mem.role, isMember: true, member_count: ct.c, members };
+    // VIP gate: a pro_only channel is readable only by active subscribers (and
+    // admins). Non-subscribers still receive the channel info (so the client can
+    // show an upgrade screen and the list keeps the latest signal) — but never the
+    // messages, and the member list is already collapsed for private channels.
+    let proLocked = false;
+    if (chat.pro_only && !isAdmin) {
+      const { rows: [su] } = await pool.query("SELECT subscription_status, subscription_expiry FROM users WHERE id=$1", [req.user.id]);
+      proLocked = !(su && su.subscription_status === "active" && (!su.subscription_expiry || new Date(su.subscription_expiry) > new Date()));
+    }
+    const resp = { ...chat, myRole: mem.role, isMember: true, member_count: ct.c, members, pro_locked: proLocked };
     if (!isAdmin) delete resp.webhook_token;
     res.json(resp);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
@@ -180,14 +189,11 @@ router.post("/:id/members", async (req, res) => {
     const { rows: [chat] } = await pool.query("SELECT type,visibility,pro_only FROM chats WHERE id=$1", [chatId]);
     if (!chat) return res.status(404).json({ error: "Chat not found" });
     if (chat.type === "dm") return res.status(400).json({ error: "Cannot join DM" });
-    // VIP (pro-only) channels: the target user must be an active subscriber (or a
-    // global admin). Membership here is tied to subscription, so free users are
-    // never added — not by self-join and not by an admin's "Add Member".
-    if (chat.pro_only) {
-      const { rows: [tu] } = await pool.query("SELECT role, subscription_status, subscription_expiry FROM users WHERE id=$1", [targetUserId]);
-      const proOk = !!tu && (tu.role === "admin" || (tu.subscription_status === "active" && (!tu.subscription_expiry || new Date(tu.subscription_expiry) > new Date())));
-      if (!proOk) return res.status(403).json({ error: "VIP channels are for Pro subscribers only." });
-    }
+    // NOTE: pro_only (VIP) channels are open to EVERYONE as members — the channel
+    // and its latest signal appear in every user's list (users are auto-joined on
+    // register and at boot). Reading a VIP channel is gated to active subscribers
+    // in the GET messages/pins handlers, so there is intentionally no membership
+    // check here.
     // Self-join: allowed for public, blocked for private
     if (isSelfJoin) {
       if (chat.visibility === "private") return res.status(403).json({ error: "This is a private chat. An admin must add you." });
@@ -226,6 +232,16 @@ router.get("/:id/messages", async (req, res) => {
     const chatId = parseInt(req.params.id);
     const { rows: [mem] } = await pool.query("SELECT * FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
     if (!mem) return res.status(403).json({ error: "Not a member" });
+    // VIP gate: free members can see a pro_only channel and its latest signal in
+    // their list, but only active subscribers (and admins) may read the messages.
+    {
+      const { rows: [pc] } = await pool.query("SELECT pro_only FROM chats WHERE id=$1", [chatId]);
+      if (pc && pc.pro_only && mem.role !== "admin" && req.user.role !== "admin") {
+        const { rows: [su] } = await pool.query("SELECT subscription_status, subscription_expiry FROM users WHERE id=$1", [req.user.id]);
+        const active = !!su && su.subscription_status === "active" && (!su.subscription_expiry || new Date(su.subscription_expiry) > new Date());
+        if (!active) return res.status(403).json({ error: "PRO subscription required", pro_locked: true });
+      }
+    }
     const before = req.query.before ? parseInt(req.query.before) : null;
     let q = `SELECT m.*,u.name AS sender_name,u.avatar AS sender_avatar,u.role AS sender_role,
       rm.content AS reply_content,rm.user_id AS reply_user_id,ru.name AS reply_sender_name
@@ -387,6 +403,17 @@ router.get("/:id/pins", async (req, res) => {
     const chatId = parseInt(req.params.id);
     const { rows: [mem] } = await pool.query("SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
     if (!mem) return res.status(403).json({ error: "Not a member" });
+    {
+      const { rows: [pc] } = await pool.query("SELECT pro_only FROM chats WHERE id=$1", [chatId]);
+      if (pc && pc.pro_only && req.user.role !== "admin") {
+        const { rows: [mr] } = await pool.query("SELECT role FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
+        if (!mr || mr.role !== "admin") {
+          const { rows: [su] } = await pool.query("SELECT subscription_status, subscription_expiry FROM users WHERE id=$1", [req.user.id]);
+          const active = !!su && su.subscription_status === "active" && (!su.subscription_expiry || new Date(su.subscription_expiry) > new Date());
+          if (!active) return res.status(403).json({ error: "PRO subscription required", pro_locked: true });
+        }
+      }
+    }
     const { rows } = await pool.query(
       `SELECT m.*,u.name AS sender_name,u.avatar AS sender_avatar,u.role AS sender_role
        FROM messages m JOIN users u ON m.user_id=u.id

@@ -35,6 +35,10 @@ router.post("/register", async (req, res) => {
         [u.id, ["drfx", sigU]]
       );
     } catch (e) { console.error("Default channel join:", e.message); }
+    // VIP (pro-only) channels are visible to everyone too — join the new user so
+    // they appear in the list with the latest signal preview. Opening a VIP
+    // channel is gated to Pro subscribers (see routes/chats.js).
+    await joinProChannels(pool, u.id);
     const token = jwt.sign({ id: u.id, email: u.email, role: u.role }, JWT_SECRET, { expiresIn: "30d" });
     res.status(201).json({ token, user: u });
   } catch (err) { console.error("Register:", err); res.status(500).json({ error: "Server error" }); }

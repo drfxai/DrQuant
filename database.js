@@ -198,9 +198,12 @@ async function initDB() {
           "INSERT INTO chat_members (chat_id,user_id,role) VALUES ($1,$2,'admin') ON CONFLICT (chat_id,user_id) DO UPDATE SET role='admin'",
           [ch.id, adminId]
         );
-        // Auto-join ONLY current active subscribers. Free users are not added.
+        // Auto-join EVERY non-bot user (exactly like the default channels) so the
+        // VIP channels appear in everyone's list with the latest signal preview.
+        // Whether a user may OPEN/read the channel is gated separately by the
+        // pro_only flag in routes/chats.js (free members get an upgrade screen).
         await client.query(
-          "INSERT INTO chat_members (chat_id,user_id) SELECT $1, id FROM users WHERE role <> 'bot' AND subscription_status='active' ON CONFLICT (chat_id,user_id) DO NOTHING",
+          "INSERT INTO chat_members (chat_id,user_id) SELECT $1, id FROM users WHERE role <> 'bot' ON CONFLICT (chat_id,user_id) DO NOTHING",
           [ch.id]
         );
         return ch.id;

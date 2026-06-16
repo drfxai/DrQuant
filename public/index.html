@@ -190,6 +190,12 @@ async function openChat(id,skipSwitch){
       renderJoinPreview(info);
       return;
     }
+    // VIP channel, but the viewer is not a Pro subscriber — show the upgrade gate
+    if(info.pro_locked){
+      S.chatMsgs=[];
+      renderProGate(info);
+      return;
+    }
     const msgs=await api(`/chats/${id}/messages`);
     S.chatMsgs=msgs;
     S.pinnedMsgs=await api(`/chats/${id}/pins`).catch(()=>[]);S.pinIndex=0;
@@ -235,6 +241,36 @@ function renderJoinPreview(info){
     }catch(e){jb.disabled=false;jb.textContent="Join "+info.type;alert(e.error||"Cannot join");}
   };
 }
+// ── PRO gate: shown when a member opens a pro_only (VIP) channel without an active subscription ──
+function renderProGate(info){
+  const rp=$("#rp"),isMob=window.innerWidth<=768;if(!rp)return;
+  const av=info.avatar||(info.type==="channel"?"📢":"👥");
+  // Tapping the channel counts as "seen" — clear its unread badge in the list.
+  api(`/chats/${info.id}/read`,{method:"POST"}).catch(()=>{});
+  const ch=S.chats.find(c=>c.id===info.id);if(ch)ch.unread=0;renderChatListItems();
+  rp.innerHTML=`<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+  <div style="padding:8px 12px;display:flex;align-items:center;gap:10px;background:${t.ch};backdrop-filter:blur(20px);border-bottom:1px solid ${t.bd};flex-shrink:0">${isMob?`<button class="ib" id="cv-back" type="button">${I.back}</button>`:""}<div style="flex:1;color:${t.t1};font-weight:600;font-size:14px">${esc(info.name)}</div></div>
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;-webkit-overflow-scrolling:touch">
+    <div style="text-align:center;max-width:340px;animation:si .3s ease">
+      <div style="position:relative;display:inline-block">
+        ${avatar(av,90)}
+        <div style="position:absolute;bottom:-2px;right:-2px;width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#FFD700,#f59e0b);display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid ${t.mod}">🔒</div>
+      </div>
+      <div style="color:${t.t1};font-size:20px;font-weight:700;margin-top:14px">${esc(info.name)}</div>
+      ${info.username?`<div style="color:${t.ac};font-size:14px;margin-top:4px">@${esc(info.username)}</div>`:""}
+      ${info.bio?`<div style="color:${t.t3};font-size:13px;margin-top:8px;line-height:1.5">${esc(info.bio)}</div>`:""}
+      <div style="margin-top:18px;padding:16px;border-radius:16px;background:rgba(240,185,11,.08);border:1px solid rgba(240,185,11,.3)">
+        <div style="color:#FFD700;font-size:15px;font-weight:800;letter-spacing:.5px">⭐ PRO members only</div>
+        <div style="color:${t.t2};font-size:13px;margin-top:6px;line-height:1.55">Subscribe to PRO to unlock this channel — live signals, premium indicators and bots, VIP strategies, and your AI assistant.</div>
+      </div>
+      <button id="pg-up" class="pb" type="button" style="width:100%;margin-top:18px;padding:14px;font-size:15px;background:linear-gradient(135deg,#FFD700,#f59e0b);color:#1a1a2e;font-weight:800">⭐ Upgrade to PRO</button>
+      <div style="color:${t.t4};font-size:12px;margin-top:10px">Only &#36;56/month · cancel anytime</div>
+    </div>
+  </div></div>`;
+  if(isMob){const bb=$("#cv-back");if(bb)bb.onclick=goBack;}
+  const up=$("#pg-up");if(up)up.onclick=()=>openSub();
+}
+
 function renderChatView(){
   const rp=$("#rp"),info=S.chatInfo;if(!rp||!info)return;
   const c=S.chats.find(x=>x.id===S.activeChat);

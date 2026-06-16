@@ -30,20 +30,14 @@ async function joinProChannels(pool, userId) {
 }
 
 async function leaveProChannels(pool, userId) {
-  try {
-    // Remove the user from every VIP channel, but keep channel owners/admins.
-    await pool.query(
-      `DELETE FROM chat_members cm
-       USING chats c
-       WHERE cm.chat_id = c.id
-         AND c.type='channel' AND c.pro_only=TRUE
-         AND cm.user_id = $1
-         AND cm.role <> 'admin'`,
-      [userId]
-    );
-  } catch (e) {
-    console.error("[pro] leaveProChannels:", e.message);
-  }
+  // No-op by design. VIP channels are visible to EVERYONE — every user is a
+  // member, so the channel and its latest signal show in their list. Access is
+  // gated at READ time in routes/chats.js (the pro_only flag), not by membership.
+  // So a lapsed or free user keeps seeing the VIP channels but is shown an
+  // upgrade screen when they try to open one. Kept (and still called from
+  // payment/auth/admin) so the call sites don't change and this stays trivial
+  // to re-enable if membership-based gating is ever wanted again.
+  return;
 }
 
 // Reconcile a single user's VIP membership against their live subscription
