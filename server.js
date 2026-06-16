@@ -96,6 +96,7 @@ app.use("/api/admin", require("./routes/admin"));
 app.use("/api/payment", require("./routes/payment"));
 app.use("/api/upload", require("./routes/upload"));
 app.use("/api/manage", require("./routes/manage")); // admin/manager console (RBAC matrix)
+app.use("/api/live", require("./routes/live"));   // live-trading sessions + ICE/TURN credentials
 
 // ── Socket.io ──
 io.use(async (socket, next) => {
@@ -121,7 +122,10 @@ require("./realtime/messaging").setupRealtime(io, pool);
 
 // Optional SFU live streaming. Inert unless LIVE_SFU=on AND mediasoup is
 // installed; when disabled, the frame-relay path below remains the mechanism.
-require("./realtime/sfu").setupSfu(io, pool);
+// The returned .enabled reflects BOTH the env flag and mediasoup being present;
+// /api/live/* exposes it as `mode` so the client never picks a dead media plane.
+const sfuResult = require("./realtime/sfu").setupSfu(io, pool);
+app.set("sfuEnabled", !!(sfuResult && sfuResult.enabled));
 
 const onlineUsers = new Map();
 // Live Trading state
