@@ -58,6 +58,11 @@ router.post("/start", canBroadcast, async (req, res) => {
        RETURNING id, host_id, title, status, started_at`,
       [req.user.id, title]
     );
+    // Tell everyone a broadcast is available so viewers already on the Live page
+    // begin consuming immediately (no refresh). Carries the mode so relay-mode
+    // clients ignore it and keep using the frame-relay path.
+    const io = req.app.get("io");
+    if (io) io.emit("live:available", { sessionId: s.id, mode: liveMode(req) });
     res.json({ sessionId: s.id, session: s, mode: liveMode(req) });
   } catch (e) {
     console.error("[live] start:", e.message);

@@ -175,6 +175,25 @@ function setupSfu(io, pool) {
       } catch (e) { console.error("[sfu] caps:", e.message); ack(cb, { error: "server error" }); }
     });
 
+    // Viewer enumerates the broadcaster's CURRENT producers, so someone who
+    // joins AFTER the stream started can consume what already exists (new ones
+    // arrive via the live:new-producer event).
+    socket.on("live:get-producers", ({ sessionId } = {}, cb) => {
+      const room = rooms.get(sessionId);
+      if (!room) return ack(cb, { producers: [] });
+      const list = [];
+      const bpeer = room.broadcasterSocketId && room.peers.get(room.broadcasterSocketId);
+      if (bpeer) for (const p of bpeer.producers.values()) list.push({ producerId: p.id, kind: p.kind });
+      ack(cb, { producers: list });
+    });
+
+    // Broadcaster tears the room down immediately on "End Stream" instead of
+    // waiting for the socket to drop / ICE to time out.
+    socket.on("live:close", ({ sessionId } = {}) => {
+      const room = rooms.get(sessionId);
+      if (room && room.broadcasterSocketId === socket.id) closeRoom(sessionId);
+    });
+
     socket.on("live:create-transport", async ({ sessionId, direction } = {}, cb) => {
       try {
         const room = rooms.get(sessionId);
