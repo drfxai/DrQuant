@@ -114,14 +114,16 @@ router.get("/:id", async (req, res) => {
     }
     let members = [];
     const isAdmin = mem.role === "admin" || req.user.role === "admin";
+    // Always compute the true member count so the client never has to infer it
+    // from members.length (which is 1 for the privacy-collapsed private view).
+    const { rows: [ct] } = await pool.query("SELECT COUNT(*)::int AS c FROM chat_members WHERE chat_id=$1", [chatId]);
     if (chat.visibility === "private" && !isAdmin && chat.type !== "dm") {
-      const { rows: [ct] } = await pool.query("SELECT COUNT(*)::int AS c FROM chat_members WHERE chat_id=$1", [chatId]);
       members = [{ count: ct.c }];
     } else {
       const { rows } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role AS user_role,cm.role AS chat_role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 ORDER BY cm.role DESC,cm.joined_at", [chatId]);
       members = rows;
     }
-    const resp = { ...chat, myRole: mem.role, isMember: true, members };
+    const resp = { ...chat, myRole: mem.role, isMember: true, member_count: ct.c, members };
     if (!isAdmin) delete resp.webhook_token;
     res.json(resp);
   } catch (err) { res.status(500).json({ error: "Server error" }); }
@@ -175,9 +177,17 @@ router.post("/:id/members", async (req, res) => {
     const chatId = parseInt(req.params.id);
     const targetUserId = parseInt(req.body.userId);
     const isSelfJoin = targetUserId === req.user.id;
-    const { rows: [chat] } = await pool.query("SELECT type,visibility FROM chats WHERE id=$1", [chatId]);
+    const { rows: [chat] } = await pool.query("SELECT type,visibility,pro_only FROM chats WHERE id=$1", [chatId]);
     if (!chat) return res.status(404).json({ error: "Chat not found" });
     if (chat.type === "dm") return res.status(400).json({ error: "Cannot join DM" });
+    // VIP (pro-only) channels: the target user must be an active subscriber (or a
+    // global admin). Membership here is tied to subscription, so free users are
+    // never added — not by self-join and not by an admin's "Add Member".
+    if (chat.pro_only) {
+      const { rows: [tu] } = await pool.query("SELECT role, subscription_status, subscription_expiry FROM users WHERE id=$1", [targetUserId]);
+      const proOk = !!tu && (tu.role === "admin" || (tu.subscription_status === "active" && (!tu.subscription_expiry || new Date(tu.subscription_expiry) > new Date())));
+      if (!proOk) return res.status(403).json({ error: "VIP channels are for Pro subscribers only." });
+    }
     // Self-join: allowed for public, blocked for private
     if (isSelfJoin) {
       if (chat.visibility === "private") return res.status(403).json({ error: "This is a private chat. An admin must add you." });

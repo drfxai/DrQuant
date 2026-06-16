@@ -95,6 +95,7 @@ async function initDB() {
       ["users", "username", "TEXT UNIQUE"],
       ["chats", "username", "TEXT UNIQUE"],
       ["chats", "webhook_token", "TEXT"],
+      ["chats", "pro_only", "BOOLEAN DEFAULT FALSE"],
       ["messages", "edited_at", "TIMESTAMPTZ"],
       ["messages", "reply_to", "INTEGER REFERENCES messages(id) ON DELETE SET NULL"],
       ["messages", "pinned", "BOOLEAN DEFAULT FALSE"],
@@ -171,6 +172,43 @@ async function initDB() {
       await ensureChannel("drfx", "DrFX", "Official DrFX channel — announcements and updates from the team.", "📈", false);
       await ensureChannel(signalUsername, "Dr Signal", "Automated trading signals delivered from TradingView. Only admins post here.", "📊", true);
       console.log("✅ Default channels ready (DrFX, Dr Signal)");
+
+      // ── VIP (Pro-only) channels ───────────────────────────────────────────
+      // Same shape as the default channels, but pro_only=TRUE and members are
+      // NOT everyone — only CURRENT active subscribers are auto-joined here (and
+      // the admin owner). Free users never become members; when a subscription
+      // lapses the user is removed (see services/pro.js, wired into payment +
+      // auth + admin routes). The VIP Signals channel carries its own webhook
+      // token so it receives TradingView alerts exactly like Dr Signal.
+      const ensureProChannel = async (uname, name, bio, avatar, withToken) => {
+        let { rows: [ch] } = await client.query("SELECT id, webhook_token, pro_only FROM chats WHERE username=$1", [uname]);
+        if (!ch) {
+          const token = withToken ? crypto.randomBytes(24).toString("hex") : null;
+          const { rows: [created] } = await client.query(
+            "INSERT INTO chats (type,username,name,bio,avatar,visibility,pro_only,created_by,webhook_token) VALUES ('channel',$1,$2,$3,$4,'private',TRUE,$5,$6) RETURNING id",
+            [uname, name, bio, avatar, adminId, token]
+          );
+          ch = created;
+        } else {
+          if (!ch.pro_only) await client.query("UPDATE chats SET pro_only=TRUE WHERE id=$1", [ch.id]);
+          if (withToken && !ch.webhook_token) await client.query("UPDATE chats SET webhook_token=$1 WHERE id=$2", [crypto.randomBytes(24).toString("hex"), ch.id]);
+        }
+        // Admin owns the channel (kept on every boot, idempotent).
+        await client.query(
+          "INSERT INTO chat_members (chat_id,user_id,role) VALUES ($1,$2,'admin') ON CONFLICT (chat_id,user_id) DO UPDATE SET role='admin'",
+          [ch.id, adminId]
+        );
+        // Auto-join ONLY current active subscribers. Free users are not added.
+        await client.query(
+          "INSERT INTO chat_members (chat_id,user_id) SELECT $1, id FROM users WHERE role <> 'bot' AND subscription_status='active' ON CONFLICT (chat_id,user_id) DO NOTHING",
+          [ch.id]
+        );
+        return ch.id;
+      };
+      await ensureProChannel("vipsignals", "VIP Forex & Crypto Signals", "Premium Forex & Crypto trading signals delivered from TradingView. Pro subscribers only.", "📡", true);
+      await ensureProChannel("vipalgo", "VIP Algo Channel", "Premium indicators and bots. Pro subscribers only.", "🤖", false);
+      await ensureProChannel("vipstrategies", "VIP Strategies", "Learn specific trading strategies, step by step. Pro subscribers only.", "🎯", false);
+      console.log("✅ VIP channels ready (VIP Signals, VIP Algo, VIP Strategies)");
     }
 
     console.log("✅ PostgreSQL ready");

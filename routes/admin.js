@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { joinProChannels, leaveProChannels } = require("../services/pro");
 router.use((req, res, next) => { req.app.get("authMiddleware")(req, res, () => { req.app.get("adminMiddleware")(req, res, next); }); });
 
 router.get("/stats", async (req, res) => {
@@ -66,8 +67,10 @@ router.post("/users/:id/subscription", async (req, res) => {
   if (status === "active") {
     const exp = new Date(Date.now() + (days || 30) * 86400000).toISOString();
     await pool.query("UPDATE users SET subscription_status='active',subscription_expiry=$1 WHERE id=$2", [exp, uid]);
+    await joinProChannels(pool, uid); // grant Pro -> add to VIP channels
   } else {
     await pool.query("UPDATE users SET subscription_status='free',subscription_expiry=NULL WHERE id=$1", [uid]);
+    await leaveProChannels(pool, uid); // revoke Pro -> remove from VIP channels
   }
   res.json({ ok: true });
 });

@@ -1,9 +1,10 @@
 const express = require("express");
 const crypto = require("crypto");
 const router = express.Router();
+const { joinProChannels, leaveProChannels } = require("../services/pro");
 const IPN_SECRET = process.env.NOWPAYMENTS_IPN_SECRET;
 const NP_API_KEY = process.env.NOWPAYMENTS_API_KEY;
-const DAYS = 30, PRICE = 29.99;
+const DAYS = 30, PRICE = 56;
 
 router.post("/create", (req, res) => {
   req.app.get("authMiddleware")(req, res, async () => {
@@ -54,6 +55,8 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
       const { rows: [u] } = await pool.query("SELECT subscription_expiry FROM users WHERE id=$1", [userId]);
       const ne = u?.subscription_expiry && new Date(u.subscription_expiry) > new Date() ? new Date(new Date(u.subscription_expiry).getTime() + DAYS * 86400000).toISOString() : exp;
       await pool.query("UPDATE users SET subscription_status='active',subscription_expiry=$1 WHERE id=$2", [ne, userId]);
+      // Active subscriber -> auto-join every VIP (pro-only) channel.
+      await joinProChannels(pool, userId);
     }
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: "Webhook failed" }); }
@@ -67,6 +70,9 @@ router.get("/status", (req, res) => {
     if (u.subscription_status === "active" && u.subscription_expiry && new Date(u.subscription_expiry) < new Date()) {
       await pool.query("UPDATE users SET subscription_status='free' WHERE id=$1", [req.user.id]);
       u.subscription_status = "free";
+      await leaveProChannels(pool, req.user.id); // lapsed -> remove from VIP channels
+    } else if (u.subscription_status === "active") {
+      await joinProChannels(pool, req.user.id); // self-heal VIP membership for active subs
     }
     const dl = u.subscription_status === "active" && u.subscription_expiry ? Math.max(0, Math.ceil((new Date(u.subscription_expiry) - new Date()) / 86400000)) : 0;
     res.json({ status: u.subscription_status, expiry: u.subscription_expiry, daysLeft: dl, price: PRICE });

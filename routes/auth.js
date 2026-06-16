@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const router = express.Router();
+const { joinProChannels, leaveProChannels } = require("../services/pro");
 
 router.post("/register", async (req, res) => {
   const pool = req.app.get("pool");
@@ -69,9 +70,12 @@ router.post("/login", async (req, res) => {
     if (user.subscription_status === "active" && user.subscription_expiry && new Date(user.subscription_expiry) < new Date()) {
       await pool.query("UPDATE users SET subscription_status='free' WHERE id=$1", [user.id]);
       user.subscription_status = "free";
+      await leaveProChannels(pool, user.id);
+    } else if (user.subscription_status === "active") {
+      await joinProChannels(pool, user.id);
     }
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "30d" });
-    res.json({ token, user: { id: user.id, email: user.email, username: user.username, name: user.name, bio: user.bio, avatar: user.avatar, role: user.role, subscription_status: user.subscription_status } });
+    res.json({ token, user: { id: user.id, email: user.email, username: user.username, name: user.name, bio: user.bio, avatar: user.avatar, role: user.role, subscription_status: user.subscription_status, subscription_expiry: user.subscription_expiry } });
   } catch (err) { console.error("Login:", err); res.status(500).json({ error: "Server error" }); }
 });
 
@@ -84,6 +88,9 @@ router.get("/me", async (req, res) => {
       if (u.subscription_status === "active" && u.subscription_expiry && new Date(u.subscription_expiry) < new Date()) {
         await pool.query("UPDATE users SET subscription_status='free' WHERE id=$1", [u.id]);
         u.subscription_status = "free";
+        await leaveProChannels(pool, u.id);
+      } else if (u.subscription_status === "active") {
+        await joinProChannels(pool, u.id);
       }
       res.json(u);
     } catch (err) { res.status(500).json({ error: "Server error" }); }
