@@ -785,7 +785,7 @@ function sfuReq(socket,event,data){
     socket.emit(event,data,(res)=>{if(done)return;done=true;clearTimeout(to);if(!res)return reject(new Error(event+": no response"));if(res.error)return reject(new Error(res.error));resolve(res);});
   });
 }
-async function sfuBroadcast(socket,sessionId,track,iceServers){
+async function sfuBroadcast(socket,sessionId,tracks,iceServers){
   const ms=await loadMediasoup();
   const device=new ms.Device();
   const caps=await sfuReq(socket,"live:get-rtp-capabilities",{sessionId});
@@ -794,8 +794,16 @@ async function sfuBroadcast(socket,sessionId,track,iceServers){
   const transport=device.createSendTransport({id:tp.id,iceParameters:tp.iceParameters,iceCandidates:tp.iceCandidates,dtlsParameters:tp.dtlsParameters,iceServers});
   transport.on("connect",({dtlsParameters},cb,errb)=>{sfuReq(socket,"live:connect-transport",{sessionId,transportId:transport.id,dtlsParameters}).then(()=>cb()).catch(errb);});
   transport.on("produce",({kind,rtpParameters},cb,errb)=>{sfuReq(socket,"live:produce",{sessionId,transportId:transport.id,kind,rtpParameters}).then(r=>cb({id:r.id})).catch(errb);});
-  const producer=await transport.produce({track,encodings:[{maxBitrate:4000000}],codecOptions:{videoGoogleStartBitrate:1000}});
-  return {device,transport,producer};
+  // Produce video (with a bitrate cap) plus any audio tracks (mic / system).
+  const list=Array.isArray(tracks)?tracks:[tracks];
+  const producers=[];
+  for(const track of list){
+    if(!track)continue;
+    const opts={track};
+    if(track.kind==="video"){opts.encodings=[{maxBitrate:4000000}];opts.codecOptions={videoGoogleStartBitrate:1000};}
+    producers.push(await transport.produce(opts));
+  }
+  return {device,transport,producers,producer:producers[0]};
 }
 async function sfuView(socket,sessionId,videoEl,iceServers,onPlaying){
   const ms=await loadMediasoup();
@@ -905,7 +913,9 @@ async function openLiveTrading(){
         const fpsSel=parseInt(ov.querySelector("#live-fps").value);
         if(liveMode==="sfu"){
           // ── WebRTC SFU: capture 720p at up to 60fps and PRODUCE the track ──
-          localStream=await navigator.mediaDevices.getDisplayMedia({video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:fpsSel||60}},audio:false});
+          localStream=await navigator.mediaDevices.getDisplayMedia({video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:fpsSel||60}},audio:true});
+          // Add the host's microphone (best-effort; prompts for mic permission).
+          try{const mic=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});mic.getAudioTracks().forEach(tk=>localStream.addTrack(tk));}catch(micErr){console.warn("Microphone unavailable:",micErr&&micErr.message);}
           ov.querySelector("#live-admin-idle").style.display="none";
           ov.querySelector("#live-admin-stream").style.display="flex";
           const previewVid=ov.querySelector("#live-preview");previewVid.srcObject=localStream;
@@ -915,10 +925,11 @@ async function openLiveTrading(){
           const startRes=await api("/live/start",{method:"POST"});
           sfuSession=startRes.sessionId;
           const ice=await api("/live/ice");
-          sfuHandle=await sfuBroadcast(S.socket,sfuSession,track,ice.iceServers||[]);
+          sfuHandle=await sfuBroadcast(S.socket,sfuSession,[track,...localStream.getAudioTracks()],ice.iceServers||[]);
           updateStatus({active:true,viewerCount:0});
           const ss=track.getSettings?track.getSettings():{};
-          if(fi0)fi0.textContent=`${ss.width||"?"}×${ss.height||"?"} · ${Math.round(ss.frameRate||fpsSel||60)}fps · WebRTC`;
+          const aud=localStream.getAudioTracks().length?" · 🔊":"";
+          if(fi0)fi0.textContent=`${ss.width||"?"}×${ss.height||"?"} · ${Math.round(ss.frameRate||fpsSel||60)}fps · WebRTC${aud}`;
           const startT=Date.now();
           timerInterval=setInterval(()=>{const d=Math.floor((Date.now()-startT)/1000);const m=String(Math.floor(d/60)).padStart(2,"0");const s=String(d%60).padStart(2,"0");const te=ov.querySelector("#live-timer");if(te)te.textContent=m+":"+s;},1000);
           return;
@@ -960,7 +971,7 @@ async function openLiveTrading(){
     function stopStream(){
       if(captureInterval){clearInterval(captureInterval);captureInterval=null;}
       if(liveMode==="sfu"){
-        if(sfuHandle){try{sfuHandle.producer&&sfuHandle.producer.close();}catch(e){}try{sfuHandle.transport&&sfuHandle.transport.close();}catch(e){}sfuHandle=null;}
+        if(sfuHandle){try{(sfuHandle.producers||[sfuHandle.producer]).forEach(p=>{if(p)p.close();});}catch(e){}try{sfuHandle.transport&&sfuHandle.transport.close();}catch(e){}sfuHandle=null;}
         if(sfuSession){S.socket.emit("live:close",{sessionId:sfuSession});api("/live/stop",{method:"POST",body:JSON.stringify({sessionId:sfuSession})}).catch(()=>{});sfuSession=null;}
       }else{
         S.socket.emit("live_stop");
@@ -1006,11 +1017,15 @@ async function openLiveTrading(){
       const vid=ov.querySelector("#live-video"),img0=ov.querySelector("#live-img");
       if(img0)img0.style.display="none";if(vid)vid.style.display="block";
       const setName=(n)=>{const un=ov.querySelector("#live-user-name");if(un)un.textContent=n||"Live";};
+      // Try to play WITH sound; browsers may block autoplay-with-audio, so fall
+      // back to muted playback and let a tap on the video unmute it.
+      const playVid=()=>{if(!vid)return;vid.muted=false;vid.play().catch(()=>{vid.muted=true;vid.play().catch(()=>{});});};
+      const us=ov.querySelector("#live-user-stream");if(us)us.addEventListener("click",()=>{if(vid&&vid.muted){vid.muted=false;vid.play().catch(()=>{});}});
       const startView=async(sid)=>{
         if(sfuViewHandle||!sid)return;
         try{
           const ice=await api("/live/ice");
-          sfuViewHandle=await sfuView(S.socket,sid,vid,ice.iceServers||[],()=>{showStream();if(vid.play)vid.play().catch(()=>{});});
+          sfuViewHandle=await sfuView(S.socket,sid,vid,ice.iceServers||[],()=>{showStream();playVid();});
           sfuSession=sid;
         }catch(e){console.error("Live view error:",e);}
       };
@@ -1073,7 +1088,7 @@ async function openLiveTrading(){
     if(isAdmin){
       if(captureInterval){clearInterval(captureInterval);captureInterval=null;}
       if(liveMode==="sfu"){
-        if(sfuHandle){try{sfuHandle.producer&&sfuHandle.producer.close();}catch(e){}try{sfuHandle.transport&&sfuHandle.transport.close();}catch(e){}sfuHandle=null;}
+        if(sfuHandle){try{(sfuHandle.producers||[sfuHandle.producer]).forEach(p=>{if(p)p.close();});}catch(e){}try{sfuHandle.transport&&sfuHandle.transport.close();}catch(e){}sfuHandle=null;}
         if(sfuSession){S.socket.emit("live:close",{sessionId:sfuSession});api("/live/stop",{method:"POST",body:JSON.stringify({sessionId:sfuSession})}).catch(()=>{});sfuSession=null;}
       }else{
         S.socket.emit("live_stop");
