@@ -1,11 +1,11 @@
 <!DOCTYPE html><html lang="en"><head>
 <meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
 <title>DrFX Quant</title><meta name="theme-color" content="#030812"/><meta name="apple-mobile-web-app-capable" content="yes"/><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>"/>
+<link rel="icon" type="image/png" href="/logo.png"/>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <link rel="manifest" href="/manifest.webmanifest"/>
-<link rel="apple-touch-icon" href="/icon.svg"/>
+<link rel="apple-touch-icon" href="/logo.png"/>
 <style>:root{--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);--sar:env(safe-area-inset-right,0px)}</style>
 </head><body style="margin:0;overflow:hidden;font-family:'Outfit',system-ui,sans-serif;touch-action:manipulation"><div id="app"></div>
 <script>
@@ -41,7 +41,7 @@ function chatAvatar(c){return c.type==="dm"?(c.partner?.avatar||(c.partner?.role
 function isPro(){return !!(S.user&&S.user.subscription_status==="active");}
 function subDaysLeft(){const e=S.user&&S.user.subscription_expiry;if(!e)return 0;return Math.max(0,Math.ceil((new Date(e)-new Date())/86400000));}
 function isUserPro(u){if(!u)return false;const s=typeof u==="string"?u:(u.subscription_status||u.subscription);return s==="active";}
-function proTag(u,sz){return isUserPro(u)?`<span style="color:#FFD700;font-weight:800;font-size:${sz||10}px;background:rgba(240,185,11,.14);border:1px solid rgba(240,185,11,.45);padding:0 6px;border-radius:6px;margin-left:5px;letter-spacing:.5px;vertical-align:middle">PRO</span>`:"";}
+function proTag(u,sz){if(!isUserPro(u))return"";const s=(sz||10)+5;return`<svg width="${s}" height="${s}" viewBox="0 0 24 24" style="display:inline-block;vertical-align:middle;margin-left:4px;flex-shrink:0"><path fill="#FFD700" d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34z"/><path d="M8.6 12.4l2.4 2.4 4.5-5.1" fill="none" stroke="#0a1024" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;}
 function proBadge(sz){return proTag(S.user,sz);}
 
 // ━━━ VIEWPORT HEIGHT ━━━
@@ -66,6 +66,7 @@ input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:tex
 @keyframes fm{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes bk{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes pu{0%,100%{opacity:1}50%{opacity:.5}}@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
 @keyframes sr{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+@keyframes toastIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:translateY(0)}}@keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-22px)}}
 `;}
 
 function render(){applyCSS();if(!S.token||!S.user)renderLogin();else renderApp();}
@@ -78,7 +79,7 @@ function renderLogin(){
   <div style="width:420px;max-width:100%;animation:si .4s ease">
     <div style="text-align:center;margin-bottom:28px">
       <div style="width:80px;height:80px;border-radius:22px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(20,30,65,.9),rgba(15,22,50,.95));border:1px solid rgba(100,150,255,.2);box-shadow:0 8px 32px rgba(0,0,0,.3),inset 0 1px rgba(255,255,255,.05)">
-        <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><rect x="4" y="4" width="36" height="36" rx="4" stroke="rgba(100,150,255,.3)" stroke-width="1.5" fill="rgba(20,30,60,.4)"/><polyline points="10,30 18,18 26,24 36,10" stroke="#4a8cff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><polygon points="32,8 38,8 38,14" fill="#ef4444" opacity=".9"/></svg>
+        <img src="/logo.png" alt="DrFX" style="width:100%;height:100%;object-fit:cover;border-radius:20px" onerror="this.onerror=null;this.src='/icon.svg'"/>
       </div>
       <h1 style="color:#e0e8ff;font-size:28px;font-weight:700;margin:0;letter-spacing:-.5px">DrFX <span style="font-style:italic;color:#4a8cff">Quant</span></h1>
       <p style="color:#506080;font-size:13px;margin:6px 0 0;letter-spacing:.5px">Professional Trading Communication</p>
@@ -217,7 +218,7 @@ function renderChatListItems(){
     const lastText=c.lastMessage?(c.lastMessage.image?"📷 Photo":c.lastMessage.content?.slice(0,45)||""):"";
     const online=c.type==="dm"&&c.partner?S.onlineUsers.includes(c.partner.id):false;
     d.style.cssText=`display:flex;align-items:center;gap:12px;padding:11px 14px;cursor:pointer;background:${isA?t.act:"transparent"};border-left:${isA?`3px solid ${t.pr}`:"3px solid transparent"};transition:.12s;-webkit-tap-highlight-color:transparent`;
-    d.innerHTML=`${avatar(av,46,online)}<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center"><span style="color:${t.t1};font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px">${c.type==="channel"?'<span style="color:'+t.pr+';opacity:.7;font-size:12px">'+I.channel+'</span>':c.type==="group"?'<span style="color:'+t.pr+';opacity:.7;font-size:12px">'+I.users+'</span>':""} ${esc(name)}</span><div style="display:flex;align-items:center;gap:5px">${c.unread>0?'<div class="ud"></div>':""}<span style="color:${t.t4};font-size:11px">${fmtTime(c.lastMessage?.created_at)}</span></div></div><div style="color:${t.t3};font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${c.lastMessage?.sender_name&&c.type!=="dm"?`<span style="color:${t.ac};font-weight:500">${esc(c.lastMessage.sender_name)}: </span>`:""}${esc(lastText)}</div></div>`;
+    d.innerHTML=`${avatar(av,46,online)}<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center"><span style="color:${t.t1};font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px">${c.type==="channel"?'<span style="color:'+t.pr+';opacity:.7;font-size:12px">'+I.channel+'</span>':c.type==="group"?'<span style="color:'+t.pr+';opacity:.7;font-size:12px">'+I.users+'</span>':""} ${esc(name)}${c.type==="dm"?proTag(c.partner,9):""}</span><div style="display:flex;align-items:center;gap:5px">${c.unread>0?'<div class="ud"></div>':""}<span style="color:${t.t4};font-size:11px">${fmtTime(c.lastMessage?.created_at)}</span></div></div><div style="color:${t.t3};font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${c.lastMessage?.sender_name&&c.type!=="dm"?`<span style="color:${t.ac};font-weight:500">${esc(c.lastMessage.sender_name)}: </span>`:""}${esc(lastText)}</div></div>`;
     d.onclick=()=>openChat(c.id);
     d.onmouseenter=()=>{if(!isA)d.style.background=t.cdh;};d.onmouseleave=()=>{if(!isA)d.style.background="transparent";};cl.appendChild(d);
   });
@@ -1181,6 +1182,34 @@ function openAdmin(){modal("Admin Dashboard",async(body,close)=>{
   }catch(e){body.innerHTML=`<div style="color:#ef4444">${esc(e.error||"Error")}</div>`;}
 });}
 
+// ━━━ NOTIFICATIONS — top-of-screen banner + OS notification (sound via playNotif) ━━━
+function initNotify(){
+  if(!("Notification" in window))return;
+  if(Notification.permission!=="default")return;
+  const ask=()=>{try{Notification.requestPermission().catch(()=>{});}catch(e){}document.removeEventListener("click",ask);document.removeEventListener("touchstart",ask);};
+  document.addEventListener("click",ask,{once:true});
+  document.addEventListener("touchstart",ask,{once:true});
+}
+function osNotify(title,body,chatId){
+  try{
+    if(!("Notification" in window)||Notification.permission!=="granted")return;
+    const n=new Notification(title,{body:body||"New message",icon:"/logo.png",badge:"/logo.png",tag:"dq-"+chatId,renotify:true});
+    n.onclick=()=>{try{window.focus();}catch(e){}if(chatId)openChat(chatId);n.close();};
+  }catch(e){}
+}
+function showToast(title,body,onClick){
+  let w=$("#toast-wrap");
+  if(!w){w=ce("div");w.id="toast-wrap";w.style.cssText=`position:fixed;top:calc(var(--sat) + 10px);left:0;right:0;z-index:9000;display:flex;flex-direction:column;align-items:center;gap:8px;padding:0 12px;pointer-events:none`;document.body.appendChild(w);}
+  const card=ce("div");
+  card.style.cssText=`pointer-events:auto;width:100%;max-width:440px;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;background:${t.mod};backdrop-filter:blur(20px);border:1px solid ${t.ba};box-shadow:${t.sh};color:${t.t1};cursor:pointer;animation:toastIn .25s ease`;
+  card.innerHTML=`<div style="width:36px;height:36px;border-radius:10px;background:${t.ta};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">💬</div><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div><div style="font-size:12px;color:${t.t3};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(body||"New message")}</div></div>`;
+  let to;
+  const dismiss=()=>{clearTimeout(to);card.style.animation="toastOut .2s ease forwards";setTimeout(()=>card.remove(),200);};
+  card.onclick=()=>{dismiss();if(onClick)onClick();};
+  w.appendChild(card);
+  to=setTimeout(dismiss,4500);
+}
+
 // ━━━ SOCKET ━━━
 function connectSocket(){
   if(S.socket)S.socket.disconnect();if(!S.token)return;
@@ -1190,7 +1219,13 @@ function connectSocket(){
     const ch=S.chats.find(c=>c.id===msg.chat_id);
     if(ch){ch.lastMessage=msg;if(msg.chat_id!==S.activeChat||document.hidden)ch.unread=(ch.unread||0)+1;S.chats=S.chats.filter(c=>c.id!==msg.chat_id);S.chats.unshift(ch);renderChatListItems();}else loadChats();
     if(msg.chat_id===S.activeChat){S.chatMsgs.push(msg);const mc=$("#cv-msgs");if(mc){mc.insertAdjacentHTML("beforeend",msgBubble(msg));scrollB(mc);const newEl=mc.querySelector(`[data-mid="${msg.id}"]`);if(newEl){let timer;newEl.oncontextmenu=e=>{e.preventDefault();showMsgMenu(msg.id);};newEl.ontouchstart=()=>{timer=setTimeout(()=>showMsgMenu(msg.id),500);};newEl.ontouchmove=()=>clearTimeout(timer);newEl.ontouchend=()=>clearTimeout(timer);}}api(`/chats/${msg.chat_id}/read`,{method:"POST"}).catch(()=>{});if(ch)ch.unread=0;renderChatListItems();}
-    if(msg.user_id!==S.user.id)playNotif();
+    if(msg.user_id!==S.user.id){
+      playNotif();
+      const fromName=msg.sender_name||"New message";
+      const preview=msg.image?(msg.content?("📷 "+msg.content):"📷 Photo"):(msg.content||"");
+      if(document.hidden)osNotify(fromName,preview,msg.chat_id);
+      else if(msg.chat_id!==S.activeChat)showToast(fromName,preview,()=>openChat(msg.chat_id));
+    }
   });
   S.socket.on("message_edited",msg=>{const idx=S.chatMsgs.findIndex(m=>m.id===msg.id);if(idx>=0){S.chatMsgs[idx]=msg;const mc=$("#cv-msgs");if(mc){mc.innerHTML=S.chatMsgs.map(m=>msgBubble(m)).join("");scrollB(mc);bindMsgEvents(mc);}}const pi=(S.pinnedMsgs||[]).findIndex(p=>p.id===msg.id);if(pi>=0){S.pinnedMsgs[pi]={...S.pinnedMsgs[pi],content:msg.content,image:msg.image};updatePinBar();}});
   S.socket.on("message_deleted",({id,chat_id})=>{S.chatMsgs=S.chatMsgs.filter(m=>m.id!==id);if(chat_id===S.activeChat){const mc=$("#cv-msgs");if(mc){const el=mc.querySelector(`[data-mid="${id}"]`);if(el)el.remove();}if((S.pinnedMsgs||[]).some(p=>p.id===id)){S.pinnedMsgs=S.pinnedMsgs.filter(p=>p.id!==id);if(S.pinIndex>=S.pinnedMsgs.length)S.pinIndex=0;updatePinBar();}}});
@@ -1218,6 +1253,6 @@ window.addEventListener("resize",()=>{
 (async()=>{applyCSS();setVH();
   $("#app").innerHTML=`<div style="width:100vw;height:calc(var(--vh,1vh)*100);display:flex;align-items:center;justify-content:center;background:#030812"><div style="text-align:center;animation:pu 1.5s ease infinite"><div style="font-size:44px;margin-bottom:14px">📈</div><div style="color:#607090;font-size:14px;font-family:'Outfit',sans-serif">Loading...</div></div></div>`;
   if(S.token){try{const u=await api("/auth/me");S.user=u;localStorage.setItem("dq_u",JSON.stringify(u));}catch{S.token=null;S.user=null;localStorage.removeItem("dq_t");localStorage.removeItem("dq_u");}}
-  render();if(S.token)connectSocket();
+  render();if(S.token)connectSocket();initNotify();
 })();
 </script></body></html>
