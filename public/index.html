@@ -65,10 +65,11 @@ setVH();
 // keyboard, exactly like Telegram (no DOM rebuild, no custom keyboard).
 function syncAppViewport(){
   const vv=window.visualViewport,mw=$("#mw");if(!mw)return;
+  if(window.DQKB&&window.DQKB.on)return;
   if(vv&&window.innerWidth<=768){
     const overlap=window.innerHeight-vv.height;       // keyboard height (ignore small toolbar deltas)
-    mw.style.height=overlap>120?Math.round(vv.height)+"px":"";
-  }else{mw.style.height="";}
+    mw.style.bottom=overlap>120?overlap+"px":"0px";
+  }else{mw.style.bottom="0px";}
 }
 if(window.visualViewport){
   let _vst;
@@ -1456,4 +1457,6 @@ window.addEventListener("resize",()=>{
   if(S.token){try{const u=await api("/auth/me");S.user=u;localStorage.setItem("dq_u",JSON.stringify(u));}catch{S.token=null;S.user=null;localStorage.removeItem("dq_t");localStorage.removeItem("dq_u");}}
   render();if(S.token)connectSocket();initNotify();
 })();
-</script></body></html>
+</script>
+<script src="/keyboard.js"></script>
+</body></html>
