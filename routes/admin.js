@@ -32,7 +32,7 @@ router.get("/users", async (req, res) => {
     if (search.length >= 2) {
       const like = `%${search}%`;
       ({ rows } = await pool.query(
-        "SELECT id,email,username,name,avatar,role,subscription_status,blocked,created_at FROM users WHERE role!='bot' AND (LOWER(email) LIKE $1 OR LOWER(name) LIKE $1 OR LOWER(username) LIKE $1) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT id,email,username,name,avatar,role,subscription_status,subscription_expiry,blocked,created_at FROM users WHERE role!='bot' AND (LOWER(email) LIKE $1 OR LOWER(name) LIKE $1 OR LOWER(username) LIKE $1) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         [like, limit, offset]
       ));
       ({ rows: [{ c: total }] } = await pool.query(
@@ -40,7 +40,7 @@ router.get("/users", async (req, res) => {
       ));
     } else {
       ({ rows } = await pool.query(
-        "SELECT id,email,username,name,avatar,role,subscription_status,blocked,created_at FROM users WHERE role!='bot' ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        "SELECT id,email,username,name,avatar,role,subscription_status,subscription_expiry,blocked,created_at FROM users WHERE role!='bot' ORDER BY created_at DESC LIMIT $1 OFFSET $2",
         [limit, offset]
       ));
       ({ rows: [{ c: total }] } = await pool.query("SELECT COUNT(*)::int AS c FROM users WHERE role!='bot'"));

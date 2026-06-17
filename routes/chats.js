@@ -46,7 +46,7 @@ router.get("/", async (req, res) => {
       const { rows: [lastMsg] } = await pool.query("SELECT m.*,u.name AS sender_name FROM messages m JOIN users u ON m.user_id=u.id WHERE m.chat_id=$1 ORDER BY m.created_at DESC LIMIT 1", [ch.id]);
       let partner = null;
       if (ch.type === "dm") {
-        const { rows: [p] } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 AND cm.user_id!=$2 LIMIT 1", [ch.id, req.user.id]);
+        const { rows: [p] } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role,u.subscription_status FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 AND cm.user_id!=$2 LIMIT 1", [ch.id, req.user.id]);
         partner = p || null;
       }
       result.push({ ...ch, lastMessage: lastMsg || null, partner });
@@ -120,7 +120,7 @@ router.get("/:id", async (req, res) => {
     if (chat.visibility === "private" && !isAdmin && chat.type !== "dm") {
       members = [{ count: ct.c }];
     } else {
-      const { rows } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role AS user_role,cm.role AS chat_role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 ORDER BY cm.role DESC,cm.joined_at", [chatId]);
+      const { rows } = await pool.query("SELECT u.id,u.email,u.username,u.name,u.bio,u.avatar,u.role AS user_role,u.subscription_status,cm.role AS chat_role FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 ORDER BY cm.role DESC,cm.joined_at", [chatId]);
       members = rows;
     }
     // VIP gate: a pro_only channel is readable only by active subscribers (and
@@ -243,7 +243,7 @@ router.get("/:id/messages", async (req, res) => {
       }
     }
     const before = req.query.before ? parseInt(req.query.before) : null;
-    let q = `SELECT m.*,u.name AS sender_name,u.avatar AS sender_avatar,u.role AS sender_role,
+    let q = `SELECT m.*,u.name AS sender_name,u.avatar AS sender_avatar,u.role AS sender_role,u.subscription_status AS sender_subscription,
       rm.content AS reply_content,rm.user_id AS reply_user_id,ru.name AS reply_sender_name
       FROM messages m JOIN users u ON m.user_id=u.id
       LEFT JOIN messages rm ON m.reply_to=rm.id
@@ -274,13 +274,13 @@ router.post("/:id/messages", async (req, res) => {
     const text = (content || "").trim().slice(0, 4000), img = (image || "").slice(0, 500);
     const replyId = reply_to ? parseInt(reply_to) : null;
     const { rows: [msg] } = await pool.query("INSERT INTO messages (chat_id,user_id,content,image,reply_to) VALUES ($1,$2,$3,$4,$5) RETURNING *", [chatId, req.user.id, text, img, replyId]);
-    const { rows: [sender] } = await pool.query("SELECT name,avatar,role FROM users WHERE id=$1", [req.user.id]);
+    const { rows: [sender] } = await pool.query("SELECT name,avatar,role,subscription_status FROM users WHERE id=$1", [req.user.id]);
     let replyInfo = {};
     if (replyId) {
       const { rows: [rm] } = await pool.query("SELECT m.content AS reply_content,m.user_id AS reply_user_id,u.name AS reply_sender_name FROM messages m JOIN users u ON m.user_id=u.id WHERE m.id=$1", [replyId]);
       if (rm) replyInfo = rm;
     }
-    const payload = { ...msg, sender_name: sender.name, sender_avatar: sender.avatar, sender_role: sender.role, ...replyInfo };
+    const payload = { ...msg, sender_name: sender.name, sender_avatar: sender.avatar, sender_role: sender.role, sender_subscription: sender.subscription_status, ...replyInfo };
     const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
     members.forEach(m => io.to(`user_${m.user_id}`).emit("chat_message", payload));
     await pool.query("UPDATE chat_members SET last_read_id=$1 WHERE chat_id=$2 AND user_id=$3", [msg.id, chatId, req.user.id]);
@@ -331,8 +331,8 @@ router.put("/:chatId/messages/:msgId", async (req, res) => {
     if (msg.user_id !== req.user.id && !canModerate) return res.status(403).json({ error: "You can only edit your own messages" });
     const { content } = req.body;
     const { rows: [updated] } = await pool.query("UPDATE messages SET content=$1,edited_at=NOW() WHERE id=$2 RETURNING *", [String(content).slice(0, 4000), msgId]);
-    const { rows: [sender] } = await pool.query("SELECT name,avatar,role FROM users WHERE id=$1", [msg.user_id]);
-    const payload = { ...updated, sender_name: sender.name, sender_avatar: sender.avatar, sender_role: sender.role };
+    const { rows: [sender] } = await pool.query("SELECT name,avatar,role,subscription_status FROM users WHERE id=$1", [msg.user_id]);
+    const payload = { ...updated, sender_name: sender.name, sender_avatar: sender.avatar, sender_role: sender.role, sender_subscription: sender.subscription_status };
     const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
     members.forEach(m => io.to(`user_${m.user_id}`).emit("message_edited", payload));
     res.json(payload);
@@ -443,7 +443,7 @@ router.get("/users/search", async (req, res) => {
     if (!q || q.length < 2) return res.json({ users: [], chats: [] });
     const like = `%${q.toLowerCase()}%`;
     const { rows: users } = await pool.query(
-      "SELECT id,email,username,name,avatar,role FROM users WHERE (LOWER(email) LIKE $1 OR LOWER(name) LIKE $1 OR LOWER(username) LIKE $1) AND id!=$2 AND role!='bot' LIMIT 15", [like, req.user.id]
+      "SELECT id,email,username,name,avatar,role,subscription_status FROM users WHERE (LOWER(email) LIKE $1 OR LOWER(name) LIKE $1 OR LOWER(username) LIKE $1) AND id!=$2 AND role!='bot' LIMIT 15", [like, req.user.id]
     );
     const { rows: chats } = await pool.query(
       "SELECT id,type,username,name,avatar,visibility,(SELECT COUNT(*)::int FROM chat_members WHERE chat_id=chats.id) AS member_count FROM chats WHERE type IN ('group','channel') AND (LOWER(name) LIKE $1 OR LOWER(username) LIKE $1) LIMIT 15", [like]
