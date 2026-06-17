@@ -134,12 +134,16 @@ try{
     if(!userOn())return;st.cur=target;
     var k=getKb();k.style.display='block';render();
     var de=document.documentElement;de.classList.add('dqkb-open');
-    requestAnimationFrame(function(){try{
-      var h=k.offsetHeight||268;de.style.setProperty('--dqkb',h+'px');
-      var mw=document.querySelector('#mw');
-      if(mw){mw.style.bottom=h+'px';}
-      else if(target&&target.scrollIntoView){try{target.scrollIntoView({block:'center'});}catch(_){}}
-    }catch(_){}});
+    requestAnimationFrame(function(){
+      try{
+        var h=k.offsetHeight||268;de.style.setProperty('--dqkb',h+'px');
+        var mw=document.querySelector('#mw');
+        if(mw)mw.style.bottom=h+'px';
+      }catch(_){}
+      requestAnimationFrame(function(){
+        if(target&&target.scrollIntoView){try{target.scrollIntoView({block:'center'});}catch(_){}}
+      });
+    });
   }
   function hide(){
     var k=document.getElementById('dq-kb');if(k)k.style.display='none';
