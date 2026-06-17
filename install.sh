@@ -257,20 +257,28 @@ else
   echo -e "  ${CYAN}Skipped.${NC} Install later: sudo bash $SRC_DIR/quantum-chat/scripts/install-quantum-chat.sh"
 fi
 
-echo ""; echo -e "${BOLD}── Step 8: Live Trading — high-FPS WebRTC (optional) ──${NC}"; echo ""
-echo -e "  By default Live Trading uses a low-FPS (~15) socket relay that needs no extra setup."
-echo -e "  For smooth ${BOLD}30-60 FPS${NC} screen sharing, install the WebRTC ${CYAN}SFU (mediasoup) + TURN (coturn)${NC}."
-echo -e "  ${YELLOW}Needs a bigger box (~2 vCPU / 4 GB), open UDP ports, and ~3-5 Mbps per 720p viewer.${NC}"
-echo -ne "${YELLOW}➜ Install the high-FPS live streaming stack now? (y/n): ${NC}"; read -r SFU_INSTALL
-if [[ "$SFU_INSTALL" =~ ^[Yy]$ ]]; then
+echo ""; echo -e "${BOLD}── Step 8: Live Trading — high-FPS WebRTC (SFU + TURN) ──${NC}"; echo ""
+echo -e "  Installs the WebRTC ${CYAN}SFU (mediasoup) + TURN (coturn)${NC} so Live Trading streams at smooth"
+echo -e "  ${BOLD}30-60 FPS${NC} instead of the low-FPS (~15) relay. ${GREEN}${BOLD}Enabled by default — just press Enter.${NC}"
+echo -e "  ${YELLOW}Best on ~2 vCPU / 4 GB with open UDP ports (~3-5 Mbps per 720p viewer). Type 'n' to skip on a small box.${NC}"
+# Default-ON: pressing Enter installs + activates mediasoup + coturn. For an
+# unattended install, preset the answer:  INSTALL_SFU=yes  (force, no prompt)
+# or  INSTALL_SFU=no  (skip, no prompt).
+SFU_CHOICE="${INSTALL_SFU:-}"
+if [ -z "$SFU_CHOICE" ]; then
+  echo -ne "${YELLOW}➜ Install & activate high-FPS live streaming now? [Y/n]: ${NC}"; read -r SFU_CHOICE
+  SFU_CHOICE="${SFU_CHOICE:-Y}"
+fi
+if [[ "$SFU_CHOICE" =~ ^([Nn]|no|No|NO)$ ]]; then
+  echo -e "  ${CYAN}Skipped.${NC} Enable later (any time):  sudo bash $SRC_DIR/setup-live-sfu.sh"
+else
   if [ -f "$SRC_DIR/setup-live-sfu.sh" ]; then
+    echo -e "${CYAN}▸ Installing mediasoup (SFU) + coturn (TURN), writing config, opening ports, activating...${NC}"
     DOMAIN="$DOMAIN" bash "$SRC_DIR/setup-live-sfu.sh" \
       || echo -e "${YELLOW}  ⚠ SFU setup did not finish; Live Trading will use the frame-relay fallback until you re-run it.${NC}"
   else
     echo -e "${YELLOW}  ⚠ setup-live-sfu.sh not found in this checkout.${NC}"
   fi
-else
-  echo -e "  ${CYAN}Skipped.${NC} Enable later (any time):  sudo bash $SRC_DIR/setup-live-sfu.sh"
 fi
 
 echo ""; echo -e "${BOLD}── Step 9: Next steps ──${NC}"; echo ""

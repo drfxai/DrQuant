@@ -60,6 +60,7 @@ A self-hosted, real-time messaging platform built for trading communities. Think
 
 **Live trading**
 - Admin screen share to all users for real-time trading sessions
+- High-FPS (30–60) WebRTC streaming via a built-in SFU (mediasoup) + TURN (coturn), installed and activated by default; gracefully falls back to a low-FPS relay if disabled
 - Users automatically see the stream when entering the section
 - Live status indicator with viewer count, stream timer, and auto-cleanup on disconnect
 - Adjustable quality (frame rate) for bandwidth control
@@ -119,7 +120,7 @@ cd DrFXQuant
 sudo bash install.sh
 ```
 
-The installer handles everything: Node.js, PostgreSQL, Nginx, PM2, SSL, database schema and migrations, and an interactively-created admin account. It can also optionally install the Quantum Chat node.
+The installer handles everything: Node.js, PostgreSQL, Nginx, PM2, SSL, database schema and migrations, and an interactively-created admin account. It also installs and activates the high-FPS **Live Trading** stack — the WebRTC **SFU (mediasoup) + TURN (coturn)** for smooth 30–60 FPS screen sharing — **on by default**; just press Enter at the prompt. On a small (1 GB) box, skip it by running `sudo INSTALL_SFU=no bash install.sh` instead. It can also optionally install the Quantum Chat node.
 
 ### Manual setup
 

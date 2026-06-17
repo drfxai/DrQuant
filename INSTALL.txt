@@ -41,6 +41,9 @@ install.sh is a one-shot installer. It will:
     migrations/*.sql (this creates the TradingView signal/webhook tables).
   - Start the app under PM2 behind an Nginx reverse proxy.
   - Optionally obtain an HTTPS certificate.
+  - Install & activate the WebRTC SFU (mediasoup) + TURN (coturn) for high-FPS
+    (30-60) Live Trading - ON BY DEFAULT (just press Enter at the prompt). Skip
+    on a small box with:  sudo INSTALL_SFU=no bash install.sh
 
 Prompts it will ask:
   - Domain (e.g. app.yourdomain.com)
@@ -52,6 +55,10 @@ Prompts it will ask:
   - Proceed? (y/n)
   - Setup SSL now? (y/n)
   - Install the Quantum Chat node now? (y/n)   (optional - see section 5)
+  - Install & activate high-FPS live streaming (SFU + TURN)? [Y/n]
+        (default YES - press Enter to install mediasoup + coturn for 30-60 FPS
+         Live Trading; type 'n' to skip, e.g. on a 1 GB box. Preset for
+         unattended installs with INSTALL_SFU=yes or INSTALL_SFU=no.)
 
 When it finishes:
   - The app is reachable at http://your-domain  (https if you enabled SSL).
