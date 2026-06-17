@@ -111,6 +111,7 @@ async function initDB() {
       ["messages", "pinned", "BOOLEAN DEFAULT FALSE"],
       ["messages", "pinned_at", "TIMESTAMPTZ"],
       ["messages", "pinned_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL"],
+      ["messages", "attachment", "JSONB"],
     ];
     for (const [tbl, col, def] of cols) {
       await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS ${col} ${def}`).catch(() => {});

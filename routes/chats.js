@@ -17,6 +17,23 @@ function badAvatar(a) {
   return false;
 }
 
+// Attachment (voice / audio / video / file) sent alongside a message. The file
+// itself was already validated + stored by /api/upload; here we re-validate the
+// client-supplied metadata so a tampered client can't inject a bad path/markup.
+const ATT_KINDS = ["voice", "audio", "video", "file", "image"];
+function sanitizeAttachment(a) {
+  if (!a || typeof a !== "object") return null;
+  const url = String(a.url || "");
+  // Must be an uploaded path from /api/upload — nothing else.
+  if (!/^\/uploads\/[A-Za-z0-9._-]+$/.test(url)) return null;
+  const kind = ATT_KINDS.includes(a.kind) ? a.kind : "file";
+  const name = String(a.name || "file").replace(/[\u0000-\u001f"'<>]/g, "").slice(0, 120) || "file";
+  const mime = String(a.mime || "").replace(/[^a-zA-Z0-9._+\/-]/g, "").slice(0, 100);
+  const size = Math.max(0, Math.min(100 * 1024 * 1024, parseInt(a.size, 10) || 0));
+  const dur = Math.max(0, Math.min(86400, parseInt(a.dur, 10) || 0));
+  return { url, kind, name, mime, size, dur };
+}
+
 // Pin permission: in a DM either participant may pin; in a group/channel only a
 // chat admin (or a global admin/manager/superadmin) may pin/unpin.
 async function pinPermission(pool, chatId, user) {
@@ -262,18 +279,20 @@ router.post("/:id/messages", async (req, res) => {
   const pool = req.app.get("pool"), io = req.app.get("io");
   try {
     const chatId = parseInt(req.params.id);
-    const { content, image, reply_to } = req.body;
-    if (!content?.trim() && !image) return res.status(400).json({ error: "Message required" });
+    const { content, image, reply_to, attachment } = req.body;
+    if (!content?.trim() && !image && !attachment) return res.status(400).json({ error: "Message required" });
     // image must be an uploaded path from /api/upload — reject arbitrary or
     // javascript:/attribute-injection values before they reach other clients.
     if (image && !/^\/uploads\/[A-Za-z0-9._-]+$/.test(String(image))) return res.status(400).json({ error: "Invalid image" });
+    const att = sanitizeAttachment(attachment);
+    if (attachment && !att) return res.status(400).json({ error: "Invalid attachment" });
     const { rows: [mem] } = await pool.query("SELECT cm.role AS chat_role FROM chat_members cm WHERE cm.chat_id=$1 AND cm.user_id=$2", [chatId, req.user.id]);
     if (!mem) return res.status(403).json({ error: "Not a member" });
     const { rows: [chat] } = await pool.query("SELECT type FROM chats WHERE id=$1", [chatId]);
     if (chat?.type === "channel" && mem.chat_role !== "admin" && req.user.role !== "admin") return res.status(403).json({ error: "Only admins post in channels" });
     const text = (content || "").trim().slice(0, 4000), img = (image || "").slice(0, 500);
     const replyId = reply_to ? parseInt(reply_to) : null;
-    const { rows: [msg] } = await pool.query("INSERT INTO messages (chat_id,user_id,content,image,reply_to) VALUES ($1,$2,$3,$4,$5) RETURNING *", [chatId, req.user.id, text, img, replyId]);
+    const { rows: [msg] } = await pool.query("INSERT INTO messages (chat_id,user_id,content,image,reply_to,attachment) VALUES ($1,$2,$3,$4,$5,$6::jsonb) RETURNING *", [chatId, req.user.id, text, img, replyId, att ? JSON.stringify(att) : null]);
     const { rows: [sender] } = await pool.query("SELECT name,avatar,role,subscription_status FROM users WHERE id=$1", [req.user.id]);
     let replyInfo = {};
     if (replyId) {
