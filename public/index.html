@@ -91,33 +91,73 @@ function render(){applyCSS();if(!S.token||!S.user)renderLogin();else renderApp()
 let loginTab="login";
 function renderLogin(){
   const fs=`background:rgba(15,22,45,.7);border:1px solid rgba(100,150,255,.15);color:#e0e8ff;font-family:'Outfit',sans-serif;font-size:16px;outline:none;-webkit-appearance:none;-moz-appearance:none;appearance:none;touch-action:auto`;
-  $("#app").innerHTML=`<div style="width:100vw;height:calc(var(--vh,1vh)*100);display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 30% 30%,#0d1a35,#060d1f 50%,#020714);position:relative;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px">
-  <div style="width:420px;max-width:100%;animation:si .4s ease">
-    <div style="text-align:center;margin-bottom:28px">
-      <div style="width:80px;height:80px;border-radius:22px;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(20,30,65,.9),rgba(15,22,50,.95));border:1px solid rgba(100,150,255,.2);box-shadow:0 8px 32px rgba(0,0,0,.3),inset 0 1px rgba(255,255,255,.05)">
-        <img src="/logo.png" alt="DrFX" style="width:100%;height:100%;object-fit:cover;border-radius:20px" onerror="this.onerror=null;this.src='/icon.svg'"/>
+  const fIcon=(svg)=>`<span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#5e6f99;display:flex;pointer-events:none">${svg}</span>`;
+  const svgMail=ic('<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/>',18);
+  const svgLock=ic('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',18);
+  const feats=[["\uD83D\uDCE1","Real-time signals","TradingView alerts hit your channels the instant price moves."],["\uD83E\uDD16","AI trading desk","Patterns, risk sizing and Pine Script help from a built-in AI, 24/7."],["\uD83D\uDD34","Live sessions","Watch the desk in crisp 30\u201360 FPS WebRTC and trade in real time."],["\uD83D\uDCAC","Telegram-style chat","Groups, channels and DMs with replies, voice notes and files."],["\uD83D\uDCCA","Pro charts","Full TradingView charts in-app with multi-timeframe tools and notes."],["\uD83D\uDEE1\uFE0F","Quantum Chat","Optional end-to-end-encrypted, censorship-resilient messenger."]];
+  const featsHTML=feats.map(f=>`<div class="lg-feat"><div class="lg-feat-ic">${f[0]}</div><div><div style="color:#e7eeff;font-size:13.5px;font-weight:600;margin-bottom:1px">${f[1]}</div><div style="color:#90a3ca;font-size:12px;line-height:1.45">${f[2]}</div></div></div>`).join("");
+  $("#app").innerHTML=`<style>
+@keyframes lgTwk{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes lgDriftA{from{background-position:0 0}to{background-position:0 -2000px}}
+@keyframes lgDriftB{from{background-position:0 0}to{background-position:0 -1200px}}
+@keyframes lgFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
+@keyframes lgRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+@keyframes lgShoot{0%{transform:translate(0,0) rotate(35deg);opacity:0}8%{opacity:1}38%{opacity:1}60%{transform:translate(440px,308px) rotate(35deg);opacity:0}100%{opacity:0}}
+@keyframes lgRing{0%,100%{box-shadow:0 0 0 1px rgba(140,170,255,.16),0 30px 80px rgba(0,0,0,.55),0 0 70px rgba(124,92,255,.10)}50%{box-shadow:0 0 0 1px rgba(140,170,255,.26),0 30px 80px rgba(0,0,0,.55),0 0 100px rgba(124,92,255,.22)}}
+.lg-stars,.lg-stars2,.lg-stars3{position:absolute;inset:-60px;pointer-events:none}
+.lg-stars{background-image:radial-gradient(1.5px 1.5px at 25px 35px,#fff,transparent),radial-gradient(1.5px 1.5px at 120px 90px,#cfe0ff,transparent),radial-gradient(1px 1px at 70px 160px,#fff,transparent),radial-gradient(1px 1px at 180px 210px,#bcd4ff,transparent);background-size:230px 270px;animation:lgDriftA 90s linear infinite,lgTwk 5s ease-in-out infinite}
+.lg-stars2{background-image:radial-gradient(1px 1px at 50px 60px,#fff,transparent),radial-gradient(1px 1px at 160px 30px,#9fc0ff,transparent),radial-gradient(1.5px 1.5px at 100px 140px,#fff,transparent);background-size:300px 320px;opacity:.7;animation:lgDriftB 150s linear infinite,lgTwk 7s ease-in-out infinite}
+.lg-stars3{background-image:radial-gradient(2px 2px at 80px 50px,#e9d5ff,transparent),radial-gradient(1.5px 1.5px at 210px 190px,#a5f3ff,transparent);background-size:440px 440px;opacity:.55;animation:lgDriftA 210s linear infinite}
+.lg-orb{position:absolute;border-radius:50%;filter:blur(64px);opacity:.5;pointer-events:none;animation:lgFloat 15s ease-in-out infinite}
+.lg-shoot{position:absolute;top:9%;left:-12%;width:150px;height:2px;background:linear-gradient(90deg,transparent,#fff,transparent);border-radius:2px;filter:drop-shadow(0 0 6px #cfe0ff);transform:rotate(35deg);animation:lgShoot 11s ease-in-out 4s infinite;pointer-events:none}
+.lg-split{width:100%;max-width:1040px;display:grid;grid-template-columns:1.05fr .95fr;gap:46px;align-items:center}
+.lg-card{position:relative;background:rgba(12,18,42,.62);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid rgba(140,170,255,.16);border-radius:24px;padding:30px;animation:lgRing 6s ease-in-out infinite,lgRise .5s ease both}
+.lg-field{width:100%;padding:14px 16px 14px 44px;border-radius:13px;background:rgba(10,16,34,.72);border:1px solid rgba(120,150,230,.18);color:#e7eeff;font-size:16px;font-family:'Outfit',sans-serif;outline:none;transition:border .2s,box-shadow .2s;-webkit-appearance:none;-moz-appearance:none;appearance:none}
+.lg-field::placeholder{color:#5a6b92}
+.lg-field:focus{border-color:rgba(124,92,255,.6);box-shadow:0 0 0 3px rgba(124,92,255,.16)}
+.lg-lbl{color:#9fb2d8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;margin-bottom:7px}
+.lg-feat{display:flex;gap:12px;align-items:flex-start;padding:8px 0}
+.lg-feat-ic{width:38px;height:38px;min-width:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;background:linear-gradient(135deg,rgba(124,92,255,.22),rgba(34,211,238,.15));border:1px solid rgba(140,170,255,.18)}
+.lg-btn{width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,#7c5cff,#4a8cff 55%,#22d3ee);background-size:200% 100%;color:#fff;font-weight:700;font-size:15px;cursor:pointer;font-family:'Outfit',sans-serif;letter-spacing:.4px;box-shadow:0 10px 30px rgba(74,108,255,.35);transition:transform .15s,background-position .5s,box-shadow .2s;-webkit-appearance:none}
+.lg-btn:hover{transform:translateY(-2px);background-position:100% 0;box-shadow:0 14px 42px rgba(124,92,255,.45)}
+.lg-btn:active{transform:scale(.985)}
+.lg-btn:disabled{opacity:.6;cursor:wait;transform:none}
+.lg-feats-m{display:none}
+@media(max-width:900px){.lg-split{grid-template-columns:1fr;gap:22px;max-width:430px}.lg-hero{text-align:center}.lg-brand{justify-content:center}.lg-h1{font-size:25px!important}.lg-hero-feats{display:none}.lg-feats-m{display:block;grid-column:1/-1}}
+</style>
+<div class="lg-scroll" style="position:relative;height:calc(var(--vh,1vh)*100);overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:radial-gradient(ellipse 120% 90% at 50% -10%,#101a3d,#0a1130 38%,#05081c 74%,#03050f)">
+  <div class="lg-stars"></div><div class="lg-stars2"></div><div class="lg-stars3"></div>
+  <div class="lg-orb" style="width:340px;height:340px;top:-90px;right:-60px;background:radial-gradient(circle,#6d3cff,transparent 65%)"></div>
+  <div class="lg-orb" style="width:300px;height:300px;bottom:-110px;left:-70px;background:radial-gradient(circle,#1e6bff,transparent 65%);animation-delay:-7s"></div>
+  <div class="lg-shoot"></div>
+  <div style="position:relative;z-index:1;min-height:100%;display:flex;align-items:center;justify-content:center;padding:max(24px,var(--sat)) 18px max(24px,var(--sab))">
+    <div class="lg-split">
+      <div class="lg-hero" style="animation:lgRise .5s ease both">
+        <div class="lg-brand" style="display:flex;align-items:center;gap:12px">
+          <div style="width:58px;height:58px;border-radius:17px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.16));border:1px solid rgba(140,170,255,.22);box-shadow:0 0 38px rgba(124,92,255,.32)"><img src="/logo.png" alt="DrFX" style="width:100%;height:100%;object-fit:cover;border-radius:15px" onerror="this.onerror=null;this.src='/icon.svg'"/></div>
+          <div><div style="font-size:23px;font-weight:800;color:#eaf1ff;letter-spacing:-.4px">DrFX <span style="background:linear-gradient(135deg,#a78bfa,#4a8cff,#22d3ee);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Quant</span></div><div style="color:#8aa0cc;font-size:12px;letter-spacing:.4px">Where charts meet the cosmos</div></div>
+        </div>
+        <h1 class="lg-h1" style="color:#f0f5ff;font-size:30px;line-height:1.16;font-weight:800;margin:22px 0 10px;letter-spacing:-.6px">Trade among the stars.<br/>Move with the smart money.</h1>
+        <p style="color:#9fb2d8;font-size:14px;line-height:1.6;margin:0 0 18px;max-width:470px">The all-in-one galaxy for active traders \u2014 real-time signals, a built-in AI desk, live screen-share sessions and pro charting, in one encrypted platform.</p>
+        <div class="lg-hero-feats">${featsHTML}</div>
       </div>
-      <h1 style="color:#e0e8ff;font-size:28px;font-weight:700;margin:0;letter-spacing:-.5px">DrFX <span style="font-style:italic;color:#4a8cff">Quant</span></h1>
-      <p style="color:#506080;font-size:13px;margin:6px 0 0;letter-spacing:.5px">Professional Trading Communication</p>
+      <div class="lg-card">
+        <div id="lt" style="display:flex;gap:0;margin-bottom:22px;background:rgba(8,12,30,.6);border-radius:14px;padding:5px;border:1px solid rgba(120,150,230,.12)"></div>
+        <div id="l-err"></div>
+        <div id="l-name-w" style="display:none;margin-bottom:14px"><div class="lg-lbl">Name</div><div style="position:relative">${fIcon(I.user)}<input id="l-name" placeholder="Your name" class="lg-field"/></div></div>
+        <div class="lg-lbl">Username or Email</div>
+        <div style="position:relative;margin-bottom:14px">${fIcon(svgMail)}<input id="l-em" placeholder="Enter username or email" autocomplete="username" inputmode="email" class="lg-field"/></div>
+        <div class="lg-lbl">Password</div>
+        <div style="position:relative;margin-bottom:22px">${fIcon(svgLock)}<input type="password" id="l-pw" placeholder="Enter password" autocomplete="current-password" class="lg-field" style="padding-right:46px"/><button id="pw-tog" type="button" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:#6b7ca6;cursor:pointer;padding:4px;display:flex">${I.eye}</button></div>
+        <button id="l-btn" type="button" class="lg-btn">Sign In</button>
+        <div style="margin-top:15px;text-align:center;color:#6f82ab;font-size:11.5px;line-height:1.6">\uD83D\uDD12 Encrypted \u00b7 Communication &amp; charting only \u2014 not financial advice</div>
+      </div>
+      <div class="lg-feats-m"><div style="color:#9fb2d8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.4px;margin:2px 0 8px;text-align:center">Why DrFX Quant</div>${featsHTML}</div>
     </div>
-    <div style="background:rgba(12,18,42,.8);backdrop-filter:blur(30px);border:1px solid rgba(100,150,255,.12);border-radius:24px;padding:28px;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <div id="lt" style="display:flex;gap:0;margin-bottom:24px;background:rgba(20,30,60,.4);border-radius:14px;padding:4px;border:1px solid rgba(100,150,255,.08)"></div>
-      <div id="l-err"></div>
-      <div id="l-name-w" style="display:none;margin-bottom:16px"><div style="color:#a0b4d8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">NAME</div><input id="l-name" placeholder="Your name" style="width:100%;padding:14px 16px;border-radius:12px;${fs}"/></div>
-      <div style="color:#a0b4d8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">USERNAME OR EMAIL</div>
-      <input id="l-em" placeholder="Enter username or email" autocomplete="username" inputmode="email" style="width:100%;padding:14px 16px;border-radius:12px;${fs};margin-bottom:16px"/>
-      <div style="color:#a0b4d8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">PASSWORD</div>
-      <div style="position:relative;margin-bottom:24px"><input type="password" id="l-pw" placeholder="Enter password" autocomplete="current-password" style="width:100%;padding:14px 16px;padding-right:48px;border-radius:12px;${fs}"/><button id="pw-tog" type="button" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:#506080;cursor:pointer;padding:4px;display:flex">${I.eye}</button></div>
-      <button id="l-btn" type="button" style="width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,#3a6cdc,#2a5cc0);color:#fff;font-weight:700;font-size:15px;cursor:pointer;font-family:'Outfit',sans-serif;box-shadow:0 4px 20px rgba(58,108,220,.4);letter-spacing:.3px;-webkit-appearance:none">Sign In</button>
-    </div>
-    <div style="margin-top:20px;padding:20px 24px;border-radius:20px;background:rgba(12,18,42,.6);border:1px solid rgba(100,150,255,.1);text-align:center">
-      <p style="color:#8cc4ff;font-size:14px;line-height:1.7;font-style:italic;margin:0 0 6px">"The stock market transfers money from the impatient to the patient."</p>
-      <p style="color:#506080;font-size:12px;margin:0 0 14px">— Warren Buffett</p>
-      <p style="margin:0;line-height:1.8"><span style="color:#4a8cff;font-weight:700">Patience</span><span style="color:#a0b4d8;font-size:13px"> is your edge.</span><br><span style="color:#4a8cff;font-weight:700">Discipline</span><span style="color:#a0b4d8;font-size:13px"> is your power.</span></p>
-    </div>
-  </div></div>`;
+  </div>
+</div>`;
   const lt=$("#lt");
-  ["login","register"].forEach(m=>{const b=ce("button");b.type="button";b.textContent=m==="login"?"Sign In":"Register";b.style.cssText=`flex:1;padding:12px;border-radius:11px;border:none;font-weight:600;font-size:14px;cursor:pointer;font-family:'Outfit',sans-serif;transition:.2s;-webkit-appearance:none;${loginTab===m?"background:linear-gradient(135deg,#3a6cdc,#2a5cc0);color:#fff;box-shadow:0 2px 12px rgba(58,108,220,.3)":"background:transparent;color:#506080"}`;b.onclick=()=>{loginTab=m;renderLogin();};lt.appendChild(b);});
+  ["login","register"].forEach(m=>{const b=ce("button");b.type="button";b.textContent=m==="login"?"Sign In":"Register";b.style.cssText=`flex:1;padding:12px;border-radius:11px;border:none;font-weight:600;font-size:14px;cursor:pointer;font-family:'Outfit',sans-serif;transition:.2s;-webkit-appearance:none;${loginTab===m?"background:linear-gradient(135deg,#7c5cff,#4a8cff);color:#fff;box-shadow:0 4px 16px rgba(124,92,255,.4)":"background:transparent;color:#7d8fb8"}`;b.onclick=()=>{loginTab=m;renderLogin();};lt.appendChild(b);});
   if(loginTab==="register")$("#l-name-w").style.display="block";
   $("#l-btn").textContent=loginTab==="login"?"Sign In":"Create Account";
   $("#pw-tog").onclick=()=>{const inp=$("#l-pw"),tog=$("#pw-tog");if(inp.type==="password"){inp.type="text";tog.innerHTML=I.eyeOff;}else{inp.type="password";tog.innerHTML=I.eye;}};
