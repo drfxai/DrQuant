@@ -106,7 +106,7 @@ if [ -f "$SRC_DIR/server.js" ]; then
     mkdir -p "$APP_DIR/quantum-chat"
     cp -r "$SRC_DIR/quantum-chat/web" "$APP_DIR/quantum-chat/"
   fi
-  for f in uninstall.sh update.sh manage.sh INTEGRATION.md; do
+  for f in uninstall.sh update.sh manage.sh setup-live-sfu.sh INTEGRATION.md; do
     [ -f "$SRC_DIR/$f" ] && cp "$SRC_DIR/$f" "$APP_DIR/"
   done
   echo -e "  ${GREEN}✓${NC} Files copied (incl. middleware, services, migrations, realtime, quantum-chat web)"
@@ -257,7 +257,23 @@ else
   echo -e "  ${CYAN}Skipped.${NC} Install later: sudo bash $SRC_DIR/quantum-chat/scripts/install-quantum-chat.sh"
 fi
 
-echo ""; echo -e "${BOLD}── Step 8: Next steps ──${NC}"; echo ""
+echo ""; echo -e "${BOLD}── Step 8: Live Trading — high-FPS WebRTC (optional) ──${NC}"; echo ""
+echo -e "  By default Live Trading uses a low-FPS (~15) socket relay that needs no extra setup."
+echo -e "  For smooth ${BOLD}30-60 FPS${NC} screen sharing, install the WebRTC ${CYAN}SFU (mediasoup) + TURN (coturn)${NC}."
+echo -e "  ${YELLOW}Needs a bigger box (~2 vCPU / 4 GB), open UDP ports, and ~3-5 Mbps per 720p viewer.${NC}"
+echo -ne "${YELLOW}➜ Install the high-FPS live streaming stack now? (y/n): ${NC}"; read -r SFU_INSTALL
+if [[ "$SFU_INSTALL" =~ ^[Yy]$ ]]; then
+  if [ -f "$SRC_DIR/setup-live-sfu.sh" ]; then
+    DOMAIN="$DOMAIN" bash "$SRC_DIR/setup-live-sfu.sh" \
+      || echo -e "${YELLOW}  ⚠ SFU setup did not finish; Live Trading will use the frame-relay fallback until you re-run it.${NC}"
+  else
+    echo -e "${YELLOW}  ⚠ setup-live-sfu.sh not found in this checkout.${NC}"
+  fi
+else
+  echo -e "  ${CYAN}Skipped.${NC} Enable later (any time):  sudo bash $SRC_DIR/setup-live-sfu.sh"
+fi
+
+echo ""; echo -e "${BOLD}── Step 9: Next steps ──${NC}"; echo ""
 echo -e "  ${CYAN}Reminder:${NC} TradingView webhook secret is in ${APP_DIR}/.env (TRADINGVIEW_WEBHOOK_SECRET);"
 echo -e "  create a channel named 'signals' in-app so incoming signals have somewhere to post."
 

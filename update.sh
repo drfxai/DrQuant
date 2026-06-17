@@ -71,7 +71,7 @@ if [ -d "$SRC_DIR/quantum-chat/web" ]; then
   mkdir -p "$APP_DIR/quantum-chat"
   cp -r "$SRC_DIR/quantum-chat/web" "$APP_DIR/quantum-chat/"
 fi
-for f in uninstall.sh update.sh manage.sh INTEGRATION.md; do
+for f in uninstall.sh update.sh manage.sh setup-live-sfu.sh INTEGRATION.md; do
   [ -f "$SRC_DIR/$f" ] && cp "$SRC_DIR/$f" "$APP_DIR/"
 done
 echo -e "  ${GREEN}OK${NC} Code updated (.env, uploads/, and database untouched)"
@@ -136,6 +136,19 @@ echo -e "${CYAN}> Restarting service...${NC}"
 pm2 restart "$PM2_NAME" --update-env 2>/dev/null || pm2 start server.js --name "$PM2_NAME" --cwd "$APP_DIR"
 pm2 save >/dev/null 2>&1 || true
 echo -e "  ${GREEN}OK${NC} $PM2_NAME restarted"
+
+# Live Trading SFU sanity check. mediasoup's native build is an OPTIONAL
+# dependency, so `npm install --production` SKIPS it on a host without a
+# C++/python toolchain - which silently drops Live Trading back to the 15 FPS
+# relay even though LIVE_SFU=on. Surface it instead of letting it fail quietly.
+if grep -q '^LIVE_SFU=on' "$APP_DIR/.env" 2>/dev/null; then
+  if [ -d "$APP_DIR/node_modules/mediasoup" ]; then
+    echo -e "  ${GREEN}OK${NC} Live SFU enabled (mediasoup present)"
+  else
+    echo -e "${YELLOW}  ! LIVE_SFU=on but mediasoup is NOT installed - Live Trading is on the 15 FPS relay.${NC}"
+    echo -e "${YELLOW}    Restore high-FPS streaming:  cd $SRC_DIR && sudo bash setup-live-sfu.sh${NC}"
+  fi
+fi
 
 echo ""
 echo -e "${GREEN}${BOLD}  Update complete.${NC}"
