@@ -1,0 +1,19 @@
+{
+  "name": "DrFX Quant",
+  "short_name": "DrFX Quant",
+  "description": "Professional Trading Communication",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#030812",
+  "theme_color": "#030812",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
