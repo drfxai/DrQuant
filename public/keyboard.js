@@ -11,7 +11,7 @@ try{
 
   function userOn(){return localStorage.getItem('dq_kb')==='on';}
   function isTextField(el){
-    if(!el)return false;
+    if(!el||el.nodeType!==1)return false;
     if(el.tagName==='TEXTAREA')return true;
     if(el.tagName==='INPUT'){var ty=(el.getAttribute('type')||'text').toLowerCase();return ['text','search','email','url','tel','password','number',''].indexOf(ty)>=0;}
     return false;
@@ -30,10 +30,29 @@ try{
   var st={lay:'en',alpha:'en',shift:false,cur:null};
   function curLayout(){return st.lay==='fa'?FA:st.lay==='sym'?SYM:st.lay==='sym2'?SYM2:EN;}
 
+  // ── Native-keyboard suppression ──────────────────────────────────────────
+  // The native keyboard must be suppressed BEFORE a field receives focus,
+  // otherwise iOS/Android already commit to showing it and you get BOTH
+  // keyboards at once. We set inputmode="none" pre-emptively: on every field as
+  // it enters the DOM (observer), and again on pointerdown before focus.
+  function suppress(el){try{if(!isTextField(el))return;if(el.dataset.kbIm==null){el.dataset.kbIm=el.getAttribute('inputmode')||'_n_';}el.setAttribute('inputmode','none');}catch(_){}}
+  function restoreField(el){
+    if(!el||!el.dataset)return;
+    try{if(el.dataset.kbIm!=null){if(el.dataset.kbIm==='_n_')el.removeAttribute('inputmode');else el.setAttribute('inputmode',el.dataset.kbIm);delete el.dataset.kbIm;}}catch(_){}
+  }
+  function allFields(){try{return document.querySelectorAll('input,textarea');}catch(_){return [];}}
+  function sweepSuppress(){var f=allFields();for(var i=0;i<f.length;i++)suppress(f[i]);}
+  function restoreAll(){var f=allFields();for(var i=0;i<f.length;i++)restoreField(f[i]);}
+
   function ensureCss(){
     if(document.getElementById('dqkb-css'))return;
     var s=document.createElement('style');s.id='dqkb-css';
-    s.textContent='html.dqkb-open .lg-scroll{height:calc(var(--vh,1vh)*100 - var(--dqkb,0px))!important}#dq-kb{animation:dqkbUp .18s ease}@keyframes dqkbUp{from{transform:translateY(100%)}to{transform:translateY(0)}}#dq-kb button:active{filter:brightness(.88)}';
+    s.textContent='html.dqkb-open .lg-scroll{height:calc(var(--vh,1vh)*100 - var(--dqkb,0px))!important}'
+      +'#dq-kb{animation:dqkbUp .18s ease;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}'
+      +'#dq-kb *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}'
+      +'#dq-kb button{touch-action:none}'
+      +'@keyframes dqkbUp{from{transform:translateY(100%)}to{transform:translateY(0)}}'
+      +'#dq-kb button:active{filter:brightness(.86)}';
     document.head.appendChild(s);
   }
   function getKb(){
@@ -41,10 +60,13 @@ try{
     if(!k){
       ensureCss();
       k=document.createElement('div');k.id='dq-kb';
-      k.addEventListener('pointerdown',function(e){if(e.target===k||e.target.id==='dq-kb-rows')e.preventDefault();},{passive:false});
+      // Keep focus on the field + stop iOS text-selection while tapping keys.
+      k.addEventListener('pointerdown',function(e){e.preventDefault();},{passive:false});
+      k.addEventListener('selectstart',function(e){e.preventDefault();});
+      k.addEventListener('contextmenu',function(e){e.preventDefault();});
       document.body.appendChild(k);
     }
-    k.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9600;background:'+p.bg+';padding:7px 4px calc(7px + var(--sab,0px));box-shadow:0 -6px 24px rgba(0,0,0,.4);font-family:Outfit,system-ui,sans-serif;-webkit-user-select:none;user-select:none;direction:ltr';
+    k.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9600;background:'+p.bg+';padding:7px 4px calc(7px + var(--sab,0px));box-shadow:0 -6px 24px rgba(0,0,0,.4);font-family:Outfit,system-ui,sans-serif;-webkit-user-select:none;user-select:none;direction:ltr;touch-action:none';
     return k;
   }
   function lbl(key){
@@ -69,9 +91,9 @@ try{
         var flex=wide?'5':(sp?'1.55':'1');
         var bg=send?p.acc:(sp?p.sp:p.key);var col=send?p.accC:(sp?p.spC:p.keyC);
         var b=document.createElement('button');b.type='button';
-        b.style.cssText='flex:'+flex+';min-width:0;height:46px;border:0;border-radius:7px;background:'+bg+';color:'+col+';font-size:'+(sp?'13px':'19px')+';font-weight:500;font-family:inherit;cursor:pointer;box-shadow:'+p.ksh+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;padding:0';
+        b.style.cssText='flex:'+flex+';min-width:0;height:46px;border:0;border-radius:7px;background:'+bg+';color:'+col+';font-size:'+(sp?'13px':'19px')+';font-weight:500;font-family:inherit;cursor:pointer;box-shadow:'+p.ksh+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;padding:0;touch-action:none';
         b.innerHTML=lbl(key);
-        b.addEventListener('pointerdown',function(e){e.preventDefault();press(key);},{passive:false});
+        b.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();press(key);},{passive:false});
         r.appendChild(b);
       });
       wrap.appendChild(r);
@@ -108,11 +130,6 @@ try{
     fire(t);
   }
   function fire(t){try{t.dispatchEvent(new Event('input',{bubbles:true}));}catch(_){}}
-  function suppress(el){try{if(el.dataset.kbIm==null){el.dataset.kbIm=el.getAttribute('inputmode')||'_n_';}el.setAttribute('inputmode','none');}catch(_){}}
-  function restoreField(el){
-    el=el||st.cur;if(!el||!el.dataset)return;
-    try{if(el.dataset.kbIm!=null){if(el.dataset.kbIm==='_n_')el.removeAttribute('inputmode');else el.setAttribute('inputmode',el.dataset.kbIm);delete el.dataset.kbIm;}}catch(_){}
-  }
   function show(target){
     if(!userOn())return;st.cur=target;
     var k=getKb();k.style.display='block';render();
@@ -136,10 +153,35 @@ try{
     get on(){return userOn();},
     set on(v){
       localStorage.setItem('dq_kb',v?'on':'off');
-      if(!v){restoreField();hide();}
-      else{var a=document.activeElement;if(isTextField(a)){suppress(a);show(a);}}
+      if(!v){restoreAll();hide();}
+      else{sweepSuppress();var a=document.activeElement;if(isTextField(a)){suppress(a);show(a);}}
     }
   };
+
+  // Pre-focus suppression: set inputmode="none" the instant the user touches a
+  // field (capture phase runs before the browser's focus/keyboard decision).
+  function preTouch(e){if(!userOn())return;var el=e.target;if(isTextField(el))suppress(el);}
+  document.addEventListener('pointerdown',preTouch,true);
+  document.addEventListener('touchstart',preTouch,true);
+
+  // Catch programmatically-focused / freshly-rendered fields (e.g. modal search
+  // boxes that get .focus() called on them) so they never trigger the OS keyboard.
+  try{
+    var mo=new MutationObserver(function(muts){
+      if(!userOn())return;
+      for(var i=0;i<muts.length;i++){
+        var an=muts[i].addedNodes;
+        for(var j=0;j<an.length;j++){
+          var n=an[j];if(!n||n.nodeType!==1)continue;
+          if(isTextField(n))suppress(n);
+          if(n.querySelectorAll){var fs=n.querySelectorAll('input,textarea');for(var x=0;x<fs.length;x++)suppress(fs[x]);}
+        }
+      }
+    });
+    if(document.body)mo.observe(document.body,{childList:true,subtree:true});
+    else document.addEventListener('DOMContentLoaded',function(){mo.observe(document.body,{childList:true,subtree:true});if(userOn())sweepSuppress();});
+  }catch(_){}
+  if(userOn())sweepSuppress();
 
   document.addEventListener('focusin',function(e){
     if(!userOn())return;
@@ -147,7 +189,6 @@ try{
     suppress(el);show(el);
   });
   document.addEventListener('focusout',function(e){
-    restoreField(e.target);
     setTimeout(function(){if(!isTextField(document.activeElement))hide();},130);
   });
   window.addEventListener('orientationchange',function(){setTimeout(function(){
