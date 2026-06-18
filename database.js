@@ -225,6 +225,123 @@ async function initDB() {
       console.log("✅ VIP channels ready (VIP Signals, VIP Algo, VIP Strategies)");
     }
 
+    // ── Market section: Explore feed, creators/companies, products ────────
+    // Mirrors migrations/003_market.sql so a normal deploy + restart is enough
+    // (no manual psql step). Fully additive + idempotent. posts/likes/comments
+    // are created IF NOT EXISTS so the Market also works on a fresh DB where the
+    // numbered migrations were never run; on an existing DB these are no-ops and
+    // the ALTERs below add only the new columns.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS posts (
+        id BIGSERIAL PRIMARY KEY,
+        author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        media_id BIGINT,
+        title TEXT DEFAULT '',
+        caption TEXT DEFAULT '',
+        media_url TEXT DEFAULT '',
+        media_type TEXT DEFAULT 'text',
+        thumb_url TEXT DEFAULT '',
+        product_id BIGINT,
+        visibility TEXT NOT NULL DEFAULT 'public',
+        like_count INT DEFAULT 0,
+        comment_count INT DEFAULT 0,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS likes (
+        post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE TABLE IF NOT EXISTS comments (
+        id BIGSERIAL PRIMARY KEY,
+        post_id BIGINT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        deleted_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS products (
+        id BIGSERIAL PRIMARY KEY,
+        owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL DEFAULT 'indicator',
+        name TEXT NOT NULL,
+        subtitle TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        price_qntm NUMERIC(20,2) NOT NULL DEFAULT 0,
+        cover TEXT DEFAULT '',
+        category TEXT DEFAULT '',
+        tags TEXT[] DEFAULT '{}',
+        badge TEXT DEFAULT '',
+        rating_avg NUMERIC(3,2) DEFAULT 0,
+        rating_count INT DEFAULT 0,
+        sales_count INT DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS product_purchases (
+        id BIGSERIAL PRIMARY KEY,
+        product_id BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        buyer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        seller_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        price_qntm NUMERIC(20,2) NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'completed',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (product_id, buyer_id)
+      );
+      CREATE TABLE IF NOT EXISTS follows (
+        follower_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        followee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (follower_id, followee_id),
+        CHECK (follower_id <> followee_id)
+      );
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_creator      BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS store_kind      TEXT DEFAULT 'individual';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS headline        TEXT DEFAULT '';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS cover_image     TEXT DEFAULT '';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS verified        BOOLEAN DEFAULT FALSE;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS founded_year    INT;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS follower_count  INT DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS following_count INT DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sales_count     INT DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS rating_avg      NUMERIC(3,2) DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS rating_count    INT DEFAULT 0;
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS title      TEXT DEFAULT '';
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS caption    TEXT DEFAULT '';
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_url  TEXT DEFAULT '';
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS media_type TEXT DEFAULT 'text';
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS thumb_url  TEXT DEFAULT '';
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS product_id BIGINT;
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS visibility TEXT DEFAULT 'public';
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS like_count INT DEFAULT 0;
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS comment_count INT DEFAULT 0;
+      ALTER TABLE posts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+      CREATE INDEX IF NOT EXISTS idx_users_creators ON users(store_kind, follower_count DESC) WHERE is_creator = TRUE;
+      CREATE INDEX IF NOT EXISTS idx_follows_followee ON follows(followee_id);
+      CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);
+      CREATE INDEX IF NOT EXISTS idx_products_owner  ON products(owner_id, status);
+      CREATE INDEX IF NOT EXISTS idx_products_listed ON products(status, type, sales_count DESC) WHERE status = 'active';
+      CREATE INDEX IF NOT EXISTS idx_purchases_buyer ON product_purchases(buyer_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_posts_top_liked ON posts(like_count DESC, created_at DESC) WHERE deleted_at IS NULL;
+      CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author_id);
+      CREATE INDEX IF NOT EXISTS idx_posts_product ON posts(product_id);
+      CREATE INDEX IF NOT EXISTS idx_comments_post ON comments(post_id, created_at);
+    `).catch((e) => console.error("Market schema:", e.message));
+    // Widened CHECK constraints kept separate so a legacy row can't abort the batch.
+    await client.query("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_store_kind_check").catch(() => {});
+    await client.query("ALTER TABLE users ADD CONSTRAINT users_store_kind_check CHECK (store_kind IN ('individual','company')) NOT VALID").catch(() => {});
+    await client.query("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_type_check").catch(() => {});
+    await client.query("ALTER TABLE products ADD CONSTRAINT products_type_check CHECK (type IN ('indicator','strategy','bot','bundle','course','script')) NOT VALID").catch(() => {});
+    await client.query("ALTER TABLE products DROP CONSTRAINT IF EXISTS products_status_check").catch(() => {});
+    await client.query("ALTER TABLE products ADD CONSTRAINT products_status_check CHECK (status IN ('active','draft','archived')) NOT VALID").catch(() => {});
+    await client.query("ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_media_type_check").catch(() => {});
+    await client.query("ALTER TABLE posts ADD CONSTRAINT posts_media_type_check CHECK (media_type IN ('text','image','video')) NOT VALID").catch(() => {});
+    await client.query("UPDATE posts SET media_type='text' WHERE media_type IS NULL OR media_type=''").catch(() => {});
+    console.log("✅ Market schema ready (Explore feed, creators/companies, products)");
+
     console.log("✅ PostgreSQL ready");
   } finally { client.release(); }
 }

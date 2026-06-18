@@ -259,7 +259,7 @@ function buildSidebar(){
   </div>`;
   ov.onclick=()=>ov.style.display="none";
   const nav=$("#sb-nav");
-  [{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${profImg(24)}</span><span>Profile</span>`,fn:openProfile},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,#1b2335,#0c1320);border-radius:6px">${tvImg(16)}</span><span>Manual Trading</span>`,fn:openManualTrading},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,#1b2335,#0c1320);border-radius:6px">${ytImg(20)}</span><span>Live Trading</span>`,fn:openLiveTrading},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;font-size:17px">\uD83D\uDEE1\uFE0F</span><span>Quantum Chat</span>`,fn:openQuantumChat},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${goldSeal(22)}</span><span>Subscription</span>`,fn:openSub},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${I.settings}</span><span>Settings</span>`,fn:openSettings}].forEach(n=>{const b=ce("button");b.className="sbtn";b.innerHTML=n.l;b.onclick=()=>{ov.style.display="none";n.fn();};nav.appendChild(b);});
+  [{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${profImg(24)}</span><span>Profile</span>`,fn:openProfile},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;color:${t.pr}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="6"/><rect x="4" y="6" width="4" height="7" rx="1"/><line x1="6" y1="13" x2="6" y2="17"/><line x1="18" y1="4" x2="18" y2="7"/><rect x="16" y="7" width="4" height="6" rx="1"/><line x1="18" y1="13" x2="18" y2="16"/></svg></span><span>Market</span>`,fn:openMarket},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,#1b2335,#0c1320);border-radius:6px">${tvImg(16)}</span><span>Manual Trading</span>`,fn:openManualTrading},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,#1b2335,#0c1320);border-radius:6px">${ytImg(20)}</span><span>Live Trading</span>`,fn:openLiveTrading},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;font-size:17px">\uD83D\uDEE1\uFE0F</span><span>Quantum Chat</span>`,fn:openQuantumChat},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${goldSeal(22)}</span><span>Subscription</span>`,fn:openSub},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${I.settings}</span><span>Settings</span>`,fn:openSettings}].forEach(n=>{const b=ce("button");b.className="sbtn";b.innerHTML=n.l;b.onclick=()=>{ov.style.display="none";n.fn();};nav.appendChild(b);});
   if(S.user.role==="admin"){const b=ce("button");b.className="sbtn";b.innerHTML="⚙️ Admin Panel";b.onclick=()=>{ov.style.display="none";openAdmin();};nav.appendChild(b);}
   const lo=ce("button");lo.className="sbtn";lo.style.color="#ff6b6b";lo.innerHTML=I.logout+" Sign Out";lo.onclick=()=>{S.token=null;S.user=null;S.chats=[];S.activeChat=null;localStorage.removeItem("dq_t");localStorage.removeItem("dq_u");if(S.socket)S.socket.disconnect();render();};nav.appendChild(lo);
 }
@@ -285,7 +285,7 @@ function buildChatList(){
   </div>`;
   $("#menu-btn").onclick=()=>$("#sb-ov").style.display="block";
   $("#fab").onclick=openCreateChat;
-  $$(".nav-tab").forEach(b=>{b.onclick=()=>{const tab=b.dataset.tab;if(tab==="chat")return;if(tab==="market")openManualTrading();else if(tab==="signals")openLiveTrading();else if(tab==="vpn")openQuantumChat();else if(tab==="profile")openProfile();};});
+  $$(".nav-tab").forEach(b=>{b.onclick=()=>{const tab=b.dataset.tab;if(tab==="chat")return;if(tab==="market")openMarket();else if(tab==="signals")openLiveTrading();else if(tab==="vpn")openQuantumChat();else if(tab==="profile")openProfile();};});
   const cq=$("#cq");let st;cq.oninput=()=>{clearTimeout(st);const q=cq.value.trim().toLowerCase();if(q.length>=2){st=setTimeout(()=>globalSearch(q),300);}else renderChatListItems();};
 }
 
@@ -1375,6 +1375,470 @@ function openQuantumChat(){
   ov.querySelector("#qc-back").onclick=()=>ov.remove();
   ov.querySelector("#qc-tab").onclick=()=>window.open("/quantum-chat.html","_blank");
 }
+
+// ============================== MARKET (creator economy) ==============================
+let MK=null;
+const MK_TYPES=[["indicator","Indicator"],["strategy","Strategy"],["bot","Bot"],["bundle","Bundle"],["course","Course"],["script","Script"]];
+function mkTypeLabel(ty){const f=MK_TYPES.find(x=>x[0]===ty);return f?f[1]:(ty||'Item');}
+function mkErrMsg(e){return (e&&(e.error||e.message))||'Something went wrong';}
+function mkToast(m){try{showToast(m,' ');}catch(e){}}
+function cssUrl(s){return String(s||'').replace(/['"()\\]/g,'');}
+function mkNum(n){n=Number(n)||0;if(n>=1e6)return (n/1e6).toFixed(1).replace(/\.0$/,'')+'M';if(n>=1e3)return (n/1e3).toFixed(1).replace(/\.0$/,'')+'k';return ''+n;}
+function mkPrice(n){n=Number(n)||0;return n<=0?'Free':n.toLocaleString('en-US')+' QNTM';}
+function mkLbl(){return `display:block;color:${t.t3};font-size:11px;font-weight:700;margin-bottom:5px;letter-spacing:.3px`;}
+function mkFollOn(){return `padding:9px 16px;border-radius:10px;border:none;background:${t.pg};color:#fff;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;flex-shrink:0`;}
+function mkFollOff(){return `padding:9px 16px;border-radius:10px;border:1px solid ${t.ba};background:transparent;color:${t.t2};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;flex-shrink:0`;}
+function mkBuyBtn(){return `padding:8px 16px;border-radius:9px;border:none;background:${t.pg};color:#fff;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;flex-shrink:0;box-shadow:0 3px 12px ${t.pgw}`;}
+function mkPrimBtn(){return `padding:11px 0;border-radius:11px;border:none;background:${t.pg};color:#fff;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px ${t.pgw}`;}
+function mkGhostBtn(){return `padding:11px 0;border-radius:11px;border:1px solid ${t.ba};background:transparent;color:${t.t1};font-weight:700;font-size:14px;cursor:pointer;font-family:inherit`;}
+function mkChartGlyph(s){s=s||28;return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${t.pr}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="6"/><rect x="4" y="6" width="4" height="7" rx="1"/><line x1="6" y1="13" x2="6" y2="17"/><line x1="12" y1="6" x2="12" y2="9"/><rect x="10" y="9" width="4" height="8" rx="1"/><line x1="12" y1="17" x2="12" y2="20"/><line x1="18" y1="4" x2="18" y2="7"/><rect x="16" y="7" width="4" height="6" rx="1"/><line x1="18" y1="13" x2="18" y2="16"/></svg>`;}
+function mkHeart(on){return on?`<svg width="17" height="17" viewBox="0 0 24 24" fill="#ff4d6d" stroke="#ff4d6d" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`:`<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;}
+function mkStars(r,showNum){r=Number(r)||0;let s='';for(let i=1;i<=5;i++){const fill=i<=Math.round(r)?'#ffb020':t.bd;s+=`<svg width="12" height="12" viewBox="0 0 24 24" fill="${fill}"><path d="M12 2l3 6.5 7 .6-5.3 4.6 1.6 6.9L12 17.8 5.1 20.6l1.6-6.9L1.4 9.1l7-.6z"/></svg>`;}return `<span style="display:inline-flex;align-items:center;gap:1px">${s}${showNum?`<span style="color:${t.t3};font-size:11px;margin-left:4px">${r.toFixed(1)}</span>`:''}</span>`;}
+function mkPriceTag(n){n=Number(n)||0;if(n<=0)return `<span style="color:${t.on};font-weight:800;font-size:14px">Free</span>`;return `<span style="display:inline-flex;align-items:center;gap:5px;color:${t.t1};font-weight:800;font-size:15px"><svg width="13" height="13" viewBox="0 0 24 24" fill="${t.pr}"><path d="M12 2l9 10-9 10-9-10z"/></svg>${n.toLocaleString('en-US')}<span style="font-size:10px;font-weight:700;color:${t.t3};letter-spacing:.5px">QNTM</span></span>`;}
+function mkStat(v,l){return `<div><div style="color:${t.t1};font-weight:800;font-size:16px">${v}</div><div style="color:${t.t3};font-size:11px">${l}</div></div>`;}
+function mkLoader(){return `<div style="display:flex;align-items:center;justify-content:center;padding:44px 0"><div style="width:30px;height:30px;border:3px solid ${t.bd};border-top-color:${t.pr};border-radius:50%;animation:dqspin .8s linear infinite"></div></div>`;}
+function mkEmpty(title,sub){return `<div style="text-align:center;padding:50px 24px;color:${t.t3}"><div style="opacity:.45;margin-bottom:12px;display:flex;justify-content:center">${mkChartGlyph(44)}</div><div style="color:${t.t1};font-weight:700;font-size:16px">${esc(title)}</div>${sub?`<div style="color:${t.t3};font-size:13px;margin-top:6px;max-width:300px;margin-left:auto;margin-right:auto;line-height:1.5">${esc(sub)}</div>`:''}</div>`;}
+
+async function mkUpload(file){const fd=new FormData();fd.append('file',file);const r=await fetch('/api/upload',{method:'POST',headers:{Authorization:'Bearer '+S.token},body:fd});const d=await r.json();if(!r.ok)throw d;return d;}
+
+// ---- entry / shell ----
+function openMarket(){
+  if(document.getElementById('mk-overlay'))return;
+  MK={tab:'explore',sort:'likes',type:'',q:'',handle:null,cur:null,ckind:'company',ctab:'store'};
+  const ov=ce('div');ov.id='mk-overlay';
+  ov.style.cssText=`position:fixed;inset:0;z-index:5000;background:${t.bg};display:flex;flex-direction:column;animation:fi .2s;padding-top:var(--sat);padding-bottom:var(--sab);padding-left:var(--sal);padding-right:var(--sar)`;
+  ov.innerHTML=`
+    <div id="mk-head" style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:${t.p};backdrop-filter:blur(20px);border-bottom:1px solid ${t.bd};flex-shrink:0">
+      <button id="mk-back" style="width:36px;height:36px;border-radius:10px;border:1px solid ${t.bd};background:${t.btn};color:${t.t1};cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px">&#8592;</button>
+      <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><span style="display:inline-flex">${mkChartGlyph(22)}</span><span style="color:${t.t1};font-weight:800;font-size:17px">Market</span></div>
+      <button id="mk-search-btn" style="width:36px;height:36px;border-radius:10px;border:1px solid ${t.bd};background:${t.btn};color:${t.t2};cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">${I.search}</button>
+    </div>
+    <div id="mk-searchbar" style="display:none;padding:8px 14px;background:${t.p};border-bottom:1px solid ${t.bd};flex-shrink:0"><input id="mk-search-input" class="gi" placeholder="Search posts, creators, products..." style="width:100%;font-size:14px"/></div>
+    <div id="mk-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+    <div id="mk-nav" style="display:flex;border-top:1px solid ${t.bd};background:${t.p};backdrop-filter:blur(20px);flex-shrink:0">
+      ${mkNavBtn('explore','Explore','<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>')}
+      ${mkNavBtn('companies','Companies','<path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/>')}
+      ${mkNavBtn('create','Create','<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>')}
+      ${mkNavBtn('store','My Store','<path d="M3 9l1-5h16l1 5"/><path d="M5 9v11h14V9"/><path d="M9 22V12h6v10"/>')}
+    </div>`;
+  document.body.appendChild(ov);
+  const body=ov.querySelector('#mk-body');
+  ov.querySelector('#mk-back').onclick=()=>{MK=null;ov.remove();};
+  const sBtn=ov.querySelector('#mk-search-btn'),sBar=ov.querySelector('#mk-searchbar'),sInp=ov.querySelector('#mk-search-input');
+  sBtn.onclick=()=>{const open=sBar.style.display==='none';sBar.style.display=open?'block':'none';if(open){setTimeout(()=>sInp.focus(),50);}else{sInp.value='';if(MK.q){MK.q='';mkRender();}}};
+  let sTimer=null;sInp.addEventListener('input',()=>{clearTimeout(sTimer);sTimer=setTimeout(()=>{MK.q=sInp.value.trim();if(MK.handle){MK.handle=null;MK.cur=null;}if(MK.tab==='create'||MK.tab==='store')MK.tab='explore';mkRender();},350);});
+  ov.querySelectorAll('.mk-navbtn').forEach(b=>{b.onclick=()=>mkSetTab(b.dataset.mktab);});
+  body.addEventListener('click',mkBodyClick);
+  mkRender();
+}
+function mkNavBtn(tab,label,path){return `<button class="mk-navbtn" data-mktab="${tab}" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:9px 0 8px;color:${t.t4};-webkit-tap-highlight-color:transparent"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg><span class="mk-navlbl" style="font-size:10px;font-weight:500">${label}</span></button>`;}
+function mkSetTab(tab){MK.tab=tab;MK.handle=null;MK.cur=null;const b=document.getElementById('mk-body');if(b)b.scrollTop=0;mkRender();}
+function mkRender(){
+  const body=document.getElementById('mk-body');if(!body)return;
+  document.querySelectorAll('#mk-nav .mk-navbtn').forEach(b=>{const on=!MK.handle&&b.dataset.mktab===MK.tab;b.style.color=on?t.pr:t.t4;const lbl=b.querySelector('.mk-navlbl');if(lbl)lbl.style.fontWeight=on?'700':'500';});
+  if(MK.handle)return mkCreator(MK.handle,true);
+  if(MK.tab==='explore')return mkExplore();
+  if(MK.tab==='companies')return mkCompanies();
+  if(MK.tab==='create')return mkCreate();
+  if(MK.tab==='store')return mkMyStore();
+}
+
+// ---- delegated clicks inside #mk-body ----
+function mkBodyClick(e){
+  const tg=e.target;if(!tg||!tg.closest)return;let el;
+  if((el=tg.closest('.mk-like'))){e.preventDefault();mkToggleLike(el);return;}
+  if((el=tg.closest('.mk-foll'))){e.preventDefault();mkToggleFollow(el);return;}
+  if((el=tg.closest('.mk-buy'))){e.preventDefault();mkBuy(el);return;}
+  if((el=tg.closest('.mk-cmt'))){e.preventDefault();mkOpenPost(el.dataset.pid);return;}
+  if((el=tg.closest('.mk-editp'))){e.preventDefault();mkEditProduct(el.dataset.pid);return;}
+  if((el=tg.closest('.mk-openp'))){mkOpenProduct(el.dataset.pid);return;}
+  if((el=tg.closest('.mk-viewstore'))){mkGoCreator(el.dataset.h);return;}
+  if((el=tg.closest('.mk-openc'))){mkGoCreator(el.dataset.h);return;}
+  if((el=tg.closest('.mk-ckind'))){MK.ckind=el.dataset.kind;mkCompanies();return;}
+  if((el=tg.closest('.mk-chip'))){MK.type=el.dataset.type;mkExplore();return;}
+  if((el=tg.closest('.mk-sortbtn'))){MK.sort=el.dataset.sort;mkExplore();return;}
+  if((el=tg.closest('.mk-back2'))){MK.handle=null;MK.cur=null;mkRender();return;}
+  if((el=tg.closest('.mk-ctab'))){MK.ctab=el.dataset.ctab;const cc=document.getElementById('mk-cv-content');if(cc&&MK.cur)cc.innerHTML=mkCreatorContent(MK.cur);return;}
+  if((el=tg.closest('.mk-editstore'))){mkEditStore();return;}
+  if((el=tg.closest('.mk-msg'))){const o=document.getElementById('mk-overlay');MK=null;if(o)o.remove();createDM(parseInt(el.dataset.uid,10));return;}
+  if((el=tg.closest('.mk-newproduct'))){mkProductForm(null);return;}
+  if((el=tg.closest('.mk-newpost'))){mkCompose();return;}
+  if((el=tg.closest('.mk-purchases'))){mkPurchases();return;}
+  if((el=tg.closest('.mk-gostore'))){mkSetTab('store');return;}
+}
+
+// ---- Explore feed ----
+async function mkExplore(){
+  const body=document.getElementById('mk-body');if(!body)return;
+  const chips=[['','All']].concat(MK_TYPES).map(p=>{const v=p[0],l=p[1],on=MK.type===v;return `<button class="mk-chip" data-type="${v}" style="flex-shrink:0;padding:7px 14px;border-radius:11px;border:1px solid ${on?t.ba:t.bd};background:${on?t.act:'transparent'};color:${on?t.ac:t.t3};font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">${l}</button>`;}).join('');
+  const sorts=[['likes','&#128293; Top'],['new','&#128640; New']].map(p=>{const v=p[0],l=p[1],on=MK.sort===v;return `<button class="mk-sortbtn" data-sort="${v}" style="flex-shrink:0;padding:7px 12px;border-radius:11px;border:1px solid ${on?t.ba:t.bd};background:${on?t.act:'transparent'};color:${on?t.ac:t.t3};font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">${l}</button>`;}).join('');
+  body.innerHTML=`
+    <div style="display:flex;gap:7px;padding:12px 14px 6px;overflow-x:auto;-webkit-overflow-scrolling:touch">${chips}</div>
+    <div style="display:flex;gap:7px;padding:0 14px 10px;align-items:center"><div style="flex:1"></div>${sorts}</div>
+    <div id="mk-feed" style="padding:0 12px 26px;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box">${mkLoader()}</div>`;
+  try{
+    const qs=`sort=${MK.sort}&type=${encodeURIComponent(MK.type)}&q=${encodeURIComponent(MK.q||'')}&limit=30`;
+    const d=await api(`/market/explore?${qs}`);
+    const feed=document.getElementById('mk-feed');if(!feed)return;
+    if(!d.posts||!d.posts.length){feed.innerHTML=mkEmpty('Nothing here yet','Be the first to share a chart, idea, or product with the community.');return;}
+    feed.innerHTML=d.posts.map(mkPostCard).join('');
+  }catch(e){const feed=document.getElementById('mk-feed');if(feed)feed.innerHTML=mkEmpty("Couldn't load feed",mkErrMsg(e));}
+}
+
+function mkPostCard(p){
+  const a=p.author||{};
+  let media='';
+  if(p.media_type==='image'&&p.media_url)media=`<img src="${esc(p.media_url)}" alt="" loading="lazy" style="width:100%;display:block;max-height:440px;object-fit:cover;background:${t.ch}"/>`;
+  else if(p.media_type==='video'&&p.media_url)media=`<video src="${esc(p.media_url)}" ${p.thumb_url?`poster="${esc(p.thumb_url)}"`:''} controls playsinline preload="metadata" style="width:100%;display:block;max-height:440px;background:#000"></video>`;
+  const foll=a.is_following?`<button class="mk-foll" data-uid="${a.id}" data-on="1" style="${mkFollOff()}">Following</button>`:`<button class="mk-foll" data-uid="${a.id}" data-on="0" style="${mkFollOn()}">Follow</button>`;
+  return `<div class="mk-post" style="border:1px solid ${t.bd};border-radius:16px;background:${t.cd};overflow:hidden;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px">
+      <div class="mk-openc" data-h="${esc(a.username)}" style="cursor:pointer;flex-shrink:0">${avatar(a.avatar||'\uD83E\uDDD1\u200D\uD83D\uDCBB',42)}</div>
+      <div class="mk-openc" data-h="${esc(a.username)}" style="flex:1;min-width:0;cursor:pointer">
+        <div style="display:flex;align-items:center;gap:4px;color:${t.t1};font-weight:700;font-size:14px">${esc(a.name||a.username||'User')}${a.verified?goldSeal(15):''}</div>
+        <div style="color:${t.t3};font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.headline||('@'+(a.username||'')))}</div>
+      </div>
+      ${foll}
+    </div>
+    ${p.title?`<div style="padding:0 14px 8px;color:${t.t1};font-weight:700;font-size:15px;line-height:1.3">${esc(p.title)}</div>`:''}
+    ${media}
+    ${p.caption?`<div style="padding:10px 14px 2px;color:${t.t2};font-size:13.5px;line-height:1.5;white-space:pre-wrap">${linkify(esc(p.caption))}</div>`:''}
+    ${p.product?mkProductChip(p.product):''}
+    <div style="display:flex;align-items:center;gap:18px;padding:12px 14px">
+      <button class="mk-like" data-pid="${p.id}" data-on="${p.liked_by_me?1:0}" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:${p.liked_by_me?'#ff4d6d':t.t3};font-family:inherit;font-size:13px;font-weight:600">${mkHeart(p.liked_by_me)}<span class="mk-like-n">${p.like_count||0}</span></button>
+      <button class="mk-cmt" data-pid="${p.id}" style="display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:${t.t3};font-family:inherit;font-size:13px;font-weight:600">${ic('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',17)}<span>${p.comment_count||0}</span></button>
+      <div style="flex:1"></div>
+      <span style="color:${t.t4};font-size:11px">${fmtTime(p.created_at)}</span>
+    </div>
+  </div>`;
+}
+
+function mkProductChip(pr){
+  return `<div class="mk-openp" data-pid="${pr.id}" style="margin:8px 14px 2px;display:flex;align-items:center;gap:12px;padding:10px;border:1px solid ${t.bl};border-radius:14px;background:${t.ch};cursor:pointer">
+    <div style="width:54px;height:54px;border-radius:10px;overflow:hidden;flex-shrink:0;background:${t.cd};display:flex;align-items:center;justify-content:center">${pr.cover?`<img src="${esc(pr.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:mkChartGlyph(28)}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.5px;color:${t.pr};text-transform:uppercase">${mkTypeLabel(pr.type)}</div>
+      <div style="color:${t.t1};font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pr.name)}</div>
+      <div style="margin-top:3px">${mkPriceTag(pr.price_qntm)}</div>
+    </div>
+    <button class="mk-buy" data-pid="${pr.id}" style="${mkBuyBtn()}">Get</button>
+  </div>`;
+}
+
+// ---- Companies / creators directory ----
+async function mkCompanies(){
+  const body=document.getElementById('mk-body');if(!body)return;
+  if(!MK.ckind)MK.ckind='company';
+  const tabs=[['company','Companies'],['individual','Creators'],['all','All']].map(p=>{const v=p[0],l=p[1],on=MK.ckind===v;return `<button class="mk-ckind" data-kind="${v}" style="flex:1;padding:9px 0;border-radius:11px;border:1px solid ${on?t.ba:t.bd};background:${on?t.act:'transparent'};color:${on?t.ac:t.t3};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${l}</button>`;}).join('');
+  body.innerHTML=`<div style="padding:12px 14px 8px;max-width:780px;margin:0 auto;width:100%;box-sizing:border-box"><div style="display:flex;gap:8px;margin-bottom:12px">${tabs}</div><div id="mk-cdir">${mkLoader()}</div></div>`;
+  try{
+    const d=await api(`/market/creators?kind=${MK.ckind}&sort=followers&q=${encodeURIComponent(MK.q||'')}&limit=40`);
+    const wrap=document.getElementById('mk-cdir');if(!wrap)return;
+    if(!d.creators||!d.creators.length){wrap.innerHTML=mkEmpty('No stores yet','Stores appear here as creators open them.');return;}
+    wrap.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">${d.creators.map(mkCreatorCard).join('')}</div>`;
+  }catch(e){const wrap=document.getElementById('mk-cdir');if(wrap)wrap.innerHTML=mkEmpty("Couldn't load",mkErrMsg(e));}
+}
+
+function mkCreatorCard(c){
+  const cover=c.cover_image?`background-image:url('${cssUrl(c.cover_image)}');background-size:cover;background-position:center`:`background:linear-gradient(135deg,${t.pr}33,${t.ch})`;
+  return `<div style="border:1px solid ${t.bd};border-radius:16px;overflow:hidden;background:${t.cd}">
+    <div style="height:64px;${cover}"></div>
+    <div style="padding:0 14px 14px;margin-top:-26px">
+      <div class="mk-openc" data-h="${esc(c.username)}" style="cursor:pointer;width:52px">${avatar(c.avatar||(c.store_kind==='company'?'\uD83C\uDFE2':'\uD83E\uDDD1\u200D\uD83D\uDCBB'),52)}</div>
+      <div style="display:flex;align-items:center;gap:4px;margin-top:8px;color:${t.t1};font-weight:700;font-size:15px">${esc(c.name||c.username)}${c.verified?goldSeal(15):''}</div>
+      <div style="color:${t.t3};font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.headline||('@'+c.username))}</div>
+      <div style="display:flex;gap:14px;margin:10px 0;color:${t.t2};font-size:12px">
+        <span><b style="color:${t.t1}" class="mk-fc" data-uid="${c.id}">${mkNum(c.follower_count)}</b> followers</span>
+        <span><b style="color:${t.t1}">${mkNum(c.product_count||0)}</b> items</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="mk-viewstore" data-h="${esc(c.username)}" style="flex:1;padding:9px 0;border-radius:10px;border:none;background:${t.pg};color:#fff;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;box-shadow:0 4px 14px ${t.pgw}">View Store</button>
+        ${c.is_me?'':`<button class="mk-foll" data-uid="${c.id}" data-on="${c.is_following?1:0}" style="${c.is_following?mkFollOff():mkFollOn()}">${c.is_following?'Following':'Follow'}</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+
+// ---- Creator profile / store ----
+async function mkCreator(handle,pushed){
+  const body=document.getElementById('mk-body');if(!body)return;
+  body.innerHTML=mkLoader();
+  try{
+    const d=await api(`/market/creators/${encodeURIComponent(handle)}`);
+    if(!MK.ctab)MK.ctab='store';
+    MK.cur=d;
+    body.innerHTML=mkCreatorView(d,pushed);
+    body.scrollTop=0;
+  }catch(e){body.innerHTML=mkEmpty('Store not found',mkErrMsg(e));}
+}
+function mkMyStore(){
+  const u=S.user;
+  const body=document.getElementById('mk-body');
+  if(!u||!u.username){if(body)body.innerHTML=mkEmpty('Sign in required','');return;}
+  return mkCreator(u.username,false);
+}
+function mkCreatorView(d,pushed){
+  const c=d.creator;
+  const isCo=c.store_kind==='company';
+  const cover=c.cover_image?`background-image:url('${cssUrl(c.cover_image)}');background-size:cover;background-position:center`:`background:linear-gradient(135deg,${t.pr},${t.ch})`;
+  const back=pushed?`<button class="mk-back2" style="position:absolute;top:10px;left:10px;width:34px;height:34px;border-radius:9px;border:none;background:rgba(0,0,0,.4);color:#fff;cursor:pointer;backdrop-filter:blur(6px);font-size:17px">&#8592;</button>`:'';
+  const actions=c.is_me
+    ? `<button class="mk-editstore" style="${mkGhostBtn()};flex:1;padding:9px 0">Edit store</button>`
+    : `<button class="mk-foll" data-uid="${c.id}" data-on="${c.is_following?1:0}" style="${c.is_following?mkFollOff():mkFollOn()};flex:1">${c.is_following?'Following':'Follow'}</button><button class="mk-msg" data-uid="${c.id}" style="${mkGhostBtn()};flex:1;padding:9px 0">Message</button>`;
+  const manage=c.is_me?`<div style="display:flex;gap:8px;margin-top:14px"><button class="mk-newproduct" style="${mkPrimBtn()};flex:1">+ Add product</button><button class="mk-newpost" style="${mkGhostBtn()};flex:1">+ New post</button></div><div style="margin-top:8px"><button class="mk-purchases" style="${mkGhostBtn()};width:100%">My purchases</button></div>`:'';
+  const tabs=[['store','Store &#183; '+d.product_count],['posts','Posts &#183; '+d.post_count]].map(p=>{const v=p[0],l=p[1],on=MK.ctab===v;return `<button class="mk-ctab" data-ctab="${v}" style="flex:1;padding:11px 0;background:none;border:none;border-bottom:2px solid ${on?t.pr:'transparent'};color:${on?t.t1:t.t3};font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit">${l}</button>`;}).join('');
+  return `<div style="max-width:780px;margin:0 auto;width:100%;box-sizing:border-box">
+    <div style="position:relative;height:124px;${cover}">${back}</div>
+    <div style="padding:0 16px 12px;margin-top:-34px">
+      <div style="display:flex;align-items:flex-end;gap:12px">
+        ${avatar(c.avatar||(isCo?'\uD83C\uDFE2':'\uD83E\uDDD1\u200D\uD83D\uDCBB'),72)}
+        <div style="flex:1;padding-bottom:4px;display:flex;gap:8px">${actions}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;color:${t.t1};font-weight:800;font-size:19px">${esc(c.name||c.username)}${c.verified?goldSeal(18):''}${isCo?`<span style="font-size:10px;font-weight:700;color:${t.ac};background:${t.act};padding:3px 8px;border-radius:7px">COMPANY</span>`:''}</div>
+      <div style="color:${t.pr};font-size:13px;margin-top:1px">@${esc(c.username)}${c.founded_year?` &#183; <span style="color:${t.t3}">Est. ${esc(String(c.founded_year))}</span>`:''}</div>
+      ${c.headline?`<div style="color:${t.t2};font-size:13.5px;margin-top:8px;line-height:1.5">${esc(c.headline)}</div>`:''}
+      ${c.bio?`<div style="color:${t.t3};font-size:13px;margin-top:6px;line-height:1.5;white-space:pre-wrap">${esc(c.bio)}</div>`:''}
+      <div style="display:flex;gap:22px;margin-top:14px;flex-wrap:wrap">${mkStat(mkNum(c.follower_count),'Followers')}${mkStat(mkNum(c.following_count),'Following')}${mkStat(mkNum(c.sales_count),'Sales')}${mkStat((Number(c.rating_avg)||0).toFixed(1),'Rating')}</div>
+      ${manage}
+    </div>
+    <div style="display:flex;border-bottom:1px solid ${t.bd};margin-top:6px;position:sticky;top:0;background:${t.bg};z-index:2">${tabs}</div>
+    <div id="mk-cv-content" style="padding:14px">${mkCreatorContent(d)}</div>
+  </div>`;
+}
+function mkCreatorContent(d){
+  if(MK.ctab==='posts'){
+    if(!d.posts||!d.posts.length)return mkEmpty('No posts yet','');
+    return `<div style="max-width:640px;margin:0 auto">${d.posts.map(mkPostCard).join('')}</div>`;
+  }
+  if(!d.products||!d.products.length)return mkEmpty('No products yet',d.creator.is_me?'Tap "Add product" to list your first indicator or strategy.':'');
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px">${d.products.map(pr=>mkProductCard(pr,d.creator.is_me)).join('')}</div>`;
+}
+
+function mkProductCard(pr,mine){
+  const cover=pr.cover?`<img src="${esc(pr.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,${t.ch},${t.cd})">${mkChartGlyph(40)}</div>`;
+  const badge=pr.badge?`<span style="position:absolute;top:8px;left:8px;font-size:9px;font-weight:800;letter-spacing:.5px;color:#fff;background:${t.pg};padding:3px 8px;border-radius:7px;box-shadow:0 2px 8px ${t.pgw}">${esc(String(pr.badge).toUpperCase())}</span>`:'';
+  let action;
+  if(mine)action=`<button class="mk-editp" data-pid="${pr.id}" style="${mkBuyBtn()}">Edit</button>`;
+  else if(pr.bought_by_me)action=`<button disabled style="padding:8px 14px;border-radius:9px;border:1px solid ${t.ba};background:transparent;color:${t.on};font-weight:700;font-size:12.5px;font-family:inherit;flex-shrink:0">Owned</button>`;
+  else action=`<button class="mk-buy" data-pid="${pr.id}" style="${mkBuyBtn()}">Get</button>`;
+  return `<div style="border:1px solid ${t.bd};border-radius:15px;overflow:hidden;background:${t.cd};display:flex;flex-direction:column">
+    <div class="mk-openp" data-pid="${pr.id}" style="position:relative;aspect-ratio:16/10;cursor:pointer;background:${t.ch}">${cover}${badge}<span style="position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;letter-spacing:.5px;color:#fff;background:rgba(0,0,0,.5);padding:3px 8px;border-radius:7px;backdrop-filter:blur(4px)">${mkTypeLabel(pr.type).toUpperCase()}</span></div>
+    <div style="padding:10px 12px 12px;display:flex;flex-direction:column;flex:1">
+      <div class="mk-openp" data-pid="${pr.id}" style="color:${t.t1};font-weight:700;font-size:14px;cursor:pointer;line-height:1.25">${esc(pr.name)}</div>
+      ${pr.subtitle?`<div style="color:${t.t3};font-size:11.5px;margin-top:3px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(pr.subtitle)}</div>`:''}
+      <div style="margin-top:8px">${mkStars(pr.rating_avg,true)}<span style="color:${t.t4};font-size:11px;margin-left:6px">${mkNum(pr.sales_count)} sold</span></div>
+      <div style="flex:1"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;gap:8px">${mkPriceTag(pr.price_qntm)}${action}</div>
+    </div>
+  </div>`;
+}
+
+// ---- Create hub ----
+function mkCreate(){
+  const body=document.getElementById('mk-body');if(!body)return;
+  const row=(cls,icon,title,sub)=>`<button class="${cls}" style="width:100%;display:flex;align-items:center;gap:14px;padding:16px;border-radius:15px;border:1px solid ${t.bl};background:${t.cd};cursor:pointer;margin-bottom:12px;text-align:left;font-family:inherit"><div style="width:44px;height:44px;border-radius:12px;background:${t.act};display:flex;align-items:center;justify-content:center;flex-shrink:0;color:${t.pr}">${icon}</div><div style="flex:1"><div style="color:${t.t1};font-weight:700;font-size:15px">${title}</div><div style="color:${t.t3};font-size:12.5px">${sub}</div></div><span style="color:${t.t4}">${ic('<polyline points="9 18 15 12 9 6"/>',18)}</span></button>`;
+  body.innerHTML=`<div style="max-width:520px;margin:0 auto;padding:24px 18px">
+    <div style="text-align:center;margin-bottom:22px"><div style="display:flex;justify-content:center">${mkChartGlyph(46)}</div><div style="color:${t.t1};font-weight:800;font-size:20px;margin-top:10px">Create</div><div style="color:${t.t3};font-size:13px;margin-top:4px">Share ideas and sell your trading tools to the community.</div></div>
+    ${row('mk-newpost',ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',22),'Share a post','Chart, photo, video or text idea')}
+    ${row('mk-newproduct',mkChartGlyph(24),'List a product','Indicator, strategy, bot, bundle...')}
+    ${row('mk-gostore',ic('<path d="M3 9l1-5h16l1 5"/><path d="M5 9v11h14V9"/><path d="M9 22V12h6v10"/>',22),'Manage your store','Edit profile, products & view sales')}
+  </div>`;
+}
+
+// ---- Compose post ----
+function mkCompose(){
+  modal('Share a post',(body,close)=>{
+    let mediaUrl='',mediaType='text',thumb='',prodId='';
+    body.innerHTML=`
+      <input id="mkc-title" class="gi" placeholder="Title (optional)" style="font-size:14px;margin-bottom:10px"/>
+      <textarea id="mkc-cap" class="gi" rows="4" placeholder="Share an idea, analysis, or update..." style="resize:none;font-size:14px;margin-bottom:10px"></textarea>
+      <div id="mkc-media" style="margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button id="mkc-upl" type="button" style="${mkGhostBtn()};flex:1;display:flex;align-items:center;justify-content:center;gap:8px">${ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',18)} Photo / Video</button>
+        <button id="mkc-attach" type="button" style="${mkGhostBtn()};flex:1;display:flex;align-items:center;justify-content:center;gap:8px">${mkChartGlyph(18)} Attach product</button>
+      </div>
+      <div id="mkc-prod" style="margin-bottom:12px"></div>
+      <input id="mkc-file" type="file" accept="image/*,video/*" style="display:none"/>
+      <button id="mkc-post" class="pb" style="width:100%">Post</button>`;
+    const fileInput=body.querySelector('#mkc-file');
+    body.querySelector('#mkc-upl').onclick=()=>fileInput.click();
+    fileInput.onchange=async()=>{const f=fileInput.files[0];if(!f)return;const md=body.querySelector('#mkc-media');md.innerHTML=`<div style="color:${t.t3};font-size:12px;padding:6px">Uploading...</div>`;try{const up=await mkUpload(f);mediaUrl=up.url;mediaType=(up.mime||'').indexOf('video')===0?'video':'image';md.innerHTML=mediaType==='video'?`<video src="${esc(mediaUrl)}" controls style="width:100%;border-radius:12px;max-height:240px;background:#000"></video>`:`<img src="${esc(mediaUrl)}" alt="" style="width:100%;border-radius:12px;max-height:240px;object-fit:cover"/>`;}catch(e){md.innerHTML=`<div style="color:#ff6b6b;font-size:12px;padding:6px">${esc(mkErrMsg(e))}</div>`;}};
+    body.querySelector('#mkc-attach').onclick=()=>mkPickProduct(sel=>{if(!sel)return;prodId=sel.id;body.querySelector('#mkc-prod').innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid ${t.bl};border-radius:12px;background:${t.ch}"><div style="width:38px;height:38px;border-radius:8px;overflow:hidden;background:${t.cd};display:flex;align-items:center;justify-content:center;flex-shrink:0">${sel.cover?`<img src="${esc(sel.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:mkChartGlyph(20)}</div><div style="flex:1;min-width:0"><div style="color:${t.t1};font-weight:700;font-size:13px">${esc(sel.name)}</div><div style="color:${t.t3};font-size:11px">${mkTypeLabel(sel.type)} &#183; ${mkPrice(sel.price_qntm)}</div></div><button type="button" id="mkc-prod-x" style="background:none;border:none;color:${t.t3};cursor:pointer;font-size:20px;line-height:1">&times;</button></div>`;const x=body.querySelector('#mkc-prod-x');if(x)x.onclick=()=>{prodId='';body.querySelector('#mkc-prod').innerHTML='';};});
+    body.querySelector('#mkc-post').onclick=async()=>{
+      const title=body.querySelector('#mkc-title').value.trim();
+      const caption=body.querySelector('#mkc-cap').value.trim();
+      if(!title&&!caption&&!mediaUrl){mkToast('Add some text or media first');return;}
+      const btn=body.querySelector('#mkc-post');btn.disabled=true;btn.textContent='Posting...';
+      try{await api('/market/posts',{method:'POST',body:JSON.stringify({title,caption,media_url:mediaUrl,media_type:mediaType,thumb_url:thumb,product_id:prodId||null})});close();mkToast('Posted!');if(MK.handle)mkCreator(MK.handle,true);else if(MK.tab==='store')mkMyStore();else if(MK.tab==='explore')mkExplore();}catch(e){btn.disabled=false;btn.textContent='Post';mkToast(mkErrMsg(e));}
+    };
+  });
+}
+
+// ---- Product create / edit ----
+function mkProductForm(p){
+  const ed=!!p;
+  modal(ed?'Edit product':'List a product',(body,close)=>{
+    let cover=p?(p.cover||''):'';
+    body.innerHTML=`
+      <div id="mkpf-cover" style="margin-bottom:10px"></div>
+      <button id="mkpf-cover-btn" type="button" style="${mkGhostBtn()};width:100%;margin-bottom:12px">${cover?'Change cover image':'Add cover image'}</button>
+      <input id="mkpf-file" type="file" accept="image/*" style="display:none"/>
+      <label style="${mkLbl()}">Type</label>
+      <select id="mkpf-type" class="gi" style="font-size:14px;margin-bottom:12px">${MK_TYPES.map(x=>`<option value="${x[0]}" ${p&&p.type===x[0]?'selected':''}>${x[1]}</option>`).join('')}</select>
+      <label style="${mkLbl()}">Name</label>
+      <input id="mkpf-name" class="gi" style="font-size:14px;margin-bottom:12px" value="${ed?esc(p.name):''}" placeholder="e.g. Quantum Trend Pro"/>
+      <label style="${mkLbl()}">Subtitle</label>
+      <input id="mkpf-sub" class="gi" style="font-size:14px;margin-bottom:12px" value="${ed?esc(p.subtitle||''):''}" placeholder="One-line summary"/>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1"><label style="${mkLbl()}">Price (QNTM)</label><input id="mkpf-price" class="gi" type="number" min="0" step="1" style="font-size:14px;margin-bottom:12px" value="${ed?(Number(p.price_qntm)||0):0}"/></div>
+        <div style="flex:1"><label style="${mkLbl()}">Category</label><input id="mkpf-cat" class="gi" style="font-size:14px;margin-bottom:12px" value="${ed?esc(p.category||''):''}" placeholder="Trend, Scalping..."/></div>
+      </div>
+      <label style="${mkLbl()}">Badge (optional)</label>
+      <input id="mkpf-badge" class="gi" style="font-size:14px;margin-bottom:12px" maxlength="12" value="${ed?esc(p.badge||''):''}" placeholder="NEW, HOT, PRO..."/>
+      <label style="${mkLbl()}">Description</label>
+      <textarea id="mkpf-desc" class="gi" rows="4" style="resize:none;font-size:14px;margin-bottom:14px" placeholder="What it does, how to use it, what's included...">${ed?esc(p.description||''):''}</textarea>
+      <div style="display:flex;gap:8px">${ed?`<button id="mkpf-arch" type="button" style="${mkGhostBtn()};flex:1;color:#ff6b6b;border-color:rgba(255,107,107,.4)">Archive</button>`:''}<button id="mkpf-save" class="pb" style="flex:2">${ed?'Save changes':'Publish'}</button></div>`;
+    const renderCover=()=>{const cc=body.querySelector('#mkpf-cover');cc.innerHTML=cover?`<img src="${esc(cover)}" alt="" style="width:100%;border-radius:12px;max-height:180px;object-fit:cover"/>`:`<div style="width:100%;height:120px;border-radius:12px;border:1px dashed ${t.ba};display:flex;align-items:center;justify-content:center;background:${t.ch}">${mkChartGlyph(34)}</div>`;};
+    renderCover();
+    const fi=body.querySelector('#mkpf-file');
+    body.querySelector('#mkpf-cover-btn').onclick=()=>fi.click();
+    fi.onchange=async()=>{const f=fi.files[0];if(!f)return;const cc=body.querySelector('#mkpf-cover');cc.innerHTML=`<div style="color:${t.t3};font-size:12px;padding:6px">Uploading...</div>`;try{const up=await mkUpload(f);cover=up.url;renderCover();}catch(e){renderCover();mkToast(mkErrMsg(e));}};
+    if(ed){const ab=body.querySelector('#mkpf-arch');if(ab)ab.onclick=async()=>{if(!confirm('Archive this product? It will be hidden from your store.'))return;try{await api(`/market/products/${p.id}`,{method:'DELETE'});close();mkToast('Product archived');mkRefreshStore();}catch(e){mkToast(mkErrMsg(e));}};}
+    body.querySelector('#mkpf-save').onclick=async()=>{
+      const name=body.querySelector('#mkpf-name').value.trim();
+      if(!name){mkToast('Name is required');return;}
+      const payload={type:body.querySelector('#mkpf-type').value,name,subtitle:body.querySelector('#mkpf-sub').value.trim(),price_qntm:Number(body.querySelector('#mkpf-price').value)||0,category:body.querySelector('#mkpf-cat').value.trim(),badge:body.querySelector('#mkpf-badge').value.trim(),description:body.querySelector('#mkpf-desc').value.trim(),cover};
+      const btn=body.querySelector('#mkpf-save');btn.disabled=true;btn.textContent='Saving...';
+      try{if(ed)await api(`/market/products/${p.id}`,{method:'PUT',body:JSON.stringify(payload)});else await api('/market/products',{method:'POST',body:JSON.stringify(payload)});close();mkToast(ed?'Saved':'Published!');mkRefreshStore();}catch(e){btn.disabled=false;btn.textContent=ed?'Save changes':'Publish';mkToast(mkErrMsg(e));}
+    };
+  });
+}
+async function mkEditProduct(id){try{const d=await api(`/market/products/${id}`);mkProductForm(d.product);}catch(e){mkToast(mkErrMsg(e));}}
+
+// ---- Edit store profile ----
+function mkEditStore(){
+  const c=(MK.cur&&MK.cur.creator)||S.user||{};
+  modal('Edit store',(body,close)=>{
+    let cover=c.cover_image||'';
+    let kind=c.store_kind==='company'?'company':'individual';
+    body.innerHTML=`
+      <div id="mkes-cover" style="margin-bottom:10px"></div>
+      <button id="mkes-cover-btn" type="button" style="${mkGhostBtn()};width:100%;margin-bottom:12px">${cover?'Change cover banner':'Add cover banner'}</button>
+      <input id="mkes-file" type="file" accept="image/*" style="display:none"/>
+      <label style="${mkLbl()}">Store type</label>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button type="button" class="mkes-kind" data-k="individual" style="flex:1;padding:10px;border-radius:11px;border:1px solid ${kind!=='company'?t.ba:t.bd};background:${kind!=='company'?t.act:'transparent'};color:${kind!=='company'?t.ac:t.t3};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Individual</button>
+        <button type="button" class="mkes-kind" data-k="company" style="flex:1;padding:10px;border-radius:11px;border:1px solid ${kind==='company'?t.ba:t.bd};background:${kind==='company'?t.act:'transparent'};color:${kind==='company'?t.ac:t.t3};font-weight:700;font-size:13px;cursor:pointer;font-family:inherit">Company</button>
+      </div>
+      <label style="${mkLbl()}">Headline</label>
+      <input id="mkes-head" class="gi" maxlength="120" style="font-size:14px;margin-bottom:12px" value="${esc(c.headline||'')}" placeholder="e.g. Algorithmic trading tools & signals"/>
+      <label style="${mkLbl()}">Founded year (optional)</label>
+      <input id="mkes-year" class="gi" type="number" min="1900" max="2100" style="font-size:14px;margin-bottom:14px" value="${c.founded_year?esc(String(c.founded_year)):''}" placeholder="2021"/>
+      <button id="mkes-save" class="pb" style="width:100%">Save store</button>
+      <div style="color:${t.t4};font-size:11px;text-align:center;margin-top:10px">Name, @username, avatar & bio are managed in your Profile.</div>`;
+    const renderCover=()=>{const el=body.querySelector('#mkes-cover');el.innerHTML=cover?`<img src="${esc(cover)}" alt="" style="width:100%;border-radius:12px;height:110px;object-fit:cover"/>`:`<div style="width:100%;height:90px;border-radius:12px;border:1px dashed ${t.ba};display:flex;align-items:center;justify-content:center;color:${t.t4};background:${t.ch};font-size:12px">No banner</div>`;};
+    renderCover();
+    const fi=body.querySelector('#mkes-file');
+    body.querySelector('#mkes-cover-btn').onclick=()=>fi.click();
+    fi.onchange=async()=>{const f=fi.files[0];if(!f)return;try{const up=await mkUpload(f);cover=up.url;renderCover();}catch(e){mkToast(mkErrMsg(e));}};
+    body.querySelectorAll('.mkes-kind').forEach(b=>{b.onclick=()=>{kind=b.dataset.k;body.querySelectorAll('.mkes-kind').forEach(x=>{const on=x.dataset.k===kind;x.style.border='1px solid '+(on?t.ba:t.bd);x.style.background=on?t.act:'transparent';x.style.color=on?t.ac:t.t3;});};});
+    body.querySelector('#mkes-save').onclick=async()=>{
+      const payload={headline:body.querySelector('#mkes-head').value.trim(),store_kind:kind,founded_year:body.querySelector('#mkes-year').value||null,cover_image:cover};
+      const btn=body.querySelector('#mkes-save');btn.disabled=true;btn.textContent='Saving...';
+      try{const d=await api('/market/profile',{method:'PUT',body:JSON.stringify(payload)});
+        if(S.user){S.user.headline=d.creator.headline;S.user.store_kind=d.creator.store_kind;S.user.cover_image=d.creator.cover_image;S.user.founded_year=d.creator.founded_year;S.user.is_creator=true;try{localStorage.setItem('dq_u',JSON.stringify(S.user));}catch(e){}}
+        close();mkToast('Store updated');mkRefreshStore();
+      }catch(e){btn.disabled=false;btn.textContent='Save store';mkToast(mkErrMsg(e));}
+    };
+  });
+}
+
+// ---- Product detail / post detail modals ----
+function mkOpenProduct(id){
+  modal(' ',(body,close)=>{
+    body.innerHTML=mkLoader();
+    api(`/market/products/${id}`).then(d=>{
+      const p=d.product,o=p.owner||{};
+      const buyArea=p.bought_by_me?`<button disabled style="padding:12px 28px;border-radius:11px;border:1px solid ${t.ba};background:transparent;color:${t.on};font-weight:800;font-size:14px;font-family:inherit">&#10003; Owned</button>`:`<button class="mkop-buy" data-pid="${p.id}" style="${mkPrimBtn()};padding:12px 32px">Get now</button>`;
+      body.innerHTML=`
+        <div style="margin:-8px -8px 0"><div style="position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:${t.ch}">${p.cover?`<img src="${esc(p.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,${t.ch},${t.cd})">${mkChartGlyph(54)}</div>`}<span style="position:absolute;top:10px;left:10px;font-size:10px;font-weight:800;letter-spacing:.5px;color:#fff;background:${t.pg};padding:4px 10px;border-radius:8px">${mkTypeLabel(p.type).toUpperCase()}</span></div></div>
+        <div style="margin-top:14px;color:${t.t1};font-weight:800;font-size:19px;line-height:1.2">${esc(p.name)}</div>
+        ${p.subtitle?`<div style="color:${t.t3};font-size:13px;margin-top:3px">${esc(p.subtitle)}</div>`:''}
+        <div style="margin-top:10px;display:flex;align-items:center;gap:12px">${mkStars(p.rating_avg,true)}<span style="color:${t.t4};font-size:12px">${mkNum(p.sales_count)} sold</span></div>
+        <button class="mkop-owner" data-h="${esc(o.username)}" style="display:flex;align-items:center;gap:10px;margin:14px 0;padding:10px;border:1px solid ${t.bd};border-radius:12px;background:${t.ch};cursor:pointer;width:100%;text-align:left;font-family:inherit">${avatar(o.avatar||'\uD83E\uDDD1\u200D\uD83D\uDCBB',38)}<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:4px;color:${t.t1};font-weight:700;font-size:13px">${esc(o.name||o.username||'')}${o.verified?goldSeal(13):''}</div><div style="color:${t.t3};font-size:11px">@${esc(o.username||'')} &#183; View store</div></div><span style="color:${t.t4}">${ic('<polyline points="9 18 15 12 9 6"/>',16)}</span></button>
+        ${p.description?`<div style="color:${t.t2};font-size:13.5px;line-height:1.6;white-space:pre-wrap;margin-bottom:14px">${esc(p.description)}</div>`:''}
+        ${(p.tags&&p.tags.length)?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">${p.tags.map(tag=>`<span style="font-size:11px;color:${t.ac};background:${t.act};padding:4px 10px;border-radius:8px">#${esc(tag)}</span>`).join('')}</div>`:''}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px solid ${t.bd}"><div style="font-size:20px">${mkPriceTag(p.price_qntm)}</div>${buyArea}</div>`;
+      const ow=body.querySelector('.mkop-owner');if(ow)ow.onclick=()=>{close();mkGoCreator(o.username);};
+      const bb=body.querySelector('.mkop-buy');if(bb)bb.onclick=()=>mkBuy(bb);
+    }).catch(e=>{body.innerHTML=mkEmpty("Couldn't load",mkErrMsg(e));});
+  });
+}
+
+function mkOpenPost(id){
+  modal('Post',(body,close)=>{
+    body.innerHTML=mkLoader();
+    api(`/market/posts/${id}`).then(d=>{
+      const p=d.post;
+      body.innerHTML=`
+        <div style="margin:-4px 0 10px">${mkPostCardBare(p)}</div>
+        <div style="border-top:1px solid ${t.bd};padding-top:12px"><div style="color:${t.t3};font-size:12px;font-weight:700;margin-bottom:10px">${p.comment_count||0} comments</div><div id="mkop-comments" style="display:flex;flex-direction:column;gap:12px;max-height:40vh;overflow-y:auto"></div></div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">${avatar((S.user&&S.user.avatar)||'\uD83E\uDDD1\u200D\uD83D\uDCBB',34)}<input id="mkop-input" class="gi" placeholder="Add a comment..." style="flex:1;font-size:13px"/><button id="mkop-send" class="ib" style="width:42px;height:42px;border-radius:11px;background:${t.pg};color:#fff;border:none;flex-shrink:0">${I.send}</button></div>`;
+      const cwrap=body.querySelector('#mkop-comments');
+      cwrap.innerHTML=(d.comments&&d.comments.length)?d.comments.map(mkCommentRow).join(''):`<div style="color:${t.t4};font-size:12px;text-align:center;padding:8px">No comments yet. Say something!</div>`;
+      const send=async()=>{const inp=body.querySelector('#mkop-input');const v=inp.value.trim();if(!v)return;inp.value='';try{const r=await api(`/market/posts/${id}/comments`,{method:'POST',body:JSON.stringify({content:v})});if(!d.comments.length)cwrap.innerHTML='';d.comments.push(r.comment);cwrap.insertAdjacentHTML('beforeend',mkCommentRow(r.comment));cwrap.scrollTop=cwrap.scrollHeight;}catch(e){mkToast(mkErrMsg(e));}};
+      body.querySelector('#mkop-send').onclick=send;
+      body.querySelector('#mkop-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();send();}});
+    }).catch(e=>{body.innerHTML=mkEmpty("Couldn't load",mkErrMsg(e));});
+  });
+}
+function mkPostCardBare(p){
+  const a=p.author||{};
+  let media='';
+  if(p.media_type==='image'&&p.media_url)media=`<img src="${esc(p.media_url)}" alt="" style="width:100%;border-radius:12px;max-height:300px;object-fit:cover;margin-bottom:8px"/>`;
+  else if(p.media_type==='video'&&p.media_url)media=`<video src="${esc(p.media_url)}" controls style="width:100%;border-radius:12px;max-height:300px;background:#000;margin-bottom:8px"></video>`;
+  return `<div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">${avatar(a.avatar||'\uD83E\uDDD1\u200D\uD83D\uDCBB',38)}<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:4px;color:${t.t1};font-weight:700;font-size:14px">${esc(a.name||a.username||'User')}${a.verified?goldSeal(14):''}</div><div style="color:${t.t3};font-size:11px">@${esc(a.username||'')} &#183; ${fmtTime(p.created_at)}</div></div></div>
+    ${p.title?`<div style="color:${t.t1};font-weight:700;font-size:15px;margin-bottom:6px">${esc(p.title)}</div>`:''}
+    ${media}
+    ${p.caption?`<div style="color:${t.t2};font-size:13.5px;line-height:1.5;white-space:pre-wrap">${linkify(esc(p.caption))}</div>`:''}
+    <div style="display:flex;align-items:center;gap:6px;margin-top:8px;color:#ff4d6d;font-size:13px;font-weight:600">${mkHeart(true)} ${p.like_count||0}</div>
+  </div>`;
+}
+function mkCommentRow(c){
+  const a=c.author||{};
+  return `<div style="display:flex;gap:8px">${avatar(a.avatar||'\uD83E\uDDD1\u200D\uD83D\uDCBB',30)}<div style="flex:1;min-width:0"><div style="background:${t.ch};border:1px solid ${t.bd};border-radius:12px;padding:8px 12px"><div style="display:flex;align-items:center;gap:4px;color:${t.t1};font-weight:700;font-size:12.5px">${esc(a.name||a.username||'User')}${a.verified?goldSeal(12):''}</div><div style="color:${t.t2};font-size:13px;line-height:1.4;white-space:pre-wrap;margin-top:2px">${linkify(esc(c.content))}</div></div><div style="color:${t.t4};font-size:10px;margin:3px 0 0 12px">${fmtTime(c.created_at)}</div></div></div>`;
+}
+
+// ---- Purchases / picker ----
+function mkPurchases(){
+  modal('My purchases',(body,close)=>{
+    body.innerHTML=mkLoader();
+    api('/market/purchases').then(d=>{
+      if(!d.purchases||!d.purchases.length){body.innerHTML=mkEmpty('No purchases yet','Items you buy will appear here.');return;}
+      body.innerHTML=`<div style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto">${d.purchases.map(pr=>`<button type="button" class="mkpur-item" data-id="${pr.id}" style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid ${t.bd};border-radius:12px;background:${t.ch};cursor:pointer;text-align:left;font-family:inherit"><div style="width:48px;height:48px;border-radius:10px;overflow:hidden;background:${t.cd};flex-shrink:0;display:flex;align-items:center;justify-content:center">${pr.cover?`<img src="${esc(pr.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:mkChartGlyph(24)}</div><div style="flex:1;min-width:0"><div style="color:${t.t1};font-weight:700;font-size:14px">${esc(pr.name)}</div><div style="color:${t.t3};font-size:11.5px">${mkTypeLabel(pr.type)}${pr.owner?(' &#183; @'+esc(pr.owner.username)):''}</div></div><span style="color:${t.on};font-size:11px;font-weight:700;flex-shrink:0">&#10003; Owned</span></button>`).join('')}</div>`;
+      body.querySelectorAll('.mkpur-item').forEach(b=>{b.onclick=()=>{close();mkOpenProduct(b.dataset.id);};});
+    }).catch(e=>{body.innerHTML=mkEmpty("Couldn't load",mkErrMsg(e));});
+  });
+}
+function mkPickProduct(cb){
+  modal('Attach a product',(body,close)=>{
+    body.innerHTML=mkLoader();let done=false;const finish=v=>{if(done)return;done=true;close();cb(v);};
+    api(`/market/products?owner=${S.user.id}&limit=50`).then(d=>{
+      if(!d.products||!d.products.length){body.innerHTML=`<div style="text-align:center;padding:8px 0"><div style="color:${t.t2};font-size:14px;margin-bottom:12px">You don't have any products yet.</div><button id="mkpp-new" class="pb" style="width:100%">Create a product</button></div>`;const nb=body.querySelector('#mkpp-new');if(nb)nb.onclick=()=>{finish(null);mkProductForm(null);};return;}
+      body.innerHTML=`<div style="display:flex;flex-direction:column;gap:8px;max-height:55vh;overflow-y:auto">${d.products.map(pr=>`<button type="button" class="mkpp-item" data-id="${pr.id}" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${t.bd};border-radius:12px;background:${t.ch};cursor:pointer;text-align:left;font-family:inherit"><div style="width:40px;height:40px;border-radius:8px;overflow:hidden;background:${t.cd};display:flex;align-items:center;justify-content:center;flex-shrink:0">${pr.cover?`<img src="${esc(pr.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:mkChartGlyph(20)}</div><div style="flex:1;min-width:0"><div style="color:${t.t1};font-weight:700;font-size:13px">${esc(pr.name)}</div><div style="color:${t.t3};font-size:11px">${mkTypeLabel(pr.type)} &#183; ${mkPrice(pr.price_qntm)}</div></div></button>`).join('')}</div>`;
+      body.querySelectorAll('.mkpp-item').forEach(b=>{b.onclick=()=>{const pr=d.products.find(x=>String(x.id)===b.dataset.id);finish(pr||null);};});
+    }).catch(e=>{body.innerHTML=mkEmpty("Couldn't load",mkErrMsg(e));});
+  });
+}
+
+// ---- navigation + actions ----
+function mkGoCreator(h){if(!h)return;MK.handle=h;MK.cur=null;MK.ctab='store';const b=document.getElementById('mk-body');if(b)b.scrollTop=0;mkRender();}
+function mkRefreshStore(){if(MK.handle)mkCreator(MK.handle,true);else if(MK.tab==='store')mkMyStore();else mkRender();}
+async function mkToggleLike(btn){const id=btn.dataset.pid;try{const d=await api(`/market/posts/${id}/like`,{method:'POST'});btn.dataset.on=d.liked?'1':'0';btn.style.color=d.liked?'#ff4d6d':t.t3;btn.innerHTML=mkHeart(d.liked)+`<span class="mk-like-n">${d.like_count}</span>`;}catch(e){mkToast(mkErrMsg(e));}}
+async function mkToggleFollow(btn){const uid=btn.dataset.uid;try{const d=await api(`/market/follow/${uid}`,{method:'POST'});const on=d.following;document.querySelectorAll(`.mk-foll[data-uid="${uid}"]`).forEach(b=>{b.dataset.on=on?'1':'0';b.textContent=on?'Following':'Follow';b.style.cssText=on?mkFollOff():mkFollOn();});if(MK.cur&&MK.cur.creator&&String(MK.cur.creator.id)===String(uid)){MK.cur.creator.is_following=on;MK.cur.creator.follower_count=d.follower_count;}}catch(e){mkToast(mkErrMsg(e));}}
+async function mkBuy(btn){const id=btn.dataset.pid;if(btn.disabled)return;btn.disabled=true;const old=btn.textContent;btn.textContent='...';try{const d=await api(`/market/products/${id}/buy`,{method:'POST'});btn.textContent='Owned';btn.style.cssText=`padding:8px 14px;border-radius:9px;border:1px solid ${t.ba};background:transparent;color:${t.on};font-weight:700;font-size:12.5px;font-family:inherit;flex-shrink:0`;mkToast(d.already_owned?'Already in your library':'Added to your library');}catch(e){btn.disabled=false;btn.textContent=old;mkToast(mkErrMsg(e));}}
+// ============================== END MARKET ==============================
 
 function openUserProfile(u){
   if(!u)return;
