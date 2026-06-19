@@ -7,6 +7,7 @@ const path = require("path");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const { pool, initDB } = require("./database");
+const { setupQntmSchema, mountQntmEconomy } = require("./qntm-ledger/integrate");
 const { applySecurity, corsOptions, globalLimiter, makeLimiter, ALLOWED } = require("./middleware/security");
 
 const PORT = process.env.PORT || 3000;
@@ -98,6 +99,10 @@ app.use("/api/upload", require("./routes/upload"));
 app.use("/api/manage", require("./routes/manage")); // admin/manager console (RBAC matrix)
 app.use("/api/live", require("./routes/live"));   // live-trading sessions + ICE/TURN credentials
 app.use("/api/market", require("./routes/market")); // Market: Explore feed, creators/companies, products, follows/likes
+
+// QNTM economy — internal ledger/wallet admin routes (mounts at /api/qntm/admin),
+// guarded by the host's auth + admin middleware so it shares one RBAC path.
+mountQntmEconomy(app, { authMiddleware, adminMiddleware });
 
 // ── Socket.io ──
 io.use(async (socket, next) => {
@@ -206,6 +211,7 @@ app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.ht
 (async () => {
   try {
     await initDB();
+    await setupQntmSchema().catch((e) => console.error("[qntm] schema setup failed:", e.message));
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);
       console.log(`  ║  📈 DrFX Quant v5.2 on port ${PORT}         ║`);
