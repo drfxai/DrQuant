@@ -1,0 +1,15 @@
+{
+  "name": "qntm-ledger",
+  "version": "1.0.0",
+  "description": "Off-chain double-entry ledger for the internal, non-redeemable QNTM credit (DrFX Quant).",
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "main": "src/routes/index.js",
+  "scripts": {
+    "test": "node --test test/decimal.test.js test/ledger.test.js test/domain.test.js test/routes.test.js",
+    "migrate": "psql \"$DATABASE_URL\" -f sql/001_init.sql"
+  },
+  "dependencies": { "pg": "^8.11.0" },
+  "peerDependencies": { "express": ">=4.18.0" },
+  "devDependencies": { "express": "^4.18.0" }
+}
