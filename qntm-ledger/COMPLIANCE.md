@@ -1,95 +1,66 @@
-# QNTM Ledger — Compliance Boundary
+# QNTM Compliance Posture
 
-This document states, in writing, the regulatory posture the code is built to.
-Read it before changing anything in `treasury.js`, `payments/`, `bridge.routes.js`,
-or the supply model.
+**Status: internal ledger only. QNTM is not a public, on-chain, or investment
+product in this phase.**
+
+This document is the canonical statement of what QNTM is and is not at the
+current stage of the DrFX Quant platform. It supersedes any earlier framing that
+described QNTM as a purchasable credit priced in fiat.
 
 ## What QNTM is
 
-QNTM is an **internal, non-redeemable platform credit** used inside DrFX Quant
-for engagement, tipping, marketplace purchases of digital goods, subscriptions,
-pay-per-use AI features, tournaments, and staking-for-perks.
+- An **internal ledger token** used to account for platform activity, rewards,
+  and utility inside DrFX Quant.
+- A **fixed-supply** unit: exactly 1,000,000,000 QNTM, minted once at bootstrap
+  and never expanded (enforced by `QNTM_MAX_SUPPLY` and a one-time guard).
+- A **6-decimal** product/API token (1 QNTM = 1,000,000 base units) layered over
+  an 18-decimal double-entry ledger. All balances are stored as exact
+  integer / fixed-point values -- never floating point.
 
-It is **not** money, **not** e-money or a stablecoin, **not** an investment or
-security, and **not** a claim on the company's assets or profits.
+## What QNTM is NOT (this phase)
 
-Users may **buy** QNTM with fiat or crypto through a third-party payment
-processor. This makes QNTM a *purchased, non-redeemable access credit* — the
-same category as game gems, arcade tokens, or prepaid API/SaaS credits — **not**
-a withdrawable balance, stored-value instrument, or tradable token.
+- **Not sold as an investment.** There is no endpoint that sells QNTM to users
+  for money. The previous direct "buy QNTM" NOWPayments flow is paused/disabled
+  and is not mounted.
+- **No redemption or cash-out.** QNTM cannot be exchanged back to fiat or crypto.
+- **No tradability or bridge for end users.** There is no on-chain transfer,
+  withdrawal, or bridge. The `deposit`/`withdrawal` ledger types remain reserved
+  and unimplemented; contract files remain `.placeholder` only.
+- **No APY, yield, or guaranteed return.** Staking (a later phase) grants utility
+  benefits only, never passive income.
+- **No DAO / on-chain governance.**
 
-## The rule that keeps this in-bounds: one way in, no way out
+## Future on-chain / tradable form
 
-1. **One-way purchase only.** Money flows in exactly one direction:
-   fiat/crypto → (NOWPayments) → QNTM credits → spent inside the platform.
-   - **DrFX never custodies fiat or crypto.** NOWPayments collects and holds
-     the funds and runs its own KYC/AML. DrFX only adjusts an internal credit
-     balance, and only *after* a webhook that is **signature-verified
-     (HMAC-SHA512), amount-validated, and idempotent** (see
-     `payments/nowpayments.js`, `payments/orders.js`).
-   - Crediting debits the pre-minted treasury (`type = 'purchase'`); it does not
-     create money or move funds.
+A future wrapped or on-chain form of QNTM is a **documented possibility, strictly
+gated on legal sign-off**. It is not promised, scheduled, or implied to users or
+investors. Candidate chains and migration notes, when written, live in
+`docs/qntm-onchain-migration.md` and describe a possibility, not a commitment.
 
-2. **Non-redeemable — no value out.** There is **no cash-out, withdrawal,
-   redemption, on-chain bridge, external trading, or liquidity/exchange
-   listing**. QNTM cannot be converted back into fiat, crypto, or anything of
-   monetary value. It is spent inside the platform or it sits in a wallet. The
-   recipient of a tip holds equally non-redeemable credits, so user-to-user
-   tipping is a gift of internal credits, not a money transfer.
+## Allocation (Dubai Edition, 5 buckets)
 
-As long as value can only flow **in** and never **out**, QNTM stays in the
-prepaid-access-credit category and does not become custody, money transmission,
-or a security on the redemption side.
+| Bucket | Account code | QNTM | % |
+|---|---|---|---|
+| Protocol & Platform Treasury | QNTM_TREASURY | 250,000,000 | 25% |
+| Dynamic Reward & Growth Pool | QNTM_REWARD_GROWTH_POOL | 350,000,000 | 35% |
+| Ecosystem & Strategic | QNTM_ECOSYSTEM_STRATEGIC | 150,000,000 | 15% |
+| Team, Founders, Core (vesting) | QNTM_TEAM_FOUNDERS_VESTING | 200,000,000 | 20% |
+| Community Reserve & Governance | QNTM_COMMUNITY_RESERVE | 50,000,000 | 5% |
+| **Total** | | **1,000,000,000** | **100%** |
 
-## Enabled vs. intentionally NOT built
+Team/Founders is documented as an 18-month cliff from `bootstrap_completed_v1`
+then linear vesting over 48 months. The vesting **engine** is not implemented in
+Phase 1; the bucket is funded and the policy is recorded for a later phase.
 
-| Capability | Status in this codebase |
-|---|---|
-| **Buy QNTM via NOWPayments** (fiat/crypto in) | **ENABLED.** `/api/exchange/qntm/quote`, `/api/exchange/qntm/buy/nowpayments`, `/api/webhooks/nowpayments`. Credit only on a verified, amount-matched, idempotent `finished` webhook. |
-| Withdrawal / redemption / cash-out | **None.** No code path pays value out of the system. |
-| On-chain bridge (deposit or withdrawal) | `bridge.routes.js` returns **501**. The NOWPayments top-up is *not* an on-chain bridge; mirroring QNTM to a blockchain is not implemented. |
-| External trading / AMM / liquidity / listing | Not implemented. |
-| Governance token / voting | Not implemented. |
-| Yield / APY / interest-bearing balances | Not implemented, and out of scope. |
+## Engineering guarantees
 
-`bridge.routes.js` staying at 501 is intentional: the *only* sanctioned way
-value enters is the audited NOWPayments purchase flow, never an ad-hoc deposit.
+- Every balance change is an immutable, append-only ledger transaction.
+- Total issued supply can never exceed 1,000,000,000 QNTM.
+- Bootstrap runs exactly once (flag + supply check + advisory lock + idempotency).
+- All admin operations require the platform admin role (the highest role today);
+  the bootstrap entrypoint is structured so a future super-admin/root tier can be
+  substituted without touching the financial core.
 
-## What is the operator's responsibility (not the code's)
-
-Selling a non-redeemable access credit is lighter-touch than running an exchange,
-but it is still a **sale to consumers** and still carries obligations that live
-outside this repository and require qualified counsel in the relevant
-jurisdictions:
-
-- **Consumer protection & refunds:** a clear refund/chargeback policy and terms
-  of service for the credit sale.
-- **Tax:** sales-tax / VAT / GST treatment of selling the credits, and any
-  reporting that follows.
-- **Reliance on the processor:** NOWPayments performs the regulated money/crypto
-  handling and KYC/AML/sanctions screening. Confirm their coverage fits the
-  jurisdictions you sell into; DrFX is relying on it.
-- **Positioning:** all naming, UX, and marketing copy must present QNTM as
-  *credits*, never as an investment, and must never imply ROI, profit, yield, or
-  resale value. (The code emits no such language; the surrounding product must
-  not either.)
-- **If you ever add a redemption/withdrawal/bridge path,** that is a different
-  regulatory posture entirely (money transmission / e-money / VASP / securities
-  analysis, full AML program, safeguarding of funds). It is a business/legal
-  decision, not a code change, and the boundary above must not be crossed by
-  accident.
-
-## Note on supply
-
-`treasury.mint` applies the supply figures the operator provides. If you want a
-hard cap, set `QNTM_MAX_SUPPLY` (a decimal string); mints that would exceed it
-are rejected. The `genesis` contra-wallet holds `-(total issued)` at all times,
-so total issuance is always auditable and conservation is provable
-(`supply.verifyIntegrity`). Purchases draw down the treasury, so the treasury
-must be minted/funded ahead of demand; if it is underfunded when a payment
-confirms, the order is parked as `paid_pending_credit` and credited by an admin
-re-credit after minting (never silently dropped).
-
-> This document is an engineering description of how the system is built. It is
-> not legal advice. Obtain qualified legal counsel before changing the posture
-> above.
+_This posture is an engineering description, not legal advice. Any move toward a
+tradable or on-chain QNTM must be reviewed and signed off by qualified counsel
+first._
