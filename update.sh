@@ -64,7 +64,7 @@ echo -e "  ${GREEN}OK${NC} Backed up .env"
 echo -e "${CYAN}> Updating application files...${NC}"
 cp "$SRC_DIR/server.js" "$SRC_DIR/database.js" "$SRC_DIR/package.json" "$APP_DIR/"
 cp -r "$SRC_DIR/routes" "$SRC_DIR/public" "$APP_DIR/"
-for d in middleware services migrations realtime; do
+for d in middleware services migrations realtime qntm-ledger; do
   [ -d "$SRC_DIR/$d" ] && cp -r "$SRC_DIR/$d" "$APP_DIR/"
 done
 if [ -d "$SRC_DIR/quantum-chat/web" ]; then

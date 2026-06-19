@@ -97,7 +97,7 @@ if [ -f "$SRC_DIR/server.js" ]; then
   # NOTE: every new top-level runtime directory that server.js require()s MUST
   # be added here, or the deployed copy will be missing it (realtime/ is such a
   # dependency — its omission caused a MODULE_NOT_FOUND crash loop once).
-  for d in middleware services migrations realtime; do
+  for d in middleware services migrations realtime qntm-ledger; do
     [ -d "$SRC_DIR/$d" ] && cp -r "$SRC_DIR/$d" "$APP_DIR/"
   done
   # Quantum Chat browser client — served at /qc for the in-app Quantum Chat panel.
