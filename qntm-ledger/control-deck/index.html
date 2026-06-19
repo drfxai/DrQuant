@@ -1,0 +1,641 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QNTM Control Deck</title>
+<style>
+  /* ---- QNTM Control Deck: an instrument panel for treasury & ledger ops ----
+     Restrained dark console. Personality lives in two places only: the
+     monospace "readouts" and the live integrity lamp. Everything else stays
+     quiet so high-risk actions read clearly. */
+  :root{
+    --bg:#0a0e14; --panel:#121823; --panel2:#172030; --raised:#1c2738;
+    --line:#243044; --line2:#2e3b52;
+    --ink:#e6edf3; --muted:#8b97a8; --faint:#5c6675;
+    --accent:#4da3ff; --accent-dim:#27496f;
+    --good:#3fb950; --warn:#d29922; --bad:#f85149;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--accent);text-decoration:none}
+  button{font-family:inherit}
+  .mono{font-family:var(--mono)}
+  .muted{color:var(--muted)} .faint{color:var(--faint)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  /* ---- shell ---- */
+  .app{display:grid;grid-template-columns:230px 1fr;grid-template-rows:auto 1fr;height:100vh;
+    grid-template-areas:"top top" "nav main"}
+  .topbar{grid-area:top;display:flex;align-items:center;gap:16px;padding:10px 18px;
+    background:linear-gradient(180deg,var(--panel2),var(--panel));border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:600;letter-spacing:.02em}
+  .brand .glyph{font-family:var(--mono);color:var(--accent);border:1px solid var(--accent-dim);
+    border-radius:6px;padding:2px 7px;font-size:13px}
+  .brand small{display:block;font-weight:400;color:var(--muted);letter-spacing:.06em;font-size:10px;text-transform:uppercase}
+  .top-spacer{flex:1}
+  .conn{display:flex;align-items:center;gap:14px;font-size:12px}
+  .lamp{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;
+    padding:4px 10px;border:1px solid var(--line2);border-radius:999px;background:var(--panel)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);box-shadow:0 0 0 0 transparent}
+  .dot.ok{background:var(--good);box-shadow:0 0 10px 1px rgba(63,185,80,.6)}
+  .dot.bad{background:var(--bad);box-shadow:0 0 10px 1px rgba(248,81,73,.6)}
+  .dot.warn{background:var(--warn);box-shadow:0 0 10px 1px rgba(210,153,34,.55)}
+
+  nav{grid-area:nav;background:var(--panel);border-right:1px solid var(--line);padding:14px 10px;overflow:auto}
+  nav .navlbl{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--faint);
+    padding:10px 12px 6px}
+  nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;
+    color:var(--muted);border:0;border-radius:8px;padding:9px 12px;cursor:pointer;font-size:13.5px}
+  nav button:hover{background:var(--panel2);color:var(--ink)}
+  nav button.active{background:var(--accent-dim);color:#dcebff;font-weight:600}
+  nav button .k{font-family:var(--mono);font-size:11px;color:var(--faint);width:16px}
+  nav button.active .k{color:#9cc7ff}
+
+  main{grid-area:main;overflow:auto;padding:22px 26px}
+  .view{display:none;max-width:1080px} .view.active{display:block}
+  h1{font-size:19px;margin:0 0 2px;font-weight:600;letter-spacing:.01em}
+  .sub{color:var(--muted);margin:0 0 18px;font-size:13px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);
+    margin:26px 0 10px;font-weight:600}
+
+  /* ---- instrument readouts ---- */
+  .grid{display:grid;gap:12px}
+  .cards{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+  .readout{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 15px;position:relative}
+  .readout .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .readout .val{font-family:var(--mono);font-size:23px;margin-top:6px;letter-spacing:-.01em;word-break:break-all}
+  .readout .unit{color:var(--faint);font-size:13px;margin-left:4px}
+  .readout.accent{border-color:var(--accent-dim)}
+  .readout.accent .val{color:#bcdcff}
+
+  /* ---- panels / tables ---- */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .panel .ph{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .panel .ph h3{margin:0;font-size:13px;font-weight:600}
+  .pb{padding:14px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);
+    font-weight:600;padding:9px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel)}
+  td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--panel2)}
+  .tablewrap{max-height:460px;overflow:auto}
+  .clickable{cursor:pointer}
+
+  /* ---- bits ---- */
+  .tag{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line2);
+    color:var(--muted);white-space:nowrap;display:inline-block}
+  .tag.completed,.tag.active{color:var(--good);border-color:#1f5130}
+  .tag.failed,.tag.cancelled{color:var(--bad);border-color:#5a2420}
+  .tag.pending,.tag.awaiting_webhook{color:var(--warn);border-color:#5a4516}
+  .tag.paid_pending_credit{color:#e6a23c;border-color:#5a4516}
+  .pill{font-family:var(--mono);font-size:11px;color:var(--muted);background:var(--panel2);
+    border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+
+  label.f{display:block;margin:0 0 11px}
+  label.f span{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+  input,select{width:100%;background:var(--bg);color:var(--ink);border:1px solid var(--line2);
+    border-radius:8px;padding:9px 11px;font-size:13.5px;font-family:inherit}
+  input.mono{font-family:var(--mono)}
+  input:focus,select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(77,163,255,.15)}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .row > *{flex:1;min-width:130px}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line2);
+    background:var(--raised);color:var(--ink);border-radius:8px;padding:9px 14px;font-size:13.5px;
+    cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--accent);color:#dcebff}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#06121f;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.danger{border-color:#5a2420;color:#ff9b94}
+  .btn.danger:hover{background:#2a1614;border-color:var(--bad);color:#ffb4ae}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:5px 10px;font-size:12px}
+
+  .empty{padding:30px 14px;text-align:center;color:var(--faint);font-size:13px}
+  .note{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--line);
+    border-left:3px solid var(--accent-dim);border-radius:8px;padding:10px 12px;margin:12px 0}
+  .warnnote{border-left-color:var(--warn);color:#e7c889}
+
+  /* ---- modal ---- */
+  .scrim{position:fixed;inset:0;background:rgba(4,7,11,.72);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:50;padding:20px}
+  .scrim.on{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line2);border-radius:14px;width:min(520px,100%);
+    box-shadow:0 24px 60px rgba(0,0,0,.55);overflow:hidden}
+  .modal .mh{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .modal .mh .dot{width:10px;height:10px}
+  .modal .mh h3{margin:0;font-size:15px}
+  .modal .mb{padding:18px}
+  .modal .mf{padding:14px 18px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px;background:var(--panel2)}
+  .effects{font-family:var(--mono);font-size:12.5px;background:var(--bg);border:1px solid var(--line);
+    border-radius:8px;padding:12px;margin:6px 0 14px}
+  .effects .ln{display:flex;justify-content:space-between;gap:12px;padding:3px 0}
+  .effects .ln b{color:var(--ink);font-weight:600}
+  .confirmrow span{display:block;font-size:12px;color:var(--warn);margin-bottom:5px}
+
+  /* ---- toast ---- */
+  #toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:80;max-width:380px}
+  .toast{background:var(--raised);border:1px solid var(--line2);border-left:3px solid var(--accent);
+    border-radius:9px;padding:11px 14px;font-size:13px;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:slin .18s ease}
+  .toast.ok{border-left-color:var(--good)} .toast.err{border-left-color:var(--bad)}
+  .toast .tt{font-weight:600;margin-bottom:2px}
+  @keyframes slin{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+  .ro-badge{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);
+    border:1px solid var(--line);border-radius:5px;padding:2px 6px}
+  @media (max-width:760px){ .app{grid-template-columns:1fr;grid-template-areas:"top" "main"} nav{display:none} }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="glyph">QNTM</span>
+      <div>Control Deck<small>treasury &middot; ledger &middot; payments</small></div>
+    </div>
+    <div class="top-spacer"></div>
+    <div class="conn">
+      <span class="lamp" id="lampIntegrity" title="Ledger conservation check"><span class="dot" id="dotIntegrity"></span><span id="integrityTxt">integrity -</span></span>
+      <span class="lamp"><span class="dot" id="dotConn"></span><span id="connTxt">not connected</span></span>
+      <button class="btn sm ghost" id="btnSettings">Connection</button>
+    </div>
+  </header>
+
+  <nav id="nav">
+    <div class="navlbl">Monitor</div>
+    <button data-view="dashboard" class="active"><span class="k">01</span> Dashboard</button>
+    <button data-view="ledger"><span class="k">02</span> Ledger explorer</button>
+    <button data-view="users"><span class="k">03</span> User inspector</button>
+    <div class="navlbl">Control</div>
+    <button data-view="supply"><span class="k">04</span> Treasury &amp; supply</button>
+    <button data-view="orders"><span class="k">05</span> Payment orders</button>
+    <button data-view="adminwallet"><span class="k">06</span> Admin wallet</button>
+  </nav>
+
+  <main>
+    <!-- DASHBOARD -->
+    <section class="view active" id="view-dashboard">
+      <h1>Dashboard</h1>
+      <p class="sub">Live figures derived from the ledger. Nothing here changes state.</p>
+      <div id="dashCards" class="grid cards"></div>
+      <h2>Recent activity</h2>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px" id="dashActivity">
+        <div class="panel"><div class="ph"><h3>Recent transactions</h3><button class="btn sm ghost" data-goto="ledger">Open explorer</button></div>
+          <div class="tablewrap" id="dashTxns"></div></div>
+        <div class="panel"><div class="ph"><h3>Recent payment orders</h3><button class="btn sm ghost" data-goto="orders">Manage</button></div>
+          <div class="tablewrap" id="dashOrders"></div></div>
+      </div>
+    </section>
+
+    <!-- LEDGER EXPLORER -->
+    <section class="view" id="view-ledger">
+      <h1>Ledger explorer</h1>
+      <p class="sub">Search the double-entry ledger. Click a row to see its entries.</p>
+      <div class="panel"><div class="pb">
+        <div class="row">
+          <label class="f"><span>Type</span>
+            <select id="lxType"><option value="">Any type</option>
+              <option>mint</option><option>purchase</option><option>grant</option><option>reward</option>
+              <option>spend</option><option>tip</option><option>transfer</option>
+              <option>marketplace_purchase</option><option>subscription</option><option>stake</option>
+              <option>adjustment</option></select></label>
+          <label class="f"><span>User id</span><input id="lxUser" class="mono" placeholder="initiator user id"></label>
+          <label class="f"><span>Wallet id</span><input id="lxWallet" class="mono" placeholder="numeric wallet id"></label>
+          <label class="f" style="max-width:120px"><span>&nbsp;</span><button class="btn primary" id="lxRun">Search</button></label>
+        </div>
+      </div></div>
+      <div class="panel" style="margin-top:14px"><div class="tablewrap" id="lxResults"></div></div>
+    </section>
+
+    <!-- USER INSPECTOR -->
+    <section class="view" id="view-users">
+      <h1>User inspector</h1>
+      <p class="sub">Look up a user's QNTM wallet, activity, and balance.</p>
+      <div class="panel"><div class="pb">
+        <div class="row">
+          <label class="f"><span>User id</span><input id="uiUser" class="mono" placeholder="user id"></label>
+          <label class="f" style="max-width:120px"><span>&nbsp;</span><button class="btn primary" id="uiRun">Inspect</button></label>
+        </div>
+      </div></div>
+      <div id="uiOut"></div>
+    </section>
+
+    <!-- TREASURY & SUPPLY -->
+    <section class="view" id="view-supply">
+      <h1>Treasury &amp; supply</h1>
+      <p class="sub">Issue and distribute QNTM. Every action is double-entry and audited.</p>
+      <div id="supplyCards" class="grid cards"></div>
+
+      <h2>Issue &amp; distribute</h2>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
+        <div class="panel"><div class="ph"><h3>Mint to treasury</h3><span class="ro-badge">high-risk</span></div><div class="pb">
+          <p class="muted" style="margin-top:0;font-size:12.5px">Creates new QNTM into the treasury (debits genesis). Capped by <span class="pill">QNTM_MAX_SUPPLY</span> if set.</p>
+          <label class="f"><span>Amount (QNTM)</span><input id="mintAmt" class="mono" placeholder="e.g. 1000000"></label>
+          <label class="f"><span>Reason</span><input id="mintReason" placeholder="why you're minting"></label>
+          <button class="btn primary" id="mintBtn">Mint to treasury</button>
+        </div></div>
+        <div class="panel"><div class="ph"><h3>Grant to a user</h3><span class="ro-badge">high-risk</span></div><div class="pb">
+          <p class="muted" style="margin-top:0;font-size:12.5px">Moves issued QNTM from treasury to a user wallet.</p>
+          <label class="f"><span>User id</span><input id="grantUser" class="mono" placeholder="recipient user id"></label>
+          <label class="f"><span>Amount (QNTM)</span><input id="grantAmt" class="mono" placeholder="e.g. 500"></label>
+          <label class="f"><span>Reason</span><input id="grantReason" placeholder="why you're granting"></label>
+          <button class="btn primary" id="grantBtn">Grant credits</button>
+        </div></div>
+      </div>
+      <div class="note">Need a hard cap or a redemption path? Caps are set via <span class="pill">QNTM_MAX_SUPPLY</span>. There is deliberately no withdrawal / cash-out - QNTM flows in only.</div>
+    </section>
+
+    <!-- PAYMENT ORDERS -->
+    <section class="view" id="view-orders">
+      <h1>Payment orders</h1>
+      <p class="sub">NOWPayments top-ups. Re-credit covers a paid order if the treasury was short.</p>
+      <div class="panel"><div class="pb">
+        <div class="row">
+          <label class="f"><span>Status</span><select id="poStatus"><option value="">Any status</option>
+            <option>pending</option><option>awaiting_webhook</option><option>paid_pending_credit</option>
+            <option>completed</option><option>failed</option><option>cancelled</option></select></label>
+          <label class="f"><span>User id</span><input id="poUser" class="mono" placeholder="filter by user id"></label>
+          <label class="f" style="max-width:120px"><span>&nbsp;</span><button class="btn primary" id="poRun">Load</button></label>
+        </div>
+      </div></div>
+      <div class="panel" style="margin-top:14px"><div class="tablewrap" id="poResults"></div></div>
+    </section>
+
+    <!-- ADMIN WALLET -->
+    <section class="view" id="view-adminwallet">
+      <h1>Admin wallet</h1>
+      <p class="sub">Your personal QNTM wallet - same model as a user, for test &amp; internal use.</p>
+      <div id="awCards" class="grid cards"></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
+        <div class="panel"><div class="ph"><h3>Fund my wallet</h3></div><div class="pb">
+          <p class="muted" style="margin-top:0;font-size:12.5px">Grants QNTM from treasury to your personal wallet.</p>
+          <label class="f"><span>Amount (QNTM)</span><input id="awAmt" class="mono" placeholder="e.g. 100"></label>
+          <label class="f"><span>Reason</span><input id="awReason" placeholder="optional"></label>
+          <button class="btn primary" id="awFund">Fund my wallet</button>
+        </div></div>
+        <div class="panel"><div class="ph"><h3>History</h3><button class="btn sm ghost" id="awRefresh">Refresh</button></div>
+          <div class="tablewrap" id="awHist"></div></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- CONFIRM MODAL -->
+<div class="scrim" id="scrim">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="mh"><span class="dot warn"></span><h3 id="mTitle">Confirm action</h3></div>
+    <div class="mb">
+      <div id="mEffects"></div>
+      <div class="confirmrow"><span>This is a high-risk action. Type <b>CONFIRM</b> to proceed.</span>
+        <input id="mConfirm" placeholder="CONFIRM" autocomplete="off" class="mono"></div>
+    </div>
+    <div class="mf">
+      <button class="btn ghost" id="mCancel">Cancel</button>
+      <button class="btn danger" id="mGo" disabled>Execute</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="scrim" id="scrimSet">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="mh"><span class="dot"></span><h3>Connection</h3></div>
+    <div class="mb">
+      <label class="f"><span>API base URL</span><input id="setBase" class="mono" placeholder="https://drfx.io (blank = same origin)"></label>
+      <label class="f"><span>Admin bearer token</span><input id="setToken" class="mono" type="password" placeholder="paste your access token"></label>
+      <div class="note">The token is held in memory for this tab only - it is never stored. All requests use it as <span class="pill">Authorization: Bearer ...</span>.</div>
+    </div>
+    <div class="mf"><button class="btn ghost" id="setCancel">Cancel</button><button class="btn primary" id="setSave">Connect</button></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+(function(){
+  "use strict";
+  // ---------- config (in-memory only) ----------
+  var cfg = { base:"", token:"" };
+
+  // ---------- tiny helpers ----------
+  var $ = function(s,r){ return (r||document).querySelector(s); };
+  var el = function(t,a,txt){ var e=document.createElement(t); if(a) for(var k in a) e.setAttribute(k,a[k]); if(txt!=null) e.textContent=txt; return e; };
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];}); }
+  function fmt(n){ if(n==null||n==="") return "-"; var s=String(n); if(s.indexOf(".")>-1){ s=s.replace(/(\.\d*?)0+$/,"$1").replace(/\.$/,""); } return s; }
+  function shortId(s){ s=String(s||""); return s.length>16 ? s.slice(0,10)+"..."+s.slice(-4) : s; }
+  function when(t){ if(!t) return "-"; var d=new Date(t); return isNaN(d)?String(t):d.toLocaleString(); }
+
+  function toast(title,msg,kind){
+    var t=el("div",{class:"toast"+(kind?(" "+kind):"")});
+    t.appendChild(el("div",{class:"tt"},title)); if(msg) t.appendChild(el("div",{},msg));
+    $("#toasts").appendChild(t); setTimeout(function(){ t.style.opacity="0"; setTimeout(function(){t.remove();},250); },4200);
+  }
+
+  // ---------- API ----------
+  function api(path, opts){
+    opts = opts || {};
+    var headers = { "Accept":"application/json" };
+    if(opts.body){ headers["Content-Type"]="application/json"; }
+    if(cfg.token){ headers["Authorization"]="Bearer "+cfg.token; }
+    if(opts.idempotencyKey){ headers["Idempotency-Key"]=opts.idempotencyKey; }
+    return fetch((cfg.base||"")+path, {
+      method: opts.method||"GET", headers: headers,
+      body: opts.body? JSON.stringify(opts.body): undefined
+    }).then(function(res){
+      return res.text().then(function(txt){
+        var data; try{ data = txt? JSON.parse(txt): {}; }catch(e){ data={ raw:txt }; }
+        if(!res.ok){
+          var msg = (data && data.error && data.error.message) || (data && data.message) || ("HTTP "+res.status);
+          var err = new Error(msg); err.status=res.status; err.data=data; throw err;
+        }
+        return data;
+      });
+    });
+  }
+  function setConn(ok){
+    $("#dotConn").className = "dot "+(ok?"ok":"bad");
+    $("#connTxt").textContent = ok ? (cfg.base||"same origin") : "not connected";
+  }
+
+  // ---------- navigation ----------
+  function go(view){
+    var btns=document.querySelectorAll("nav button[data-view]"), views=document.querySelectorAll(".view");
+    for(var i=0;i<btns.length;i++) btns[i].classList.toggle("active", btns[i].getAttribute("data-view")===view);
+    for(var j=0;j<views.length;j++) views[j].classList.toggle("active", views[j].id==="view-"+view);
+    load(view);
+  }
+  document.querySelector("nav").addEventListener("click",function(e){
+    var b=e.target.closest("button[data-view]"); if(b) go(b.getAttribute("data-view"));
+  });
+  document.addEventListener("click",function(e){
+    var g=e.target.closest("[data-goto]"); if(g) go(g.getAttribute("data-goto"));
+  });
+
+  // ---------- settings ----------
+  function openSet(){ $("#setBase").value=cfg.base; $("#setToken").value=cfg.token; $("#scrimSet").classList.add("on"); }
+  $("#btnSettings").addEventListener("click",openSet);
+  $("#setCancel").addEventListener("click",function(){ $("#scrimSet").classList.remove("on"); });
+  $("#setSave").addEventListener("click",function(){
+    cfg.base=$("#setBase").value.trim().replace(/\/$/,""); cfg.token=$("#setToken").value.trim();
+    $("#scrimSet").classList.remove("on");
+    refreshIntegrity(); go("dashboard");
+  });
+
+  // ---------- confirm modal ----------
+  var pending=null;
+  function confirmAction(opts){ // {title, effects:[{k,v}], run:fn}
+    pending=opts; $("#mTitle").textContent=opts.title;
+    var box=el("div",{class:"effects"});
+    (opts.effects||[]).forEach(function(e){
+      var ln=el("div",{class:"ln"}); ln.appendChild(el("span",{},e.k)); ln.appendChild(el("b",{},e.v)); box.appendChild(ln);
+    });
+    var host=$("#mEffects"); host.innerHTML=""; if((opts.effects||[]).length) host.appendChild(box);
+    $("#mConfirm").value=""; $("#mGo").disabled=true; $("#scrim").classList.add("on"); setTimeout(function(){$("#mConfirm").focus();},30);
+  }
+  $("#mConfirm").addEventListener("input",function(){ $("#mGo").disabled = this.value.trim().toUpperCase()!=="CONFIRM"; });
+  $("#mCancel").addEventListener("click",function(){ $("#scrim").classList.remove("on"); pending=null; });
+  $("#mGo").addEventListener("click",function(){
+    if(!pending) return; var p=pending; pending=null; $("#scrim").classList.remove("on");
+    var btn=$("#mGo"); btn.disabled=true;
+    Promise.resolve(p.run()).then(function(ok){ if(ok && ok.toast) toast(ok.toast.t, ok.toast.m, "ok"); })
+      .catch(function(err){ toast("Action failed", err.message, "err"); });
+  });
+
+  // ---------- integrity lamp ----------
+  function refreshIntegrity(){
+    if(!cfg.token && !cfg.base){ return; }
+    api("/api/qntm/admin/supply").then(function(d){
+      setConn(true);
+      var ok = d && d.integrity && d.integrity.ok;
+      $("#dotIntegrity").className="dot "+(ok?"ok":"bad");
+      $("#integrityTxt").textContent = ok? "integrity ok" : "integrity FAIL";
+    }).catch(function(err){
+      setConn(false);
+      $("#dotIntegrity").className="dot warn"; $("#integrityTxt").textContent="integrity -";
+      if(err.status===401||err.status===403) toast("Not authorized","Open Connection and set a valid admin token.","err");
+    });
+  }
+
+  // ---------- renderers ----------
+  function card(lbl,val,unit,accent){
+    var c=el("div",{class:"readout"+(accent?" accent":"")});
+    c.appendChild(el("div",{class:"lbl"},lbl));
+    var v=el("div",{class:"val"}); v.appendChild(document.createTextNode(fmt(val))); if(unit){ var u=el("span",{class:"unit"},unit); v.appendChild(u);} 
+    c.appendChild(v); return c;
+  }
+  function tagFor(s){ var t=el("span",{class:"tag "+esc(s)}); t.textContent=s; return t; }
+  function emptyRow(host,msg){ host.innerHTML=""; host.appendChild(el("div",{class:"empty"},msg)); }
+
+  function txnTable(rows, onClick){
+    if(!rows||!rows.length) { var d=el("div",{class:"empty"},"No transactions."); return d; }
+    var tbl=el("table"); var thead=el("thead"); thead.innerHTML="<tr><th>ID</th><th>Type</th><th>Amount</th><th>Status</th><th>When</th></tr>"; tbl.appendChild(thead);
+    var tb=el("tbody");
+    rows.forEach(function(t){
+      var tr=el("tr",{class:onClick?"clickable":""});
+      tr.innerHTML="<td class='mono'>"+esc(shortId(t.public_id))+"</td><td><span class='pill'>"+esc(t.type)+"</span></td>"+
+        "<td class='num'>"+esc(fmt(t.amount))+"</td><td></td><td class='muted'>"+esc(when(t.created_at))+"</td>";
+      tr.children[3].appendChild(tagFor(t.status));
+      if(onClick) tr.addEventListener("click",function(){ onClick(t); });
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); return tbl;
+  }
+
+  // ---------- views ----------
+  var loaders = {
+    dashboard: function(){
+      api("/api/qntm/admin/deck/dashboard").then(function(d){
+        setConn(true);
+        var cards=$("#dashCards"); cards.innerHTML="";
+        cards.appendChild(card("Total issued", d.totalIssued, "QNTM", true));
+        cards.appendChild(card("Treasury", d.treasuryBalance, "QNTM"));
+        cards.appendChild(card("Control Deck wallet", d.controlDeckBalance, "QNTM"));
+        cards.appendChild(card("User balances", d.userBalanceTotal, "QNTM"));
+        cards.appendChild(card("Revenue sink", d.revenueBalance, "QNTM"));
+        cards.appendChild(card("Active wallets", d.activeWallets));
+        var txns=$("#dashTxns"); txns.innerHTML=""; txns.appendChild(txnTable(d.recentTransactions, function(t){ go("ledger"); setTimeout(function(){ openTxn(t.public_id); },200); }));
+        renderOrders($("#dashOrders"), d.recentPaymentOrders);
+        var ok=d.integrity&&d.integrity.ok; $("#dotIntegrity").className="dot "+(ok?"ok":"bad"); $("#integrityTxt").textContent=ok?"integrity ok":"integrity FAIL";
+      }).catch(apiErr);
+    },
+    ledger: function(){ /* on demand via search */ },
+    users: function(){},
+    supply: function(){
+      api("/api/qntm/admin/supply").then(function(d){
+        setConn(true);
+        var c=$("#supplyCards"); c.innerHTML="";
+        var s=d.supply||{};
+        c.appendChild(card("Total issued", s.totalIssued!=null?s.totalIssued:s.total_issued, "QNTM", true));
+        c.appendChild(card("Treasury", s.treasury!=null?s.treasury:(s.treasuryBalance), "QNTM"));
+        c.appendChild(card("Max supply", s.maxSupply!=null?s.maxSupply:(s.max_supply||"uncapped"), s.maxSupply?"QNTM":""));
+        var ok=d.integrity&&d.integrity.ok; c.appendChild(card("Integrity", ok?"OK":"FAIL"));
+      }).catch(apiErr);
+    },
+    orders: function(){ runOrders(); },
+    adminwallet: function(){ loadAdminWallet(); }
+  };
+  function load(view){ if(loaders[view]) loaders[view](); }
+  function apiErr(err){ setConn(false); if(err.status===401||err.status===403){ toast("Not authorized","Set a valid admin token in Connection.","err"); } else { toast("Request failed", err.message, "err"); } }
+
+  // ---- ledger explorer ----
+  function runLedger(){
+    var qs=[];
+    if($("#lxType").value) qs.push("type="+encodeURIComponent($("#lxType").value));
+    if($("#lxUser").value.trim()) qs.push("userId="+encodeURIComponent($("#lxUser").value.trim()));
+    if($("#lxWallet").value.trim()) qs.push("walletId="+encodeURIComponent($("#lxWallet").value.trim()));
+    var host=$("#lxResults"); emptyRow(host,"Searching...");
+    api("/api/qntm/admin/deck/transactions"+(qs.length?("?"+qs.join("&")):"")).then(function(d){
+      setConn(true); host.innerHTML="";
+      host.appendChild(txnTable(d.transactions, function(t){ openTxn(t.public_id); }));
+    }).catch(function(e){ apiErr(e); emptyRow(host,"Could not load."); });
+  }
+  $("#lxRun").addEventListener("click",runLedger);
+
+  function openTxn(publicId){
+    api("/api/qntm/admin/deck/transactions/"+encodeURIComponent(publicId)).then(function(d){
+      var t=d.transaction; if(!t) return;
+      var eff=(t.entries||[]).map(function(e){ return { k:(e.direction==="debit"?"- ":"+ ")+(e.owner_type||"")+" "+(e.wallet_type||"")+" #"+e.wallet_id, v:fmt(e.amount)+" "+(t.currency||"") }; });
+      confirmActionReadonly("Transaction "+shortId(t.public_id), [
+        {k:"Type",v:t.type},{k:"Status",v:t.status},{k:"Amount",v:fmt(t.amount)+" "+(t.currency||"")},{k:"When",v:when(t.created_at)}
+      ].concat(eff));
+    }).catch(apiErr);
+  }
+  // read-only detail reuses the modal without the CONFIRM gate
+  function confirmActionReadonly(title, effects){
+    $("#mTitle").textContent=title;
+    var box=el("div",{class:"effects"});
+    effects.forEach(function(e){ var ln=el("div",{class:"ln"}); ln.appendChild(el("span",{},e.k)); ln.appendChild(el("b",{},e.v)); box.appendChild(ln); });
+    var host=$("#mEffects"); host.innerHTML=""; host.appendChild(box);
+    // hide confirm input + execute for read-only
+    $(".confirmrow",$("#scrim")).style.display="none"; $("#mGo").style.display="none"; $("#mCancel").textContent="Close";
+    $("#scrim").classList.add("on");
+    var restore=function(){ $(".confirmrow",$("#scrim")).style.display=""; $("#mGo").style.display=""; $("#mCancel").textContent="Cancel"; $("#mCancel").removeEventListener("click",restore); };
+    $("#mCancel").addEventListener("click",restore);
+  }
+
+  // ---- user inspector ----
+  function runUser(){
+    var id=$("#uiUser").value.trim(); if(!id){ toast("Enter a user id"); return; }
+    var out=$("#uiOut"); out.innerHTML="<div class='panel'><div class='empty'>Loading...</div></div>";
+    api("/api/qntm/admin/deck/users/"+encodeURIComponent(id)).then(function(d){
+      setConn(true); out.innerHTML="";
+      if(!d.wallet){ out.innerHTML="<div class='panel'><div class='empty'>No QNTM wallet for <span class='mono'>"+esc(id)+"</span> yet.</div></div>"; return; }
+      var cards=el("div",{class:"grid cards"}); 
+      cards.appendChild(card("Available", d.wallet.available_balance, "QNTM", true));
+      cards.appendChild(card("Pending", d.wallet.pending_balance, "QNTM"));
+      cards.appendChild(card("Locked", d.wallet.locked_balance, "QNTM"));
+      cards.appendChild(card("Wallet id", d.wallet.id));
+      out.appendChild(cards);
+      // quick grant
+      var grant=el("div",{class:"panel"}); grant.style.marginTop="14px";
+      grant.innerHTML="<div class='ph'><h3>Grant to this user</h3><span class='ro-badge'>high-risk</span></div>";
+      var gb=el("div",{class:"pb"});
+      gb.innerHTML="<div class='row'><label class='f'><span>Amount (QNTM)</span><input id='uiGrantAmt' class='mono' placeholder='e.g. 50'></label>"+
+        "<label class='f'><span>Reason</span><input id='uiGrantReason' placeholder='reason'></label>"+
+        "<label class='f' style='max-width:130px'><span>&nbsp;</span><button class='btn primary' id='uiGrantBtn'>Grant</button></label></div>";
+      grant.appendChild(gb); out.appendChild(grant);
+      $("#uiGrantBtn",out).addEventListener("click",function(){
+        var amt=$("#uiGrantAmt").value.trim(); var rsn=$("#uiGrantReason").value.trim();
+        if(!amt){ toast("Enter an amount"); return; }
+        confirmAction({ title:"Grant "+amt+" QNTM", effects:[{k:"To user",v:id},{k:"Amount",v:amt+" QNTM"},{k:"From",v:"treasury"}],
+          run:function(){ return api("/api/qntm/admin/grant",{method:"POST",body:{userId:id,amount:amt,reason:rsn||"admin grant"},idempotencyKey:"ui-grant-"+id+"-"+Date.now()})
+            .then(function(){ runUser(); return {toast:{t:"Granted",m:amt+" QNTM to "+shortId(id)}}; }); } });
+      });
+      var tp=el("div",{class:"panel"}); tp.style.marginTop="14px";
+      tp.innerHTML="<div class='ph'><h3>Activity</h3></div>";
+      var tw=el("div",{class:"tablewrap"}); tw.appendChild(txnTable(d.transactions, function(t){ openTxn(t.public_id); })); tp.appendChild(tw); out.appendChild(tp);
+    }).catch(function(e){ apiErr(e); out.innerHTML="<div class='panel'><div class='empty'>Could not load.</div></div>"; });
+  }
+  $("#uiRun").addEventListener("click",runUser);
+  $("#uiUser").addEventListener("keydown",function(e){ if(e.key==="Enter") runUser(); });
+
+  // ---- supply actions ----
+  $("#mintBtn").addEventListener("click",function(){
+    var amt=$("#mintAmt").value.trim(), rsn=$("#mintReason").value.trim();
+    if(!amt){ toast("Enter an amount"); return; }
+    confirmAction({ title:"Mint "+amt+" QNTM", effects:[{k:"Action",v:"mint -> treasury"},{k:"Amount",v:amt+" QNTM"},{k:"Genesis",v:"- "+amt},{k:"Treasury",v:"+ "+amt}],
+      run:function(){ return api("/api/qntm/admin/mint",{method:"POST",body:{amount:amt,reason:rsn||"mint"},idempotencyKey:"ui-mint-"+Date.now()})
+        .then(function(){ $("#mintAmt").value=""; $("#mintReason").value=""; loaders.supply(); refreshIntegrity(); return {toast:{t:"Minted",m:amt+" QNTM into treasury"}}; }); } });
+  });
+  $("#grantBtn").addEventListener("click",function(){
+    var u=$("#grantUser").value.trim(), amt=$("#grantAmt").value.trim(), rsn=$("#grantReason").value.trim();
+    if(!u||!amt){ toast("User id and amount required"); return; }
+    confirmAction({ title:"Grant "+amt+" QNTM", effects:[{k:"To user",v:u},{k:"Amount",v:amt+" QNTM"},{k:"From",v:"treasury"}],
+      run:function(){ return api("/api/qntm/admin/grant",{method:"POST",body:{userId:u,amount:amt,reason:rsn||"admin grant"},idempotencyKey:"ui-grant-"+u+"-"+Date.now()})
+        .then(function(){ $("#grantAmt").value=""; loaders.supply(); return {toast:{t:"Granted",m:amt+" QNTM to "+shortId(u)}}; }); } });
+  });
+
+  // ---- payment orders ----
+  function renderOrders(host, rows){
+    host.innerHTML="";
+    if(!rows||!rows.length){ host.appendChild(el("div",{class:"empty"},"No payment orders.")); return; }
+    var tbl=el("table"); var th=el("thead"); th.innerHTML="<tr><th>Order</th><th>User</th><th>QNTM</th><th>USD</th><th>Pay</th><th>Status</th><th></th></tr>"; tbl.appendChild(th);
+    var tb=el("tbody");
+    rows.forEach(function(o){
+      var tr=el("tr");
+      tr.innerHTML="<td class='mono'>"+esc(shortId(o.public_id))+"</td><td class='mono'>"+esc(shortId(o.user_id))+"</td>"+
+        "<td class='num'>"+esc(fmt(o.qntm_amount))+"</td><td class='num'>"+esc(fmt(o.fiat_amount_usd))+"</td>"+
+        "<td class='muted'>"+esc(o.pay_currency||"")+"</td><td></td><td></td>";
+      tr.children[5].appendChild(tagFor(o.status));
+      var act=tr.children[6];
+      if(o.status==="paid_pending_credit"||o.status==="awaiting_webhook"){
+        var rc=el("button",{class:"btn sm"},"Re-credit"); rc.addEventListener("click",function(){
+          confirmAction({ title:"Re-credit "+shortId(o.public_id), effects:[{k:"Order",v:o.public_id},{k:"Credit",v:fmt(o.qntm_amount)+" QNTM"},{k:"To user",v:shortId(o.user_id)}],
+            run:function(){ return api("/api/qntm/admin/payment-orders/"+encodeURIComponent(o.public_id)+"/recredit",{method:"POST"})
+              .then(function(){ runOrders(); return {toast:{t:"Re-credited",m:o.public_id}}; }); } });
+        }); act.appendChild(rc);
+      }
+      if(o.status!=="completed"&&o.status!=="failed"){
+        var fl=el("button",{class:"btn sm danger"},"Fail"); fl.style.marginLeft="6px"; fl.addEventListener("click",function(){
+          confirmAction({ title:"Mark failed", effects:[{k:"Order",v:o.public_id},{k:"New status",v:"failed"},{k:"Balance change",v:"none"}],
+            run:function(){ return api("/api/qntm/admin/payment-orders/"+encodeURIComponent(o.public_id)+"/fail",{method:"POST",body:{reason:"manual override via Control Deck"}})
+              .then(function(){ runOrders(); return {toast:{t:"Marked failed",m:o.public_id}}; }); } });
+        }); act.appendChild(fl);
+      }
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); host.appendChild(tbl);
+  }
+  function runOrders(){
+    var qs=[]; if($("#poStatus").value) qs.push("status="+encodeURIComponent($("#poStatus").value));
+    if($("#poUser").value.trim()) qs.push("userId="+encodeURIComponent($("#poUser").value.trim()));
+    var host=$("#poResults"); emptyRow(host,"Loading...");
+    api("/api/qntm/admin/payment-orders"+(qs.length?("?"+qs.join("&")):"")).then(function(d){
+      setConn(true); renderOrders(host, d.orders);
+    }).catch(function(e){ apiErr(e); emptyRow(host,"Could not load."); });
+  }
+  $("#poRun").addEventListener("click",runOrders);
+
+  // ---- admin wallet ----
+  function loadAdminWallet(){
+    api("/api/qntm/admin/deck/admin-wallet").then(function(d){
+      setConn(true);
+      var c=$("#awCards"); c.innerHTML="";
+      c.appendChild(card("Available", d.wallet.available_balance, "QNTM", true));
+      c.appendChild(card("Pending", d.wallet.pending_balance, "QNTM"));
+      c.appendChild(card("Wallet id", d.wallet.id));
+      var hist=$("#awHist"); hist.innerHTML=""; hist.appendChild(txnTable(d.transactions, null));
+    }).catch(apiErr);
+  }
+  $("#awFund").addEventListener("click",function(){
+    var amt=$("#awAmt").value.trim(), rsn=$("#awReason").value.trim();
+    if(!amt){ toast("Enter an amount"); return; }
+    confirmAction({ title:"Fund my wallet "+amt+" QNTM", effects:[{k:"To",v:"my admin wallet"},{k:"Amount",v:amt+" QNTM"},{k:"From",v:"treasury"}],
+      run:function(){ return api("/api/qntm/admin/deck/admin-wallet/fund",{method:"POST",body:{amount:amt,reason:rsn||"fund admin wallet"},idempotencyKey:"ui-aw-"+Date.now()})
+        .then(function(){ $("#awAmt").value=""; loadAdminWallet(); return {toast:{t:"Funded",m:amt+" QNTM"}}; }); } });
+  });
+  $("#awRefresh").addEventListener("click",loadAdminWallet);
+
+  // ---------- boot ----------
+  if(!cfg.token){ openSet(); }   // first run: ask for connection
+  setConn(false);
+})();
+</script>
+</body>
+</html>
