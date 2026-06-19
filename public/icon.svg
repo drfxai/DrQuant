@@ -1,13 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <radialGradient id="bg" cx="30%" cy="30%" r="95%">
-      <stop offset="0%" stop-color="#0d1a35"/>
-      <stop offset="55%" stop-color="#060d1f"/>
-      <stop offset="100%" stop-color="#020714"/>
+    <radialGradient id="bg" cx="32%" cy="28%" r="100%">
+      <stop offset="0%" stop-color="#16224a"/>
+      <stop offset="55%" stop-color="#0a1130"/>
+      <stop offset="100%" stop-color="#03061a"/>
     </radialGradient>
+    <linearGradient id="line" x1="120" y1="360" x2="392" y2="150" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#c4b5fd"/>
+      <stop offset=".5" stop-color="#7c5cff"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <rect x="96" y="96" width="320" height="320" rx="40" fill="#141e3c" fill-opacity="0.5" stroke="#6496ff" stroke-opacity="0.35" stroke-width="10"/>
-  <polyline points="140,352 216,236 292,300 380,150" fill="none" stroke="#4a8cff" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
-  <polygon points="340,134 398,134 398,192" fill="#ef4444"/>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect x="96" y="96" width="320" height="320" rx="46" fill="none" stroke="#6a8cff" stroke-opacity="0.28" stroke-width="8"/>
+  <rect x="150" y="250" width="34" height="120" rx="17" fill="#4a8cff" fill-opacity="0.5"/>
+  <rect x="239" y="208" width="34" height="162" rx="17" fill="#7c5cff" fill-opacity="0.5"/>
+  <rect x="328" y="282" width="34" height="88" rx="17" fill="#22d3ee" fill-opacity="0.45"/>
+  <path d="M120 360 L210 250 L280 300 L380 165" fill="none" stroke="url(#line)" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M320 165 H380 V225" fill="none" stroke="#22d3ee" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="380" cy="165" r="18" fill="#eaf1ff"/>
 </svg>

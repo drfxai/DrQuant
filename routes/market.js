@@ -130,6 +130,7 @@ function shapePost(r) {
           cover: r.product_cover || "",
           badge: r.product_badge || "",
           rating_avg: r.product_rating != null ? Number(r.product_rating) : 0,
+          bought_by_me: !!r.product_bought_by_me,
         }
       : null,
   };
@@ -145,7 +146,8 @@ const FEED_SELECT = `
   pr.price_qntm AS product_price, pr.cover AS product_cover, pr.badge AS product_badge,
   pr.rating_avg AS product_rating,
   EXISTS(SELECT 1 FROM likes l   WHERE l.post_id = po.id AND l.user_id = $1) AS liked_by_me,
-  EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.followee_id = u.id) AS following_author
+  EXISTS(SELECT 1 FROM follows f WHERE f.follower_id = $1 AND f.followee_id = u.id) AS following_author,
+  EXISTS(SELECT 1 FROM product_purchases pp WHERE pp.product_id = pr.id AND pp.buyer_id = $1 AND pp.status='completed') AS product_bought_by_me
 `;
 
 // ============================================================================
@@ -275,6 +277,55 @@ router.post("/posts", requirePermission("explore:post"), async (req, res) => {
   } catch (e) {
     console.error("[market] create post:", e.message);
     res.status(500).json({ error: "Could not create post" });
+  }
+});
+
+// PUT /api/market/posts/:id  → author edits their own post (title/caption/media/product)
+router.put("/posts/:id", async (req, res) => {
+  const pool = req.app.get("pool");
+  const me = req.user.id;
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "Bad id" });
+  const b = req.body || {};
+  try {
+    const { rows: [p] } = await pool.query("SELECT author_id FROM posts WHERE id=$1 AND deleted_at IS NULL", [id]);
+    if (!p) return res.status(404).json({ error: "Post not found" });
+    if (p.author_id !== me && !can(req.user.role, "explore:moderate")) return res.status(403).json({ error: "Not allowed" });
+
+    const sets = [];
+    const params = [];
+    const put = (col, val) => { params.push(val); sets.push(col + " = $" + params.length); };
+    if (b.title !== undefined) put("title", trimStr(b.title, 140));
+    if (b.caption !== undefined) put("caption", trimStr(b.caption, 4000));
+    if (b.media_url !== undefined) {
+      const mu = trimStr(b.media_url, 500);
+      let mt = MEDIA_TYPES.includes(b.media_type) ? b.media_type : "text";
+      if (mu && mt === "text") mt = "image";
+      if (!mu) mt = "text";
+      put("media_url", mu);
+      put("media_type", mt);
+      put("thumb_url", trimStr(b.thumb_url, 500));
+    }
+    if (b.visibility !== undefined && ["public", "subscribers", "private"].includes(b.visibility)) put("visibility", b.visibility);
+    if (b.product_id !== undefined) {
+      let pid = b.product_id ? parseInt(b.product_id, 10) : null;
+      if (pid) { const { rows: [pp] } = await pool.query("SELECT id FROM products WHERE id=$1 AND owner_id=$2 AND status<>'archived'", [pid, me]); if (!pp) pid = null; }
+      put("product_id", pid);
+    }
+    if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
+    params.push(id);
+    await pool.query("UPDATE posts SET " + sets.join(", ") + " WHERE id=$" + params.length, params);
+    const { rows: [r] } = await pool.query(
+      `SELECT ${FEED_SELECT}
+         FROM posts po JOIN users u ON u.id = po.author_id
+    LEFT JOIN products pr ON pr.id = po.product_id
+        WHERE po.id = $2`,
+      [me, id]
+    );
+    res.json({ post: shapePost(r) });
+  } catch (e) {
+    console.error("[market] update post:", e.message);
+    res.status(500).json({ error: "Could not update post" });
   }
 });
 
@@ -506,8 +557,8 @@ router.get("/creators/:handle", async (req, res) => {
     if (!u) return res.status(404).json({ error: "Creator not found" });
 
     const { rows: products } = await pool.query(
-      `SELECT * FROM products WHERE owner_id=$1 AND status='active' ORDER BY sales_count DESC, created_at DESC LIMIT 60`,
-      [u.id]
+      `SELECT products.*, EXISTS(SELECT 1 FROM product_purchases pp WHERE pp.product_id=products.id AND pp.buyer_id=$2 AND pp.status='completed') AS bought_by_me FROM products WHERE owner_id=$1 AND status='active' ORDER BY sales_count DESC, created_at DESC LIMIT 60`,
+      [u.id, me]
     );
     const { rows: posts } = await pool.query(
       `SELECT ${FEED_SELECT}

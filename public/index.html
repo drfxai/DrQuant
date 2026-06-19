@@ -92,7 +92,7 @@ input,textarea,[contenteditable="true"]{-webkit-user-select:text;user-select:tex
 .cv-wall{background-color:${t.n==="light"?"#e8edf6":"#0a1023"};background-image:${t.n==="light"?"radial-gradient(1.6px 1.6px at 30px 40px,rgba(110,130,190,.14),transparent),radial-gradient(1.3px 1.3px at 150px 110px,rgba(110,130,190,.10),transparent),radial-gradient(1.2px 1.2px at 90px 200px,rgba(110,130,190,.09),transparent),radial-gradient(1.5px 1.5px at 230px 70px,rgba(120,100,200,.10),transparent)":"radial-gradient(1.6px 1.6px at 30px 40px,rgba(150,180,255,.13),transparent),radial-gradient(1.3px 1.3px at 150px 110px,rgba(150,180,255,.08),transparent),radial-gradient(1.2px 1.2px at 90px 200px,rgba(150,180,255,.07),transparent),radial-gradient(1.5px 1.5px at 230px 70px,rgba(124,92,255,.12),transparent)"};background-size:260px 260px,300px 300px,240px 240px,320px 320px}
 html.dqkb-open .dq-modal-ov{bottom:var(--dqkb,0px)!important}
 html.dqkb-open .dq-modal-md{max-height:calc(var(--vh,1vh)*100 - var(--dqkb,0px) - 26px)!important}
-@keyframes fi{from{opacity:0}to{opacity:1}}@keyframes si{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+${t.n==='dark'?'.mk-post{background:linear-gradient(180deg,rgba(36,48,92,.44),rgba(16,24,52,.34))!important;border-color:rgba(150,180,255,.18)!important;-webkit-backdrop-filter:blur(14px) saturate(150%);backdrop-filter:blur(14px) saturate(150%);box-shadow:0 10px 30px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.06)}':''}@keyframes fi{from{opacity:0}to{opacity:1}}@keyframes si{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 @keyframes fm{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}@keyframes bk{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes pu{0%,100%{opacity:1}50%{opacity:.5}}@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
 @keyframes sr{from{transform:translateX(-100%)}to{transform:translateX(0)}}
@@ -159,7 +159,7 @@ function renderLogin(){
     <div class="lg-split">
       <div class="lg-hero" style="animation:lgRise .5s ease both">
         <div class="lg-brand" style="display:flex;align-items:center;gap:12px">
-          <div style="width:58px;height:58px;border-radius:17px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.16));border:1px solid rgba(140,170,255,.22);box-shadow:0 0 38px rgba(124,92,255,.32)"><img src="/icon.svg" alt="DrQuant" style="width:100%;height:100%;object-fit:cover;border-radius:15px"/></div>
+          <div style="width:58px;height:58px;border-radius:17px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(124,92,255,.25),rgba(34,211,238,.16));border:1px solid rgba(140,170,255,.22);box-shadow:0 0 38px rgba(124,92,255,.32)"><svg width="36" height="36" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="dqLgLine" x1="7" y1="33" x2="40" y2="12" gradientUnits="userSpaceOnUse"><stop stop-color="#c4b5fd"/><stop offset=".5" stop-color="#7c5cff"/><stop offset="1" stop-color="#22d3ee"/></linearGradient></defs><rect x="11" y="25" width="4.4" height="13" rx="2.2" fill="#4a8cff" opacity=".5"/><rect x="20.8" y="21" width="4.4" height="17" rx="2.2" fill="#7c5cff" opacity=".5"/><rect x="30.6" y="28" width="4.4" height="10" rx="2.2" fill="#22d3ee" opacity=".45"/><path d="M7 33L18 22L26 27L40 12" stroke="url(#dqLgLine)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M32.5 12H40V19.5" stroke="#22d3ee" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="40" cy="12" r="2.6" fill="#eaf1ff"/></svg></div>
           <div><div style="font-size:23px;font-weight:800;color:#eaf1ff;letter-spacing:-.4px">DrFX <span style="background:linear-gradient(135deg,#a78bfa,#4a8cff,#22d3ee);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">Quant</span></div><div style="color:#8aa0cc;font-size:12px;letter-spacing:.4px">Where charts meet the cosmos</div></div>
         </div>
         <h1 class="lg-h1" style="color:#f0f5ff;font-size:30px;line-height:1.16;font-weight:800;margin:22px 0 10px;letter-spacing:-.6px">Trade among the stars.<br/>Move with the smart money.</h1>
@@ -1429,8 +1429,10 @@ function openMarket(){
   let sTimer=null;sInp.addEventListener('input',()=>{clearTimeout(sTimer);sTimer=setTimeout(()=>{MK.q=sInp.value.trim();if(MK.handle){MK.handle=null;MK.cur=null;}if(MK.tab==='create'||MK.tab==='store')MK.tab='explore';mkRender();},350);});
   ov.querySelectorAll('.mk-navbtn').forEach(b=>{b.onclick=()=>mkSetTab(b.dataset.mktab);});
   body.addEventListener('click',mkBodyClick);
+  document.addEventListener('play',mkVideoGuard,true);
   mkRender();
 }
+function mkVideoGuard(e){const v=e.target;if(!v||v.tagName!=='VIDEO'||!v.closest)return;if(!v.closest('#mk-overlay,.dq-modal-ov'))return;document.querySelectorAll('#mk-overlay video,.dq-modal-ov video').forEach(o=>{if(o!==v&&!o.paused){try{o.pause();}catch(_){}}});}
 function mkNavBtn(tab,label,path){return `<button class="mk-navbtn" data-mktab="${tab}" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:9px 0 8px;color:${t.t4};-webkit-tap-highlight-color:transparent"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg><span class="mk-navlbl" style="font-size:10px;font-weight:500">${label}</span></button>`;}
 function mkSetTab(tab){MK.tab=tab;MK.handle=null;MK.cur=null;const b=document.getElementById('mk-body');if(b)b.scrollTop=0;mkRender();}
 function mkRender(){
@@ -1450,6 +1452,7 @@ function mkBodyClick(e){
   if((el=tg.closest('.mk-foll'))){e.preventDefault();mkToggleFollow(el);return;}
   if((el=tg.closest('.mk-buy'))){e.preventDefault();mkBuy(el);return;}
   if((el=tg.closest('.mk-cmt'))){e.preventDefault();mkOpenPost(el.dataset.pid);return;}
+  if((el=tg.closest('.mk-editpost'))){e.preventDefault();mkEditPost(el.dataset.pid);return;}
   if((el=tg.closest('.mk-editp'))){e.preventDefault();mkEditProduct(el.dataset.pid);return;}
   if((el=tg.closest('.mk-openp'))){mkOpenProduct(el.dataset.pid);return;}
   if((el=tg.closest('.mk-viewstore'))){mkGoCreator(el.dataset.h);return;}
@@ -1458,7 +1461,7 @@ function mkBodyClick(e){
   if((el=tg.closest('.mk-chip'))){MK.type=el.dataset.type;mkExplore();return;}
   if((el=tg.closest('.mk-sortbtn'))){MK.sort=el.dataset.sort;mkExplore();return;}
   if((el=tg.closest('.mk-back2'))){MK.handle=null;MK.cur=null;mkRender();return;}
-  if((el=tg.closest('.mk-ctab'))){MK.ctab=el.dataset.ctab;const cc=document.getElementById('mk-cv-content');if(cc&&MK.cur)cc.innerHTML=mkCreatorContent(MK.cur);return;}
+  if((el=tg.closest('.mk-ctab'))){MK.ctab=el.dataset.ctab;document.querySelectorAll('#mk-overlay .mk-ctab').forEach(b=>{const on=b.dataset.ctab===MK.ctab;b.style.borderBottom='2px solid '+(on?t.pr:'transparent');b.style.color=on?t.t1:t.t3;});const cc=document.getElementById('mk-cv-content');if(cc&&MK.cur)cc.innerHTML=mkCreatorContent(MK.cur);return;}
   if((el=tg.closest('.mk-editstore'))){mkEditStore();return;}
   if((el=tg.closest('.mk-msg'))){const o=document.getElementById('mk-overlay');MK=null;if(o)o.remove();createDM(parseInt(el.dataset.uid,10));return;}
   if((el=tg.closest('.mk-newproduct'))){mkProductForm(null);return;}
@@ -1490,7 +1493,8 @@ function mkPostCard(p){
   let media='';
   if(p.media_type==='image'&&p.media_url)media=`<img src="${esc(p.media_url)}" alt="" loading="lazy" style="width:100%;display:block;max-height:440px;object-fit:cover;background:${t.ch}"/>`;
   else if(p.media_type==='video'&&p.media_url)media=`<video src="${esc(p.media_url)}" ${p.thumb_url?`poster="${esc(p.thumb_url)}"`:''} controls playsinline preload="metadata" style="width:100%;display:block;max-height:440px;background:#000"></video>`;
-  const foll=a.is_following?`<button class="mk-foll" data-uid="${a.id}" data-on="1" style="${mkFollOff()}">Following</button>`:`<button class="mk-foll" data-uid="${a.id}" data-on="0" style="${mkFollOn()}">Follow</button>`;
+  const mine=!!(S.user&&a.id===S.user.id);
+  const foll=mine?`<button class="mk-editpost" data-pid="${p.id}" style="${mkGhostBtn()};padding:7px 14px;font-size:12.5px;font-weight:700;flex-shrink:0">Edit</button>`:a.is_following?`<button class="mk-foll" data-uid="${a.id}" data-on="1" style="${mkFollOff()}">Following</button>`:`<button class="mk-foll" data-uid="${a.id}" data-on="0" style="${mkFollOn()}">Follow</button>`;
   return `<div class="mk-post" style="border:1px solid ${t.bd};border-radius:16px;background:${t.cd};overflow:hidden;margin-bottom:14px">
     <div style="display:flex;align-items:center;gap:10px;padding:12px 14px">
       <div class="mk-openc" data-h="${esc(a.username)}" style="cursor:pointer;flex-shrink:0">${avatar(a.avatar||'\uD83E\uDDD1\u200D\uD83D\uDCBB',42)}</div>
@@ -1588,7 +1592,7 @@ function mkCreatorView(d,pushed){
   const manage=c.is_me?`<div style="display:flex;gap:8px;margin-top:14px"><button class="mk-newproduct" style="${mkPrimBtn()};flex:1">+ Add product</button><button class="mk-newpost" style="${mkGhostBtn()};flex:1">+ New post</button></div><div style="margin-top:8px"><button class="mk-purchases" style="${mkGhostBtn()};width:100%">My purchases</button></div>`:'';
   const tabs=[['store','Store &#183; '+d.product_count],['posts','Posts &#183; '+d.post_count]].map(p=>{const v=p[0],l=p[1],on=MK.ctab===v;return `<button class="mk-ctab" data-ctab="${v}" style="flex:1;padding:11px 0;background:none;border:none;border-bottom:2px solid ${on?t.pr:'transparent'};color:${on?t.t1:t.t3};font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit">${l}</button>`;}).join('');
   return `<div style="max-width:780px;margin:0 auto;width:100%;box-sizing:border-box">
-    <div style="position:relative;height:124px;${cover}">${back}</div>
+    <div style="position:relative;height:124px;overflow:hidden;background-repeat:no-repeat;${cover}">${back}</div>
     <div style="padding:0 16px 12px;margin-top:-34px">
       <div style="display:flex;align-items:flex-end;gap:12px">
         ${avatar(c.avatar||(isCo?'\uD83C\uDFE2':'\uD83E\uDDD1\u200D\uD83D\uDCBB'),72)}
@@ -1715,6 +1719,36 @@ function mkProductForm(p){
 }
 async function mkEditProduct(id){try{const d=await api(`/market/products/${id}`);mkProductForm(d.product);}catch(e){mkToast(mkErrMsg(e));}}
 
+// ---- Edit post ----
+async function mkEditPost(id){
+  let p;
+  try{const d=await api(`/market/posts/${id}`);p=d.post;}catch(e){mkToast(mkErrMsg(e));return;}
+  if(!p)return;
+  modal('Edit post',(body,close)=>{
+    let mediaUrl=p.media_url||'',mediaType=p.media_type||'text',thumb=p.thumb_url||'';
+    body.innerHTML=`
+      <input id="mke-title" class="gi" placeholder="Title (optional)" style="font-size:14px;margin-bottom:10px" value="${esc(p.title||'')}"/>
+      <textarea id="mke-cap" class="gi" rows="4" placeholder="Share an idea, analysis, or update..." style="resize:none;font-size:14px;margin-bottom:10px">${esc(p.caption||'')}</textarea>
+      <div id="mke-media" style="margin-bottom:10px"></div>
+      <button id="mke-upl" type="button" style="${mkGhostBtn()};width:100%;margin-bottom:12px;display:flex;align-items:center;justify-content:center;gap:8px">${ic('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',18)} Replace / add media</button>
+      <input id="mke-file" type="file" accept="image/*,video/*" style="display:none"/>
+      <div style="display:flex;gap:8px"><button id="mke-del" type="button" style="${mkGhostBtn()};flex:1;color:#ff6b6b;border-color:rgba(255,107,107,.4)">Delete</button><button id="mke-save" class="pb" style="flex:2">Save changes</button></div>`;
+    const renderMedia=()=>{const md=body.querySelector('#mke-media');if(!md)return;if(!mediaUrl){md.innerHTML='';return;}md.innerHTML=mediaType==='video'?`<video src="${esc(mediaUrl)}" controls playsinline style="width:100%;border-radius:12px;max-height:240px;background:#000"></video>`:`<img src="${esc(mediaUrl)}" alt="" style="width:100%;border-radius:12px;max-height:240px;object-fit:cover"/>`;};
+    renderMedia();
+    const fileInput=body.querySelector('#mke-file');
+    body.querySelector('#mke-upl').onclick=()=>fileInput.click();
+    fileInput.onchange=async()=>{const f=fileInput.files[0];if(!f)return;const md=body.querySelector('#mke-media');md.innerHTML=`<div style="color:${t.t3};font-size:12px;padding:6px">Uploading...</div>`;try{const up=await mkUpload(f);mediaUrl=up.url;mediaType=(up.mime||'').indexOf('video')===0?'video':'image';thumb='';renderMedia();}catch(e){renderMedia();mkToast(mkErrMsg(e));}};
+    body.querySelector('#mke-del').onclick=async()=>{if(!confirm('Delete this post permanently?'))return;try{await api(`/market/posts/${id}`,{method:'DELETE'});close();mkToast('Post deleted');mkRefreshStore();}catch(e){mkToast(mkErrMsg(e));}};
+    body.querySelector('#mke-save').onclick=async()=>{
+      const title=body.querySelector('#mke-title').value.trim();
+      const caption=body.querySelector('#mke-cap').value.trim();
+      if(!title&&!caption&&!mediaUrl){mkToast('Add some text or media first');return;}
+      const btn=body.querySelector('#mke-save');btn.disabled=true;btn.textContent='Saving...';
+      try{await api(`/market/posts/${id}`,{method:'PUT',body:JSON.stringify({title,caption,media_url:mediaUrl,media_type:mediaType,thumb_url:thumb})});close();mkToast('Post updated');mkRefreshStore();}catch(e){btn.disabled=false;btn.textContent='Save changes';mkToast(mkErrMsg(e));}
+    };
+  });
+}
+
 // ---- Edit store profile ----
 function mkEditStore(){
   const c=(MK.cur&&MK.cur.creator)||S.user||{};
@@ -1835,7 +1869,7 @@ function mkPickProduct(cb){
 // ---- navigation + actions ----
 function mkGoCreator(h){if(!h)return;MK.handle=h;MK.cur=null;MK.ctab='store';const b=document.getElementById('mk-body');if(b)b.scrollTop=0;mkRender();}
 function mkRefreshStore(){if(MK.handle)mkCreator(MK.handle,true);else if(MK.tab==='store')mkMyStore();else mkRender();}
-async function mkToggleLike(btn){const id=btn.dataset.pid;try{const d=await api(`/market/posts/${id}/like`,{method:'POST'});btn.dataset.on=d.liked?'1':'0';btn.style.color=d.liked?'#ff4d6d':t.t3;btn.innerHTML=mkHeart(d.liked)+`<span class="mk-like-n">${d.like_count}</span>`;}catch(e){mkToast(mkErrMsg(e));}}
+async function mkToggleLike(btn){const id=btn.dataset.pid;try{const d=await api(`/market/posts/${id}/like`,{method:'POST'});btn.dataset.on=d.liked?'1':'0';btn.style.color=d.liked?'#ff4d6d':t.t3;if(MK&&MK.cur&&MK.cur.posts){const _pp=MK.cur.posts.find(x=>String(x.id)===String(id));if(_pp){_pp.liked_by_me=d.liked;_pp.like_count=d.like_count;}}btn.innerHTML=mkHeart(d.liked)+`<span class="mk-like-n">${d.like_count}</span>`;}catch(e){mkToast(mkErrMsg(e));}}
 async function mkToggleFollow(btn){const uid=btn.dataset.uid;try{const d=await api(`/market/follow/${uid}`,{method:'POST'});const on=d.following;document.querySelectorAll(`.mk-foll[data-uid="${uid}"]`).forEach(b=>{b.dataset.on=on?'1':'0';b.textContent=on?'Following':'Follow';b.style.cssText=on?mkFollOff():mkFollOn();});if(MK.cur&&MK.cur.creator&&String(MK.cur.creator.id)===String(uid)){MK.cur.creator.is_following=on;MK.cur.creator.follower_count=d.follower_count;}}catch(e){mkToast(mkErrMsg(e));}}
 async function mkBuy(btn){const id=btn.dataset.pid;if(btn.disabled)return;btn.disabled=true;const old=btn.textContent;btn.textContent='...';try{const d=await api(`/market/products/${id}/buy`,{method:'POST'});btn.textContent='Owned';btn.style.cssText=`padding:8px 14px;border-radius:9px;border:1px solid ${t.ba};background:transparent;color:${t.on};font-weight:700;font-size:12.5px;font-family:inherit;flex-shrink:0`;mkToast(d.already_owned?'Already in your library':'Added to your library');}catch(e){btn.disabled=false;btn.textContent=old;mkToast(mkErrMsg(e));}}
 // ============================== END MARKET ==============================
