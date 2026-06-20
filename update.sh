@@ -150,25 +150,14 @@ if grep -q '^LIVE_SFU=on' "$APP_DIR/.env" 2>/dev/null; then
   fi
 fi
 
-# 8b) QNTM initial airdrop - idempotently grant any account that does not yet
-#     have its initial QNTM. Runs with --execute, but is safe on EVERY deploy:
-#     already-granted users are skipped via their idempotency key, and the runner
-#     self-aborts if the reward_pool cannot cover the remainder. Turn it off with
-#     AIRDROP_ON_DEPLOY=off in .env. Non-fatal - the service is already restarted
-#     above, so a hiccup here never blocks the deploy (it retries next update).
-AIRDROP_FLAG="$(grep -E '^AIRDROP_ON_DEPLOY=' "$APP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
-case "${AIRDROP_FLAG:-on}" in
-  off|0|false|no|n|OFF|FALSE|No|N|Off|False)
-    echo -e "  ${YELLOW}-${NC} QNTM airdrop skipped (AIRDROP_ON_DEPLOY=${AIRDROP_FLAG})" ;;
-  *)
-    if [ -f "$APP_DIR/scripts/airdrop-initial-qntm.js" ]; then
-      echo -e "${CYAN}> QNTM initial airdrop (idempotent; tops up new accounts)...${NC}"
-      ( cd "$APP_DIR" && node scripts/airdrop-initial-qntm.js --execute ) \
-        || echo -e "  ${YELLOW}! airdrop exited non-zero - deploy unaffected, retries next update${NC}"
-    else
-      echo -e "  ${YELLOW}-${NC} airdrop runner missing (scripts/airdrop-initial-qntm.js) - skipped"
-    fi ;;
-esac
+# 8b) Initial QNTM airdrop on deploy - REMOVED (by design).
+#     QNTM rewards are now EVENT-DRIVEN (services/rewards.js): a user receives
+#     QNTM the moment they REGISTER, upgrade to PRO, or become a CREATOR - not on
+#     update. Deploys therefore never move tokens. The one-time backfill runner
+#     remains available to run BY HAND if you ever need to top up pre-existing
+#     accounts:
+#       cd /var/www/drfx-quantum && node scripts/airdrop-initial-qntm.js            # dry run
+#       cd /var/www/drfx-quantum && node scripts/airdrop-initial-qntm.js --execute  # grant
 
 echo ""
 echo -e "${GREEN}${BOLD}  Update complete.${NC}"

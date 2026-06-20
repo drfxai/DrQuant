@@ -26,6 +26,7 @@ const router = express.Router();
 const { requirePermission, can } = require("../middleware/permissions");
 const { marketplacePay } = require("../qntm-ledger/src/economy/phase1");
 const decimal = require("../qntm-ledger/src/decimal");
+const rewards = require("../services/rewards");
 
 // Same guard as the rest of the API; re-checks the DB (role/blocked) each call.
 router.use((req, res, next) => req.app.get("authMiddleware")(req, res, next));
@@ -612,6 +613,9 @@ router.put("/profile", async (req, res) => {
                   sales_count, rating_avg, rating_count`,
       [me, headline, cover_image, store_kind, founded_year]
     );
+    // Event-driven reward: opening a store makes the user a creator -> grant the
+    // creator bonus (idempotent, once per user; non-blocking).
+    await rewards.grantCreatorReward(me);
     res.json({ creator: shapeCreator(u, { me }) });
   } catch (e) {
     console.error("[market] update profile:", e.message);
@@ -709,7 +713,8 @@ router.post("/products", async (req, res) => {
   if (!name) return res.status(400).json({ error: "Name is required" });
 
   try {
-    await pool.query("UPDATE users SET is_creator = TRUE WHERE id=$1 AND is_creator = FALSE", [me]);
+    const becameCreator = await pool.query("UPDATE users SET is_creator = TRUE WHERE id=$1 AND is_creator = FALSE", [me]);
+    if (becameCreator.rowCount === 1) await rewards.grantCreatorReward(me); // first time as creator -> grant bonus (non-blocking)
     const { rows: [p] } = await pool.query(
       `INSERT INTO products (owner_id, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,

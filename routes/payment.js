@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const router = express.Router();
 const { joinProChannels, leaveProChannels } = require("../services/pro");
+const rewards = require("../services/rewards");
 const IPN_SECRET = process.env.NOWPAYMENTS_IPN_SECRET;
 const NP_API_KEY = process.env.NOWPAYMENTS_API_KEY;
 const DAYS = 30, PRICE = 56;
@@ -57,6 +58,9 @@ router.post("/webhook", express.raw({ type: "application/json" }), async (req, r
       await pool.query("UPDATE users SET subscription_status='active',subscription_expiry=$1 WHERE id=$2", [ne, userId]);
       // Active subscriber -> auto-join every VIP (pro-only) channel.
       await joinProChannels(pool, userId);
+      // Event-driven reward: the first time this user becomes Pro, grant the pro
+      // bonus (idempotent; non-blocking — never affects the webhook outcome).
+      await rewards.grantProReward(userId);
     }
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: "Webhook failed" }); }

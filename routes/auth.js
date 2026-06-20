@@ -5,6 +5,7 @@ const router = express.Router();
 const { joinProChannels, leaveProChannels } = require("../services/pro");
 const crypto = require("crypto");
 const { smtpConfigured, sendOtpEmail } = require("../services/email");
+const rewards = require("../services/rewards");
 
 // Shared: create the real user account + AI welcome DM + default/VIP channel
 // memberships, then return a signed token. Used by /verify (after the emailed
@@ -31,6 +32,9 @@ async function createUserAccount(pool, JWT_SECRET, em, name, passwordHash) {
   } catch (e) { console.error("Default channel join:", e.message); }
   // VIP (pro-only) channels are visible to everyone too (gated on open, see routes/chats.js).
   await joinProChannels(pool, u.id);
+  // Event-driven reward: a brand-new account receives its signup QNTM the moment
+  // it is created (idempotent; non-blocking — never fails the registration).
+  await rewards.grantSignupReward(u.id);
   const token = jwt.sign({ id: u.id, email: u.email, role: u.role }, JWT_SECRET, { expiresIn: "30d" });
   return { token, user: u };
 }
