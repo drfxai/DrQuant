@@ -68,14 +68,17 @@
       "@keyframes dqaPulse{0%{box-shadow:0 0 0 0 rgba(52,210,122,.5)}70%{box-shadow:0 0 0 7px rgba(52,210,122,0)}100%{box-shadow:0 0 0 0 rgba(52,210,122,0)}}",
       ".dqa-spin{animation:dqaSpin 1s linear infinite}",
       /* topbar */
-      ".dqa-bar{display:flex;align-items:center;gap:11px;padding:calc(var(--sat,0px) + 11px) 16px 11px;background:var(--dqa-card);border-bottom:1px solid var(--dqa-bd);flex-shrink:0}",
+      ".dqa-bar{display:flex;align-items:center;gap:11px;flex-wrap:wrap;padding:calc(var(--sat,0px) + 11px) 16px 11px;background:var(--dqa-card);border-bottom:1px solid var(--dqa-bd);flex-shrink:0}",
+      ".dqa-id{display:flex;align-items:center;gap:10px;flex:0 1 auto;min-width:0;overflow:hidden}",
+      ".dqa-brand{flex:0 1 auto;min-width:0;overflow:hidden}",
+      ".dqa-tools{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-left:auto}",
+      ".dqa-win{display:flex;align-items:center;gap:8px;flex:0 0 auto}",
       ".dqa-logo{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex-shrink:0;background:linear-gradient(135deg,#1f8bff,#2f6bff);box-shadow:0 6px 16px rgba(28,132,255,.42)}",
       ".dqa-logo svg{width:20px;height:20px}",
-      ".dqa-ttl{font-size:16px;font-weight:800;line-height:1.05;white-space:nowrap}",
-      ".dqa-sub{font-size:11px;color:var(--dqa-t3);font-weight:500;margin-top:2px;white-space:nowrap}",
-      ".dqa-secure{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:9px;background:rgba(52,211,122,.12);border:1px solid rgba(52,211,122,.32);color:#34d27a;font-size:10px;font-weight:800;letter-spacing:.8px;white-space:nowrap}",
+      ".dqa-ttl{font-size:16px;font-weight:800;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".dqa-sub{font-size:11px;color:var(--dqa-t3);font-weight:500;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      ".dqa-secure{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:9px;background:rgba(52,211,122,.12);border:1px solid rgba(52,211,122,.32);color:#34d27a;font-size:10px;font-weight:800;letter-spacing:.8px;white-space:nowrap;flex-shrink:0}",
       ".dqa-secure svg{width:12px;height:12px}",
-      ".dqa-sp{flex:1}",
       ".dqa-chip{display:flex;align-items:center;gap:9px;padding:7px 12px;border-radius:13px;background:var(--dqa-card);border:1px solid var(--dqa-bl);cursor:pointer;flex-shrink:0;transition:.15s}",
       ".dqa-chip:hover{border-color:var(--dqa-pri)}",
       ".dqa-chip .wi{width:24px;height:24px;color:var(--dqa-pri);flex-shrink:0}",
@@ -194,6 +197,12 @@
       ".dqa-kpis{grid-template-columns:repeat(3,1fr)}",
       ".dqa-ulist{max-height:62vh}",
       "}",
+      "@media (max-width:640px){",
+      ".dqa-id{flex:1 1 0%;order:0;overflow:visible}",
+      ".dqa-win{order:1;flex:0 0 auto}",
+      ".dqa-tools{order:2;flex:1 1 100%;margin-left:0}",
+      ".dqa-chip{flex:1 1 auto;min-width:0;justify-content:flex-start}",
+      "}",
       "@media (max-width:560px){",
       ".dqa-kpis{grid-template-columns:repeat(2,1fr)}",
       ".dqa-hideS{display:none}",
@@ -247,21 +256,26 @@
 
     ov.innerHTML =
       '<div class="dqa-bar">' +
-        '<div class="dqa-logo">' + SVG.logo + '</div>' +
-        '<div style="min-width:0">' +
-          '<div class="dqa-ttl">DrFX Quant <span style="color:var(--dqa-pri)">Admin</span></div>' +
-          '<div class="dqa-sub">Control dashboard</div>' +
+        '<div class="dqa-id">' +
+          '<div class="dqa-logo">' + SVG.logo + '</div>' +
+          '<div class="dqa-brand">' +
+            '<div class="dqa-ttl">DrFX Quant <span style="color:var(--dqa-pri)">Admin</span></div>' +
+            '<div class="dqa-sub">Control dashboard</div>' +
+          '</div>' +
+          '<span class="dqa-secure dqa-hideS">' + SVG.shield + 'SECURE</span>' +
         '</div>' +
-        '<span class="dqa-secure dqa-hideS" style="margin-left:6px">' + SVG.shield + 'SECURE</span>' +
-        '<div class="dqa-sp"></div>' +
-        '<div class="dqa-chip" id="dqa-wallet" title="Open your QNTM wallet">' +
-          '<span class="wi">' + SVG.wallet + '</span>' +
-          '<div style="line-height:1.15"><div class="wl">QNTM</div><div class="wv" id="dqa-bal">' + bal0 + '</div></div>' +
+        '<div class="dqa-tools">' +
+          '<div class="dqa-chip" id="dqa-wallet" title="Open your QNTM wallet">' +
+            '<span class="wi">' + SVG.wallet + '</span>' +
+            '<div style="line-height:1.15"><div class="wl">QNTM</div><div class="wv" id="dqa-bal">' + bal0 + '</div></div>' +
+          '</div>' +
+          '<button class="dqa-ib" id="dqa-deck" title="Control Deck">' + SVG.deck + '</button>' +
+          '<button class="dqa-ib" id="dqa-gear" title="Settings">' + SVG.gear + '</button>' +
         '</div>' +
-        '<button class="dqa-ib dqa-hideS" id="dqa-deck" title="Control Deck">' + SVG.deck + '</button>' +
-        '<button class="dqa-ib dqa-hideS" id="dqa-gear" title="Settings">' + SVG.gear + '</button>' +
-        '<button class="dqa-ib" id="dqa-refresh" title="Refresh">' + SVG.refresh + '</button>' +
-        '<button class="dqa-ib cl" id="dqa-close" title="Close">' + SVG.close + '</button>' +
+        '<div class="dqa-win">' +
+          '<button class="dqa-ib" id="dqa-refresh" title="Refresh">' + SVG.refresh + '</button>' +
+          '<button class="dqa-ib cl" id="dqa-close" title="Close">' + SVG.close + '</button>' +
+        '</div>' +
       '</div>' +
       '<div class="dqa-body"><div class="dqa-grid">' +
         '<div class="dqa-kpis" id="dqa-kpis"></div>' +
