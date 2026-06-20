@@ -176,6 +176,8 @@
     <button data-view="supply"><span class="k">04</span> Treasury &amp; supply</button>
     <button data-view="orders"><span class="k">05</span> Payment orders</button>
     <button data-view="adminwallet"><span class="k">06</span> Admin wallet</button>
+    <div class="navlbl">Economy</div>
+    <button data-view="economy"><span class="k">07</span> Economy Console</button>
   </nav>
 
   <main>
@@ -282,6 +284,57 @@
         <div class="panel"><div class="ph"><h3>History</h3><button class="btn sm ghost" id="awRefresh">Refresh</button></div>
           <div class="tablewrap" id="awHist"></div></div>
       </div>
+    </section>
+    <!-- ECONOMY CONSOLE -->
+    <section class="view" id="view-economy">
+      <h1>Economy Console</h1>
+      <p class="sub">System pools, circulation and emissions - derived live from the ledger. Grant, reclaim and rebalance pools.</p>
+      <div id="ecWarnings"></div>
+      <h2>System pools</h2>
+      <div id="ecPools" class="grid cards"></div>
+      <h2>Circulation</h2>
+      <div id="ecCirc" class="grid cards"></div>
+      <h2>Emissions</h2>
+      <div id="ecEmis" class="grid cards"></div>
+
+      <h2>Operations</h2>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px">
+        <div class="panel"><div class="ph"><h3>Grant from reward_pool</h3><span class="ro-badge">high-risk</span></div><div class="pb">
+          <p class="muted" style="margin-top:0;font-size:12.5px">Moves issued QNTM from the reward_pool to a user. Never mints.</p>
+          <label class="f"><span>User id</span><input id="ecGrantUser" class="mono" placeholder="recipient user id"></label>
+          <label class="f"><span>Amount (QNTM)</span><input id="ecGrantAmt" class="mono" placeholder="e.g. 100"></label>
+          <label class="f"><span>Reason</span><input id="ecGrantReason" placeholder="why you're granting"></label>
+          <button class="btn primary" id="ecGrantBtn">Grant from pool</button>
+        </div></div>
+        <div class="panel"><div class="ph"><h3>Reclaim to reward_pool</h3><span class="ro-badge">high-risk</span></div><div class="pb">
+          <p class="muted" style="margin-top:0;font-size:12.5px">Pulls QNTM from a user's available balance back into the reward_pool.</p>
+          <label class="f"><span>User id</span><input id="ecReclUser" class="mono" placeholder="from user id"></label>
+          <label class="f"><span>Amount (QNTM)</span><input id="ecReclAmt" class="mono" placeholder="e.g. 100"></label>
+          <label class="f"><span>Reason</span><input id="ecReclReason" placeholder="why you're reclaiming"></label>
+          <button class="btn danger" id="ecReclBtn">Reclaim to pool</button>
+        </div></div>
+      </div>
+      <div class="panel" style="margin-top:14px"><div class="ph"><h3>Transfer between pools</h3><span class="ro-badge">high-risk</span></div><div class="pb">
+        <p class="muted" style="margin-top:0;font-size:12.5px">Permanently shifts allocation between system pools (treasury, reward_pool, ecosystem, community_reserve).</p>
+        <div class="row">
+          <label class="f"><span>From pool</span><select id="ecXFrom"><option>treasury</option><option>reward_pool</option><option>ecosystem</option><option>community_reserve</option></select></label>
+          <label class="f"><span>To pool</span><select id="ecXTo"><option>reward_pool</option><option>treasury</option><option>ecosystem</option><option>community_reserve</option></select></label>
+          <label class="f"><span>Amount (QNTM)</span><input id="ecXAmt" class="mono" placeholder="e.g. 1000"></label>
+          <label class="f" style="max-width:150px"><span>&nbsp;</span><button class="btn primary" id="ecXBtn">Transfer pool</button></label>
+        </div>
+        <label class="f" style="margin-top:6px"><span>Reason</span><input id="ecXReason" placeholder="why you're rebalancing"></label>
+      </div></div>
+
+      <h2>Recent economy movements</h2>
+      <div class="panel"><div class="pb">
+        <div class="row">
+          <label class="f"><span>Type</span><input id="ecLxType" class="mono" placeholder="e.g. admin_manual_grant"></label>
+          <label class="f"><span>Wallet type</span><input id="ecLxWallet" class="mono" placeholder="e.g. reward_pool"></label>
+          <label class="f"><span>User id</span><input id="ecLxUser" class="mono" placeholder="user id"></label>
+          <label class="f" style="max-width:120px"><span>&nbsp;</span><button class="btn primary" id="ecLxRun">Search</button></label>
+        </div>
+      </div></div>
+      <div class="panel" style="margin-top:14px"><div class="tablewrap" id="ecLxResults"></div></div>
     </section>
   </main>
 </div>
@@ -478,7 +531,8 @@
       }).catch(apiErr);
     },
     orders: function(){ runOrders(); },
-    adminwallet: function(){ loadAdminWallet(); }
+    adminwallet: function(){ loadAdminWallet(); },
+    economy: function(){ loadEconomy(); }
   };
   function load(view){ if(loaders[view]) loaders[view](); }
   function apiErr(err){ setConn(false); if(err.status===401||err.status===403){ toast("Not authorized","Set a valid admin token in Connection.","err"); } else { toast("Request failed", err.message, "err"); } }
@@ -631,6 +685,106 @@
         .then(function(){ $("#awAmt").value=""; loadAdminWallet(); return {toast:{t:"Funded",m:amt+" QNTM"}}; }); } });
   });
   $("#awRefresh").addEventListener("click",loadAdminWallet);
+
+  // ---- economy console ----
+  function ecAmt(a){ return a && a.qntm!=null ? a.qntm : (a!=null?a:"-"); }
+  function ecStatusTag(s){
+    var cls="tag";
+    if(s==="healthy"||s==="active") cls="tag completed";
+    else if(s==="low"||s==="not_configured") cls="tag pending";
+    else if(s==="critical"||s==="frozen"||s==="closed") cls="tag failed";
+    var t=el("span",{class:cls}); t.textContent=s||"-"; return t;
+  }
+  function ecPoolCard(name, w){
+    var c=el("div",{class:"readout"+(name==="reward_pool"?" accent":"")});
+    c.appendChild(el("div",{class:"lbl"},name));
+    if(!w || w.configured===false){ var nv=el("div",{class:"val muted"}); nv.textContent="not configured"; c.appendChild(nv); return c; }
+    var v=el("div",{class:"val"}); v.appendChild(document.createTextNode(fmt(ecAmt(w.balance)))); v.appendChild(el("span",{class:"unit"},"QNTM")); c.appendChild(v);
+    var meta=el("div",{style:"margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"});
+    meta.appendChild(ecStatusTag(w.status));
+    if(w.percentRemaining!=null) meta.appendChild(el("span",{class:"pill"}, w.percentRemaining+"%"));
+    c.appendChild(meta); return c;
+  }
+  function loadEconomy(){
+    api("/api/qntm/admin/economy/summary").then(function(d){
+      setConn(true);
+      var wn=$("#ecWarnings"); wn.innerHTML="";
+      var warns=(d.health&&d.health.warnings)||[];
+      if(warns.length){ var nb=el("div",{class:"note warnnote"}); nb.appendChild(el("b",{},"Warnings: ")); nb.appendChild(document.createTextNode(warns.join("  \u00b7  "))); wn.appendChild(nb); }
+      var sw=d.systemWallets||{}, pools=$("#ecPools"); pools.innerHTML="";
+      var order=["reward_pool","treasury","ecosystem","team_vesting","community_reserve","burn","escrow","fee","staking","tournament_pool","subscription_settlement","genesis"], shown={};
+      order.forEach(function(k){ if(sw[k]){ pools.appendChild(ecPoolCard(k,sw[k])); shown[k]=1; } });
+      Object.keys(sw).forEach(function(k){ if(!shown[k]) pools.appendChild(ecPoolCard(k,sw[k])); });
+      var ci=d.circulation||{}, cc=$("#ecCirc"); cc.innerHTML="";
+      cc.appendChild(card("Held by users", ecAmt(ci.userBalancesTotal), "QNTM", true));
+      cc.appendChild(card("From reward_pool", ecAmt(ci.distributedFromRewardPool), "QNTM"));
+      cc.appendChild(card("Treasury collected", ecAmt(ci.treasuryCollected), "QNTM"));
+      cc.appendChild(card("Marketplace volume", ecAmt(ci.marketplaceVolume), "QNTM"));
+      var em=d.emissions||{}, ee=$("#ecEmis"); ee.innerHTML="";
+      ee.appendChild(card("Signup rewards", ecAmt(em.signupRewardsTotal), "QNTM"));
+      ee.appendChild(card("PRO rewards", ecAmt(em.proRewardsTotal), "QNTM"));
+      ee.appendChild(card("Creator rewards", ecAmt(em.creatorRewardsTotal), "QNTM"));
+      ee.appendChild(card("Airdrops", ecAmt(em.airdropsTotal), "QNTM", true));
+      ee.appendChild(card("Manual grants", ecAmt(em.manualGrantsTotal), "QNTM"));
+      ee.appendChild(card("Reclaimed", ecAmt(em.reclaimedTotal), "QNTM"));
+    }).catch(apiErr);
+  }
+
+  function ecMoveTable(rows){
+    if(!rows||!rows.length) return el("div",{class:"empty"},"No movements.");
+    var tbl=el("table"), th=el("thead");
+    th.innerHTML="<tr><th>ID</th><th>Type</th><th>Amount</th><th>Source</th><th>Destination</th><th>Actor</th><th>When</th></tr>"; tbl.appendChild(th);
+    var tb=el("tbody");
+    rows.forEach(function(m){
+      var src=m.source; if(src&&src.length!=null) src=src.length?src[0]:null;
+      var dst=(m.destinations&&m.destinations.length)?m.destinations[0]:null;
+      var st=src?(src.walletType+(src.ownerId?(" #"+src.ownerId):"")):"-";
+      var dt=dst?(dst.walletType+(dst.ownerId?(" #"+dst.ownerId):"")):"-";
+      if(m.destinations&&m.destinations.length>1) dt+=" (+"+(m.destinations.length-1)+")";
+      var tr=el("tr",{class:"clickable"});
+      tr.innerHTML="<td class='mono'>"+esc(shortId(m.publicId))+"</td><td><span class='pill'>"+esc(m.type)+"</span></td>"+
+        "<td class='num'>"+esc(fmt(ecAmt(m.amount)))+"</td><td class='muted'>"+esc(st)+"</td><td class='muted'>"+esc(dt)+"</td>"+
+        "<td class='mono muted'>"+esc(m.actorId||"-")+"</td><td class='muted'>"+esc(when(m.createdAt))+"</td>";
+      tr.addEventListener("click",function(){ openTxn(m.publicId); });
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); return tbl;
+  }
+  function runEcLedger(){
+    var qs=[];
+    if($("#ecLxType").value.trim()) qs.push("type="+encodeURIComponent($("#ecLxType").value.trim()));
+    if($("#ecLxWallet").value.trim()) qs.push("wallet="+encodeURIComponent($("#ecLxWallet").value.trim()));
+    if($("#ecLxUser").value.trim()) qs.push("userId="+encodeURIComponent($("#ecLxUser").value.trim()));
+    var host=$("#ecLxResults"); emptyRow(host,"Searching...");
+    api("/api/qntm/admin/economy/ledger"+(qs.length?("?"+qs.join("&")):"")).then(function(d){
+      setConn(true); host.innerHTML=""; host.appendChild(ecMoveTable(d.movements));
+    }).catch(function(e){ apiErr(e); emptyRow(host,"Could not load."); });
+  }
+  function ecKey(p){ return p+"-"+Date.now()+"-"+Math.random().toString(36).slice(2,8); }
+  $("#ecLxRun").addEventListener("click",runEcLedger);
+
+  $("#ecGrantBtn").addEventListener("click",function(){
+    var u=$("#ecGrantUser").value.trim(), a=$("#ecGrantAmt").value.trim(), r=$("#ecGrantReason").value.trim();
+    if(!u||!a){ toast("User id and amount required"); return; }
+    confirmAction({ title:"Grant "+a+" QNTM from reward_pool", effects:[{k:"From",v:"reward_pool"},{k:"To user",v:u},{k:"Amount",v:a+" QNTM"}],
+      run:function(){ return api("/api/qntm/admin/economy/grant",{method:"POST",body:{toUserId:u,amount:a,reason:r||"admin grant"},idempotencyKey:ecKey("ec-grant")})
+        .then(function(){ $("#ecGrantAmt").value=""; loadEconomy(); return {toast:{t:"Granted",m:a+" QNTM to "+shortId(u)}}; }); } });
+  });
+  $("#ecReclBtn").addEventListener("click",function(){
+    var u=$("#ecReclUser").value.trim(), a=$("#ecReclAmt").value.trim(), r=$("#ecReclReason").value.trim();
+    if(!u||!a){ toast("User id and amount required"); return; }
+    confirmAction({ title:"Reclaim "+a+" QNTM to reward_pool", effects:[{k:"From user",v:u},{k:"To",v:"reward_pool"},{k:"Amount",v:a+" QNTM"}],
+      run:function(){ return api("/api/qntm/admin/economy/reclaim",{method:"POST",body:{fromUserId:u,amount:a,reason:r||"admin reclaim"},idempotencyKey:ecKey("ec-reclaim")})
+        .then(function(){ $("#ecReclAmt").value=""; loadEconomy(); return {toast:{t:"Reclaimed",m:a+" QNTM from "+shortId(u)}}; }); } });
+  });
+  $("#ecXBtn").addEventListener("click",function(){
+    var f=$("#ecXFrom").value, t=$("#ecXTo").value, a=$("#ecXAmt").value.trim(), r=$("#ecXReason").value.trim();
+    if(!a){ toast("Enter an amount"); return; }
+    if(f===t){ toast("Pools must differ"); return; }
+    confirmAction({ title:"Transfer "+a+" QNTM "+f+" -> "+t, effects:[{k:"From pool",v:f},{k:"To pool",v:t},{k:"Amount",v:a+" QNTM"}],
+      run:function(){ return api("/api/qntm/admin/economy/transfer-pool",{method:"POST",body:{fromPool:f,toPool:t,amount:a,reason:r||"pool rebalance"},idempotencyKey:ecKey("ec-xfer")})
+        .then(function(){ $("#ecXAmt").value=""; loadEconomy(); return {toast:{t:"Transferred",m:a+" QNTM "+f+" -> "+t}}; }); } });
+  });
 
   // ---------- boot ----------
   if(!cfg.token){ openSet(); }   // first run: ask for connection
