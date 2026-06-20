@@ -777,10 +777,10 @@ router.delete("/products/:id", async (req, res) => {
   }
 });
 
-// POST /api/market/products/:id/buy  → record a purchase (LICENSE STUB)
-// IMPORTANT: this does NOT move QNTM funds. It records intent + a license so the
-// rest of the UX (My Purchases / download gating) works. Wire the real QNTM /
-// NowPayments settlement here later (deduct buyer, credit seller, set status).
+// POST /api/market/products/:id/buy  → buy a product (settles QNTM + records license)
+// Settles the QNTM payment via marketplacePay INSIDE this transaction, so the
+// balance movements and the license row commit together (atomic). Free products
+// (price 0) skip settlement; insufficient balance returns 402 to the caller.
 router.post("/products/:id/buy", async (req, res) => {
   const pool = req.app.get("pool");
   const me = req.user.id;

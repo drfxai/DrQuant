@@ -23,7 +23,8 @@
  * of that date). Tier amounts are configurable in AMOUNT below.
  *
  * Transaction type: initial_qntm_airdrop (added to the txn_type enum here,
- * idempotently, before any grant is posted).
+ * idempotently, before any grant is posted). Each grant runs in its own DB
+ * transaction; a single failure is logged and does not stop the run.
  */
 require('dotenv').config();
 
@@ -76,6 +77,7 @@ function fmt(s) {
     console.log('QNTM initial airdrop — ' + (EXECUTE ? 'EXECUTE' : 'DRY RUN') + '\n');
 
     // 1) Ensure ledger schema + system/allocation wallets exist (idempotent).
+    //    Guarantees the schema, the system wallets, and the reward_pool wallet.
     await setupQntmSchema();
 
     // 2) Ensure the airdrop transaction type exists. ALTER TYPE ... ADD VALUE
@@ -140,17 +142,17 @@ function fmt(s) {
       pending.push(u);
     }
 
-    // 7) reward_pool balance + projection.
+    // 7) reward_pool balance + projection. poolBalance is the "before" snapshot.
     const poolId = await wallets.systemWalletId(FUNDING_POOL, 'QNTM');
     const poolBalance = (await wallets.getWallet(poolId)).available_balance;
     const projected = decimal.sub(poolBalance, pendingReq);
 
-    // 8) Report.
+    // 8) Report (dry run prints exactly this).
     line();
     console.log('Eligible accounts (one grant each, highest tier wins)');
-    console.log('  creator x ' + fmt(AMOUNT.creator) + ' : ' + totalBy.creator + ' (pending ' + pendingBy.creator + ')');
-    console.log('  pro     x ' + fmt(AMOUNT.pro) + '  : ' + totalBy.pro + ' (pending ' + pendingBy.pro + ')');
-    console.log('  early   x ' + fmt(AMOUNT.early) + '  : ' + totalBy.early + ' (pending ' + pendingBy.early + ')');
+    console.log('  early   users x ' + fmt(AMOUNT.early) + '  : ' + totalBy.early + ' (pending ' + pendingBy.early + ')');
+    console.log('  pro     users x ' + fmt(AMOUNT.pro) + '  : ' + totalBy.pro + ' (pending ' + pendingBy.pro + ')');
+    console.log('  creator users x ' + fmt(AMOUNT.creator) + ' : ' + totalBy.creator + ' (pending ' + pendingBy.creator + ')');
     console.log('  ------');
     console.log('  total eligible accounts : ' + eligible.length);
     console.log('  already airdropped      : ' + (eligible.length - pending.length));
@@ -161,7 +163,7 @@ function fmt(s) {
     console.log('  remaining this run      : ' + fmt(pendingReq) + ' QNTM');
     line();
     console.log('reward_pool funding');
-    console.log('  balance before          : ' + fmt(poolBalance) + ' QNTM');
+    console.log('  balance now             : ' + fmt(poolBalance) + ' QNTM');
     console.log('  balance after (projected): ' + fmt(projected) + ' QNTM');
     line();
 
@@ -196,7 +198,9 @@ function fmt(s) {
       process.exit(0);
     }
 
-    // 10) Execute: one atomic, idempotent grant per account.
+    // 10) Execute: one atomic, idempotent grant per account. Tally only AFTER a
+    //     transaction has actually committed (so a COMMIT failure never
+    //     overcounts). A per-user failure is logged and the run continues.
     console.log('Granting ' + pending.length + ' airdrops from ' + FUNDING_POOL + '...');
     let granted = 0;
     let skipped = 0;
@@ -206,11 +210,11 @@ function fmt(s) {
       const key = KEY_PREFIX + u.id;
       const amount = AMOUNT[u.category];
       try {
-        await wallets.withTransaction(async (cx) => {
+        const outcome = await wallets.withTransaction(async (cx) => {
           // Defensive re-check inside the transaction. postTransaction is also
           // idempotent on the key, so this is belt-and-suspenders.
           const seen = await cx.query('SELECT 1 FROM transactions WHERE idempotency_key=$1', [key]);
-          if (seen.rowCount) { skipped += 1; return; }
+          if (seen.rowCount) return 'skipped';
           const fromId = await wallets.systemWalletId(FUNDING_POOL, 'QNTM', cx);
           const to = await wallets.getOrCreateWallet('user', u.id, 'personal', 'QNTM', cx);
           await postTransaction({
@@ -232,9 +236,14 @@ function fmt(s) {
               idempotencyKey: key,
             },
           }, cx);
+          return 'granted';
+        });
+        if (outcome === 'granted') {
           granted += 1;
           distributed = decimal.add(distributed, amount);
-        });
+        } else {
+          skipped += 1;
+        }
       } catch (e) {
         failed += 1;
         console.error('  FAILED user #' + u.id + ' (' + u.category + '): ' + e.message);
@@ -245,17 +254,18 @@ function fmt(s) {
 
     const poolAfter = (await wallets.getWallet(poolId)).available_balance;
 
+    // 11) Execution summary.
     line();
     console.log('Execution summary');
     console.log('  total recipients      : ' + granted);
     console.log('  distributed QNTM      : ' + fmt(distributed) + ' QNTM');
     console.log('  skipped (already done): ' + skipped);
-    if (failed) console.log('  failed                : ' + failed);
+    console.log('  failed                : ' + failed);
     console.log('  reward_pool before    : ' + fmt(poolBalance) + ' QNTM');
     console.log('  reward_pool after     : ' + fmt(poolAfter) + ' QNTM');
     line();
 
-    // 11) Verification.
+    // 12) Verification — independent recount straight from the ledger.
     const { rows: vr } = await pool.query(
       "SELECT COUNT(*)::int AS n, COALESCE(SUM(amount),0)::text AS total FROM transactions WHERE type=$1",
       [TXN_TYPE]
@@ -266,8 +276,8 @@ function fmt(s) {
       [KEY_PREFIX + '%']
     );
     console.log('Verification');
-    console.log('  airdrop transactions (all-time): ' + vr[0].n + ' totalling ' + fmt(vr[0].total) + ' QNTM');
-    console.log('  duplicate idempotency keys     : ' + dup.length + ' (must be 0)');
+    console.log('  airdrop transactions (all-time) : ' + vr[0].n + ' totalling ' + fmt(vr[0].total) + ' QNTM');
+    console.log('  duplicate grants                : ' + dup.length + ' (must be 0)');
     line();
 
     process.exit(failed ? 1 : 0);

@@ -87,6 +87,12 @@ async function grantFromPool({ pool = 'reward_pool', toUserId, amount, actorId, 
  * @param {string|number} creatorUserId   credited in their PERSONAL wallet
  * @param {string} amount        decimal string
  * @param {string} [productRef]  opaque product reference, stored in metadata
+ * @param {object} [client]      optional pg transaction to COMPOSE into, so a
+ *                               caller (e.g. the Market buy flow) can settle the
+ *                               payment and record the license in ONE atomic
+ *                               transaction. Omit for a self-contained txn.
+ *                               Backward compatible: callers that pass no client
+ *                               are unaffected.
  */
 async function marketplacePay({ buyerUserId, creatorUserId, amount, productRef, actorId, idempotencyKey }, client) {
   if (!buyerUserId || !creatorUserId) throw E.Validation('buyerUserId and creatorUserId are required');
@@ -128,8 +134,8 @@ async function marketplacePay({ buyerUserId, creatorUserId, amount, productRef, 
     return { transaction: txn, split: shares, splitBps: MKT };
   };
 
-  // Compose within a caller-supplied transaction when one is given (lets a host
-  // flow settle payment + its own writes atomically); otherwise open our own.
+  // Compose into the caller's transaction when one is supplied; otherwise run in
+  // our own. This is what lets the Market buy flow keep payment + license atomic.
   return client ? run(client) : wallets.withTransaction(run);
 }
 
