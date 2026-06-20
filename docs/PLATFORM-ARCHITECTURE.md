@@ -1,4 +1,4 @@
-# DrFX Quantum — Platform Architecture & Signaling Directive
+# DrFX Quant — Platform Architecture & Signaling Directive
 
 Status: design + implementation reference for the core messaging, TradingView
 signal channel, live-streaming (SFU), and RBAC/admin features.

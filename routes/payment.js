@@ -14,7 +14,7 @@ router.post("/create", (req, res) => {
       if (!NP_API_KEY || NP_API_KEY === "your_nowpayments_api_key_here") return res.status(500).json({ error: "Payment not configured" });
       const r = await fetch("https://api.nowpayments.io/v1/invoice", {
         method: "POST", headers: { "x-api-key": NP_API_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ price_amount: PRICE, price_currency: "usd", order_id: `drfx_${req.user.id}_${Date.now()}`, order_description: "DrFX Quantum Pro 30d", ipn_callback_url: `${req.headers.origin||"https://drfx.com"}/api/payment/webhook`, success_url: `${req.headers.origin||"https://drfx.com"}/#ok`, cancel_url: `${req.headers.origin||"https://drfx.com"}/#cancel` }),
+        body: JSON.stringify({ price_amount: PRICE, price_currency: "usd", order_id: `drfx_${req.user.id}_${Date.now()}`, order_description: "DrFX Quant Pro 30d", ipn_callback_url: `${req.headers.origin||"https://drfx.com"}/api/payment/webhook`, success_url: `${req.headers.origin||"https://drfx.com"}/#ok`, cancel_url: `${req.headers.origin||"https://drfx.com"}/#cancel` }),
       });
       const d = await r.json();
       await pool.query("INSERT INTO payments (user_id,payment_id,amount,currency,status) VALUES ($1,$2,$3,'usd','pending')", [req.user.id, d.id, PRICE]);
