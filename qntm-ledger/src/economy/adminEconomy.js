@@ -368,7 +368,26 @@ async function transferPool({ fromPool, toPool, amount, reason = null, actorId, 
   return client ? run(client) : wallets.withTransaction(run);
 }
 
+/**
+ * User inspector: a user's QNTM personal wallet (balances, straight from the
+ * wallet row) plus their recent economy movements. Read-only.
+ */
+async function userInspector(userId, { limit = 50 } = {}, client = pool) {
+  if (!userId) throw E.Validation('userId is required');
+  const w = await wallets.getUserWallet(userId, 'user', QNTM, client);
+  const wallet = w ? {
+    walletId: w.id, status: w.status,
+    available: amt(w.available_balance),
+    pending: amt(w.pending_balance),
+    locked: amt(w.locked_balance),
+    total: amt(w.total_balance),
+  } : null;
+  const movements = await economyLedger(
+    { userId: String(userId), limit: Math.min(Number(limit) || 50, 200) }, client);
+  return { userId: String(userId), wallet, movements };
+}
+
 module.exports = {
   economySummary, economyLedger, adminGrant, adminReclaim, transferPool,
-  TRANSFERABLE_POOLS,
+  userInspector, TRANSFERABLE_POOLS,
 };

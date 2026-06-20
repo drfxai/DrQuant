@@ -101,4 +101,9 @@ router.post('/transfer-pool', requireIdemKey, asyncHandler(async (req, res) => {
   res.status(201).json({ ok: true, ...result });
 }));
 
+// GET /user/:id -- per-user wallet inspector: balances + recent movements.
+router.get('/user/:id', asyncHandler(async (req, res) => {
+  res.json(await econ.userInspector(req.params.id, { limit: Number(req.query.limit) || 50 }));
+}));
+
 module.exports = router;

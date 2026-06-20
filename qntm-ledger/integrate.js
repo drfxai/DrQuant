@@ -4,6 +4,7 @@ const wallets = require('./src/wallets');
 const { ensureQntmSchema, ensureEconomyWallets } = require('./src/economy/schema');
 const adminEconomyRouter = require('./src/routes/admin.economy.routes');
 const adminEconomyConsoleRouter = require('./src/routes/admin.economy.console.routes');
+const adminPaymentsRouter = require('./src/routes/admin.payments.routes');
 const walletRouter = require('./src/routes/wallet.routes');
 const marketplacePayRouter = require('./src/routes/marketplace.pay.routes');
 const { errorHandler } = require('./src/routes/_helpers');
@@ -58,6 +59,9 @@ function mountQntmEconomy(app, opts) {
   // MORE SPECIFIC /admin/economy path BEFORE the general /admin router below so
   // it takes precedence for those routes.
   app.use(adminBase + '/economy', express.json(), ...adminGuards, adminEconomyConsoleRouter);
+
+  // Payment orders (NOWPayments top-ups): list / re-credit / mark-failed.
+  app.use(adminBase + '/payment-orders', express.json(), ...adminGuards, adminPaymentsRouter);
 
   // Admin economy API: overview / wallets / transactions / bootstrap / grant.
   app.use(adminBase, express.json(), ...adminGuards, adminEconomyRouter);
