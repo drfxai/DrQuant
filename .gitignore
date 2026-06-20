@@ -28,3 +28,9 @@ Thumbs.db
 
 # PM2
 ecosystem.config.js
+
+# Backups & dumps (DB dumps, .env backups, migration/rename artifacts)
+*.bak
+.env.bak*
+*.dump
+*.sql.gz

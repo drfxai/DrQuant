@@ -1,0 +1,2 @@
+# Keeps the uploads/ directory in version control.
+# Actual user-uploaded files in here are gitignored (see .gitignore).
