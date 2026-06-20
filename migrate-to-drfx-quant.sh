@@ -52,7 +52,10 @@ CUR_DB=""; if db_exists "$NEW_DB"; then CUR_DB="$NEW_DB"; elif db_exists "$OLD_D
 # ---- 0) BACKUP first (always, before any change) ---------------------------
 TS="$(date +%Y%m%d-%H%M%S)"; BK="/root/drfx-rename-backup-$TS"; mkdir -p "$BK"
 echo -e "${CYAN}> Backing up database '$CUR_DB' + .env to $BK ...${NC}"
-sudo -u postgres pg_dump -Fc -d "$CUR_DB" -f "$BK/$CUR_DB.dump"
+# NOTE: redirect with '>' (the file is opened by THIS root shell) rather than
+# pg_dump -f (which makes the postgres user open it) — /root isn't traversable
+# by postgres, so -f fails with EACCES. With '>' pg_dump just writes to the fd.
+sudo -u postgres pg_dump -Fc -d "$CUR_DB" > "$BK/$CUR_DB.dump"
 [ -f "$APP_DIR/.env" ] && cp "$APP_DIR/.env" "$BK/env.backup" || true
 echo -e "  ${GREEN}OK${NC} backup saved"
 
