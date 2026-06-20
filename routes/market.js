@@ -24,6 +24,8 @@
 const express = require("express");
 const router = express.Router();
 const { requirePermission, can } = require("../middleware/permissions");
+const { marketplacePay } = require("../qntm-ledger/src/economy/phase1");
+const decimal = require("../qntm-ledger/src/decimal");
 
 // Same guard as the rest of the API; re-checks the DB (role/blocked) each call.
 router.use((req, res, next) => req.app.get("authMiddleware")(req, res, next));
@@ -794,6 +796,23 @@ router.post("/products/:id/buy", async (req, res) => {
     const existing = await client.query("SELECT id FROM product_purchases WHERE product_id=$1 AND buyer_id=$2 AND status='completed'", [id, me]);
     if (existing.rowCount) { await client.query("ROLLBACK"); return res.json({ purchased: true, already_owned: true }); }
 
+    // Settle on the QNTM ledger INSIDE this same transaction so the license row
+    // and the balance movements commit together (or roll back together). Free
+    // products (price 0) skip settlement; marketplacePay splits the amount
+    // creator/treasury/reward (70/20/10) and throws on insufficient balance.
+    let settlement = "free";
+    if (decimal.isPositive(String(p.price_qntm))) {
+      const pay = await marketplacePay({
+        buyerUserId: me,
+        creatorUserId: p.owner_id,
+        amount: String(p.price_qntm),
+        productRef: "product:" + id,
+        actorId: String(me),
+        idempotencyKey: "mkt-buy:" + id + ":" + me,
+      }, client);
+      settlement = (pay && pay.transaction && pay.transaction.public_id) || "settled";
+    }
+
     await client.query(
       "INSERT INTO product_purchases (product_id, buyer_id, seller_id, price_qntm, status) VALUES ($1,$2,$3,$4,'completed')",
       [id, me, p.owner_id, p.price_qntm]
@@ -801,9 +820,16 @@ router.post("/products/:id/buy", async (req, res) => {
     await client.query("UPDATE products SET sales_count = sales_count + 1 WHERE id=$1", [id]);
     await client.query("UPDATE users SET sales_count = sales_count + 1 WHERE id=$1", [p.owner_id]);
     await client.query("COMMIT");
-    res.json({ purchased: true, settlement: "stub", note: "License recorded. QNTM settlement not yet wired." });
+    res.json({ purchased: true, settlement });
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
+    // Insufficient QNTM (or other ledger error) -> surface a clean, mapped status.
+    if (e && e.code === "insufficient_funds") {
+      return res.status(402).json({ error: "Insufficient QNTM balance to buy this product.", code: e.code });
+    }
+    if (e && e.status && e.code) {
+      return res.status(e.status).json({ error: e.message, code: e.code });
+    }
     console.error("[market] buy:", e.message);
     res.status(500).json({ error: "Could not complete purchase" });
   } finally {

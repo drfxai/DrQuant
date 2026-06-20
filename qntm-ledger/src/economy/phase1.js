@@ -88,7 +88,7 @@ async function grantFromPool({ pool = 'reward_pool', toUserId, amount, actorId, 
  * @param {string} amount        decimal string
  * @param {string} [productRef]  opaque product reference, stored in metadata
  */
-async function marketplacePay({ buyerUserId, creatorUserId, amount, productRef, actorId, idempotencyKey }) {
+async function marketplacePay({ buyerUserId, creatorUserId, amount, productRef, actorId, idempotencyKey }, client) {
   if (!buyerUserId || !creatorUserId) throw E.Validation('buyerUserId and creatorUserId are required');
   if (String(buyerUserId) === String(creatorUserId)) throw E.Validation('cannot purchase from yourself');
   if (!decimal.isPositive(amount)) throw E.InvalidAmount();
@@ -96,7 +96,7 @@ async function marketplacePay({ buyerUserId, creatorUserId, amount, productRef, 
   // Exact, lossless split; creator absorbs the indivisible remainder.
   const shares = splitAmount(amount, MKT, 'creator'); // { creator, platform, reward }
 
-  return wallets.withTransaction(async (cx) => {
+  const run = async (cx) => {
     const buyer = await wallets.getOrCreateWallet('user', buyerUserId, 'personal', 'QNTM', cx);
     const creator = await wallets.getOrCreateWallet('user', creatorUserId, 'personal', 'QNTM', cx);
     const treasuryId = await wallets.systemWalletId('treasury', 'QNTM', cx);
@@ -126,7 +126,11 @@ async function marketplacePay({ buyerUserId, creatorUserId, amount, productRef, 
       metadata: { buyerId: String(buyerUserId), creatorId: String(creatorUserId), amount, split: shares },
     }, cx);
     return { transaction: txn, split: shares, splitBps: MKT };
-  });
+  };
+
+  // Compose within a caller-supplied transaction when one is given (lets a host
+  // flow settle payment + its own writes atomically); otherwise open our own.
+  return client ? run(client) : wallets.withTransaction(run);
 }
 
 module.exports = { grantFromPool, marketplacePay, GRANTABLE_POOLS, MKT };

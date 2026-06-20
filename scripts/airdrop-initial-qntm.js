@@ -201,6 +201,7 @@ function fmt(s) {
     let granted = 0;
     let skipped = 0;
     let failed = 0;
+    let distributed = '0';
     for (const u of pending) {
       const key = KEY_PREFIX + u.id;
       const amount = AMOUNT[u.category];
@@ -232,6 +233,7 @@ function fmt(s) {
             },
           }, cx);
           granted += 1;
+          distributed = decimal.add(distributed, amount);
         });
       } catch (e) {
         failed += 1;
@@ -241,8 +243,17 @@ function fmt(s) {
       if (processed % 100 === 0) console.log('  ...' + processed + '/' + pending.length);
     }
 
+    const poolAfter = (await wallets.getWallet(poolId)).available_balance;
+
     line();
-    console.log('Airdrop finished: granted=' + granted + ' skipped=' + skipped + ' failed=' + failed);
+    console.log('Execution summary');
+    console.log('  total recipients      : ' + granted);
+    console.log('  distributed QNTM      : ' + fmt(distributed) + ' QNTM');
+    console.log('  skipped (already done): ' + skipped);
+    if (failed) console.log('  failed                : ' + failed);
+    console.log('  reward_pool before    : ' + fmt(poolBalance) + ' QNTM');
+    console.log('  reward_pool after     : ' + fmt(poolAfter) + ' QNTM');
+    line();
 
     // 11) Verification.
     const { rows: vr } = await pool.query(
@@ -254,11 +265,9 @@ function fmt(s) {
       'WHERE idempotency_key LIKE $1 GROUP BY idempotency_key HAVING COUNT(*) > 1',
       [KEY_PREFIX + '%']
     );
-    const poolAfter = (await wallets.getWallet(poolId)).available_balance;
     console.log('Verification');
-    console.log('  airdrop transactions  : ' + vr[0].n + ' totalling ' + fmt(vr[0].total) + ' QNTM');
-    console.log('  duplicate grants      : ' + dup.length + ' (must be 0)');
-    console.log('  reward_pool balance   : ' + fmt(poolAfter) + ' QNTM');
+    console.log('  airdrop transactions (all-time): ' + vr[0].n + ' totalling ' + fmt(vr[0].total) + ' QNTM');
+    console.log('  duplicate idempotency keys     : ' + dup.length + ' (must be 0)');
     line();
 
     process.exit(failed ? 1 : 0);
