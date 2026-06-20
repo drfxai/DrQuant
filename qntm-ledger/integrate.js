@@ -3,6 +3,8 @@ const express = require('express');
 const wallets = require('./src/wallets');
 const { ensureQntmSchema, ensureEconomyWallets } = require('./src/economy/schema');
 const adminEconomyRouter = require('./src/routes/admin.economy.routes');
+const walletRouter = require('./src/routes/wallet.routes');
+const marketplacePayRouter = require('./src/routes/marketplace.pay.routes');
 const { errorHandler } = require('./src/routes/_helpers');
 
 /**
@@ -24,18 +26,40 @@ async function setupQntmSchema() {
 }
 
 /**
- * Mount the QNTM admin economy API under `base` (default /api/qntm/admin),
- * guarded by the HOST's auth middlewares. Pass the app's authMiddleware and
- * adminMiddleware.
+ * Phase-1 scoped mount of the QNTM internal economy. Deliberately does NOT call
+ * the engine's global mountQntm() (which would also expose marketplace escrow,
+ * subscriptions, staking, tournaments, public rewards and the on-chain bridge).
+ * Only the controlled-phase surface is wired:
  *
- * The direct "buy QNTM" sale path (qntm-ledger payments/exchange) is
- * deliberately NOT mounted here: QNTM is not sold to users in this phase.
+ *   /api/qntm/admin        admin economy API + POST /grant      (auth + admin)
+ *   /api/qntm/wallets      GET /me, /me/transactions, transfer  (auth)
+ *   /api/qntm/marketplace  POST /pay (atomic split payment)     (auth)
+ *
+ * NOT mounted in this phase (no route exists regardless of any flag): external
+ * buy/sell, on-chain bridge, withdrawals, staking, tournaments, subscriptions,
+ * automatic public reward emission, and admin mint. Per-capability feature flags
+ * live in ./src/economy/flags.js.
+ *
+ * Pass the host app's authMiddleware and adminMiddleware. The latter also gates
+ * grants; substitute an economy-admin role here later without touching the
+ * financial code.
  */
 function mountQntmEconomy(app, opts) {
   opts = opts || {};
-  const base = opts.base || '/api/qntm/admin';
-  const guards = [opts.authMiddleware, opts.adminMiddleware].filter(Boolean);
-  app.use(base, express.json(), ...guards, adminEconomyRouter);
+  const root = opts.root || '/api/qntm';
+  const adminBase = opts.base || (root + '/admin');
+  const userGuards = [opts.authMiddleware].filter(Boolean);
+  const adminGuards = [opts.authMiddleware, opts.adminMiddleware].filter(Boolean);
+
+  // Admin economy API: overview / wallets / transactions / bootstrap / grant.
+  app.use(adminBase, express.json(), ...adminGuards, adminEconomyRouter);
+
+  // User wallet: balance + history + peer transfer.
+  app.use(root + '/wallets', express.json(), ...userGuards, walletRouter);
+
+  // Marketplace: atomic split payment in QNTM.
+  app.use(root + '/marketplace', express.json(), ...userGuards, marketplacePayRouter);
+
   app.use(errorHandler);
   return app;
 }

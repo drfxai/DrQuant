@@ -3,6 +3,8 @@ const { Router } = require('express');
 const { asyncHandler } = require('./_helpers');
 const overview = require('../economy/overview');
 const bootstrap = require('../economy/bootstrap');
+const phase1 = require('../economy/phase1');
+const { flagGuard } = require('../economy/flags');
 
 /**
  * admin.economy.routes.js -- QNTM economic-layer admin API (Phase 1).
@@ -47,6 +49,20 @@ router.post('/bootstrap', asyncHandler(async (req, res) => {
     }
     throw e;
   }
+}));
+
+// POST /grant -- move issued QNTM from a platform pool into a user's wallet.
+// This NEVER mints: it debits an existing pool (treasury / reward_pool /
+// ecosystem / community_reserve) and the ledger rejects any overdraw. Admin
+// guards are applied at mount; the grant feature flag gates it further.
+router.post('/grant', flagGuard('grant'), asyncHandler(async (req, res) => {
+  const { pool, toUserId, amount, reason } = req.body || {};
+  const result = await phase1.grantFromPool({
+    pool, toUserId, amount, reason,
+    actorId: req.user && req.user.id,
+    idempotencyKey: req.get('Idempotency-Key') || null,
+  });
+  res.status(201).json({ ok: true, ...result });
 }));
 
 module.exports = router;

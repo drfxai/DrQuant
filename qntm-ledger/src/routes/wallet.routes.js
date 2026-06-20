@@ -6,6 +6,7 @@ const { walletLedger } = require('../ledger');
 const transfers = require('../transfers');
 const risk = require('../risk');
 const { guard } = require('../ratelimit');
+const { flagGuard } = require('../economy/flags');
 
 const router = Router();
 
@@ -24,7 +25,7 @@ router.get('/me/transactions', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 // POST /wallets/transfer — send QNTM to another user
-router.post('/transfer', requireAuth, guard({ scope: 'transfer', capacity: 10, refillPerSec: 0.5 }),
+router.post('/transfer', requireAuth, flagGuard('transfer'), guard({ scope: 'transfer', capacity: 10, refillPerSec: 0.5 }),
   asyncHandler(async (req, res) => {
     const { toUserId, amount, note, idempotencyKey } = req.body || {};
     const r = await risk.assessTransfer({ fromUserId: req.user.id, amount });
