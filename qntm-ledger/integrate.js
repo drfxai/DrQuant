@@ -3,6 +3,7 @@ const express = require('express');
 const wallets = require('./src/wallets');
 const { ensureQntmSchema, ensureEconomyWallets } = require('./src/economy/schema');
 const adminEconomyRouter = require('./src/routes/admin.economy.routes');
+const adminEconomyConsoleRouter = require('./src/routes/admin.economy.console.routes');
 const walletRouter = require('./src/routes/wallet.routes');
 const marketplacePayRouter = require('./src/routes/marketplace.pay.routes');
 const { errorHandler } = require('./src/routes/_helpers');
@@ -31,9 +32,11 @@ async function setupQntmSchema() {
  * subscriptions, staking, tournaments, public rewards and the on-chain bridge).
  * Only the controlled-phase surface is wired:
  *
- *   /api/qntm/admin        admin economy API + POST /grant      (auth + admin)
- *   /api/qntm/wallets      GET /me, /me/transactions, transfer  (auth)
- *   /api/qntm/marketplace  POST /pay (atomic split payment)     (auth)
+ *   /api/qntm/admin/economy  admin Economy Console: summary / ledger / grant /
+ *                            reclaim / transfer-pool                (auth + admin)
+ *   /api/qntm/admin          admin economy API + POST /grant        (auth + admin)
+ *   /api/qntm/wallets        GET /me, /me/transactions, transfer    (auth)
+ *   /api/qntm/marketplace    POST /pay (atomic split payment)       (auth)
  *
  * NOT mounted in this phase (no route exists regardless of any flag): external
  * buy/sell, on-chain bridge, withdrawals, staking, tournaments, subscriptions,
@@ -41,8 +44,8 @@ async function setupQntmSchema() {
  * live in ./src/economy/flags.js.
  *
  * Pass the host app's authMiddleware and adminMiddleware. The latter also gates
- * grants; substitute an economy-admin role here later without touching the
- * financial code.
+ * grants and every Economy Console action; substitute an economy-admin role
+ * here later without touching the financial code.
  */
 function mountQntmEconomy(app, opts) {
   opts = opts || {};
@@ -50,6 +53,11 @@ function mountQntmEconomy(app, opts) {
   const adminBase = opts.base || (root + '/admin');
   const userGuards = [opts.authMiddleware].filter(Boolean);
   const adminGuards = [opts.authMiddleware, opts.adminMiddleware].filter(Boolean);
+
+  // Admin Economy Console: the economy-dedicated admin wallet. Mounted at the
+  // MORE SPECIFIC /admin/economy path BEFORE the general /admin router below so
+  // it takes precedence for those routes.
+  app.use(adminBase + '/economy', express.json(), ...adminGuards, adminEconomyConsoleRouter);
 
   // Admin economy API: overview / wallets / transactions / bootstrap / grant.
   app.use(adminBase, express.json(), ...adminGuards, adminEconomyRouter);

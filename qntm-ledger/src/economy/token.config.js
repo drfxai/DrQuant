@@ -34,6 +34,10 @@ const ALLOCATIONS = [
 // New wallet_type enum values introduced for the economy buckets (migration 003).
 const NEW_WALLET_TYPES = ['ecosystem', 'team_vesting', 'community_reserve'];
 
+// New txn_type enum values for the admin Economy Console (migration 004). Added
+// idempotently at boot by ensureQntmSchema via autocommit ALTER TYPE ADD VALUE.
+const NEW_TXN_TYPES = ['admin_manual_grant', 'admin_manual_reclaim', 'pool_transfer'];
+
 // Bootstrap mints the full supply into 'treasury' (where the engine's mint
 // lands), then transfers the four non-treasury buckets OUT of treasury; the
 // treasury keeps its 250M residual. So treasury is the mint source AND its own
@@ -93,6 +97,6 @@ if (_sum !== BigInt(TOTAL_SUPPLY)) {
 
 module.exports = {
   SYMBOL, NAME, DECIMALS, BASE_UNITS_PER_QNTM, TOTAL_SUPPLY,
-  ALLOCATIONS, NEW_WALLET_TYPES, MINT_SOURCE_WALLET_TYPE, BOOTSTRAP_FLAG,
+  ALLOCATIONS, NEW_WALLET_TYPES, NEW_TXN_TYPES, MINT_SOURCE_WALLET_TYPE, BOOTSTRAP_FLAG,
   PUBLIC_SALE_ENABLED, toBase6, toQntm6, fromBase6,
 };
