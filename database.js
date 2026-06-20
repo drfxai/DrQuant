@@ -4,7 +4,7 @@ const crypto = require("crypto");
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL ||
-    `postgresql://${process.env.DB_USER || "drfx"}:${process.env.DB_PASS || "drfx123"}@${process.env.DB_HOST || "localhost"}:${process.env.DB_PORT || "5432"}/${process.env.DB_NAME || "drfx_quantum"}`,
+    `postgresql://${process.env.DB_USER || "drfx"}:${process.env.DB_PASS || "drfx123"}@${process.env.DB_HOST || "localhost"}:${process.env.DB_PORT || "5432"}/${process.env.DB_NAME || "drfx_quant"}`,
 });
 
 async function initDB() {
@@ -125,7 +125,7 @@ async function initDB() {
       const bh = await bcrypt.hash("bot_no_login_" + Date.now(), 10);
       await client.query(
         "INSERT INTO users (email,username,password_hash,name,bio,avatar,role,subscription_status) VALUES ($1,$2,$3,$4,$5,$6,'bot','active')",
-        ["ai@drfx.quantum", "drfx_ai", bh, "DrFX AI", "Your AI trading assistant.", "🤖"]
+        ["ai@drfx.quant", "drfx_ai", bh, "DrFX AI", "Your AI trading assistant.", "🤖"]
       );
       console.log("✅ AI Bot created");
     }

@@ -20,9 +20,9 @@
 # ============================================================================
 set -e
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
-APP_DIR="/var/www/drfx-quantum"
+APP_DIR="/var/www/drfx-quant"
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PM2_NAME="drfx-quantum"
+PM2_NAME="drfx-quant"
 
 [ "$EUID" -ne 0 ] && echo -e "${RED}X Run as root: sudo bash update.sh${NC}" && exit 1
 
@@ -95,7 +95,7 @@ node -e "require('dotenv').config(); require('./database').initDB().then(()=>pro
   && echo -e "  ${GREEN}OK${NC} Base schema in sync" \
   || { echo -e "${RED}X Base schema step failed (check PostgreSQL / DATABASE_URL).${NC}"; exit 1; }
 
-DB_NAME="$(grep -E '^DB_NAME=' .env | head -1 | cut -d= -f2-)"; DB_NAME="${DB_NAME:-drfx_quantum}"
+DB_NAME="$(grep -E '^DB_NAME=' .env | head -1 | cut -d= -f2-)"; DB_NAME="${DB_NAME:-drfx_quant}"
 if ls "$APP_DIR"/migrations/*.sql >/dev/null 2>&1; then
   sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -c "CREATE TABLE IF NOT EXISTS schema_migrations (filename text PRIMARY KEY, applied_at timestamptz DEFAULT now());" >/dev/null
@@ -156,8 +156,8 @@ fi
 #     update. Deploys therefore never move tokens. The one-time backfill runner
 #     remains available to run BY HAND if you ever need to top up pre-existing
 #     accounts:
-#       cd /var/www/drfx-quantum && node scripts/airdrop-initial-qntm.js            # dry run
-#       cd /var/www/drfx-quantum && node scripts/airdrop-initial-qntm.js --execute  # grant
+#       cd /var/www/drfx-quant && node scripts/airdrop-initial-qntm.js            # dry run
+#       cd /var/www/drfx-quant && node scripts/airdrop-initial-qntm.js --execute  # grant
 
 echo ""
 echo -e "${GREEN}${BOLD}  Update complete.${NC}"

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================================
 #  DrFX Quant — Management Console
-#  Run:  sudo bash /var/www/drfx-quantum/manage.sh
+#  Run:  sudo bash /var/www/drfx-quant/manage.sh
 #
 #  Interactive console to VIEW and EDIT the live configuration:
 #    • Admin email / password
@@ -18,10 +18,10 @@
 R=$'\033[0;31m'; G=$'\033[0;32m'; Y=$'\033[1;33m'; B=$'\033[0;34m'; C=$'\033[0;36m'
 M=$'\033[0;35m'; W=$'\033[1;37m'; BOLD=$'\033[1m'; DIM=$'\033[2m'; NC=$'\033[0m'
 
-APP_DIR="${APP_DIR:-/var/www/drfx-quantum}"
+APP_DIR="${APP_DIR:-/var/www/drfx-quant}"
 ENV_FILE="$APP_DIR/.env"
-NGINX_SITE="/etc/nginx/sites-available/drfx-quantum"
-PM2_NAME="drfx-quantum"
+NGINX_SITE="/etc/nginx/sites-available/drfx-quant"
+PM2_NAME="drfx-quant"
 WIDTH=64
 
 # ---- env helpers -----------------------------------------------------------
@@ -267,7 +267,7 @@ reference() {
   echo -e "    ${DIM}\$${NC} sudo certbot --nginx -d yourdomain.com"
   echo ""
   echo -e "   ${BOLD}Database${NC}"
-  local dbn; dbn="$(getenv DB_NAME)"; dbn="${dbn:-drfx_quantum}"
+  local dbn; dbn="$(getenv DB_NAME)"; dbn="${dbn:-drfx_quant}"
   echo -e "    ${DIM}\$${NC} sudo -u postgres psql -d ${dbn}"
   echo -e "    ${DIM}\$${NC} sudo -u postgres pg_dump ${dbn} > backup_\$(date +%F).sql"
   echo ""

@@ -28,9 +28,9 @@
 set -euo pipefail
 
 # ---- settings (override via environment) -----------------------------------
-APP_DIR="${APP_DIR:-/var/www/drfx-quantum}"
+APP_DIR="${APP_DIR:-/var/www/drfx-quant}"
 DOMAIN="${DOMAIN:-drfx.io}"
-PM2_NAME="${PM2_NAME:-drfx-quantum}"
+PM2_NAME="${PM2_NAME:-drfx-quant}"
 RTC_MIN="${RTC_MIN:-40000}"            # mediasoup media UDP range (~one port per viewer)
 RTC_MAX="${RTC_MAX:-40100}"
 RELAY_MIN="${RELAY_MIN:-49160}"        # coturn relay UDP range

@@ -8,8 +8,8 @@ set -e
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
-APP_DIR="/var/www/drfx-quantum"
-DB_NAME="drfx_quantum"
+APP_DIR="/var/www/drfx-quant"
+DB_NAME="drfx_quant"
 DB_USER="drfx"
 
 clear
@@ -30,8 +30,8 @@ echo -e "${YELLOW}⚠️  This will permanently remove:${NC}"
 echo -e "  • Application files: ${BOLD}$APP_DIR${NC}"
 echo -e "  • PostgreSQL database: ${BOLD}$DB_NAME${NC}"
 echo -e "  • PostgreSQL user: ${BOLD}$DB_USER${NC}"
-echo -e "  • PM2 process: ${BOLD}drfx-quantum${NC}"
-echo -e "  • Nginx config: ${BOLD}drfx-quantum${NC}"
+echo -e "  • PM2 process: ${BOLD}drfx-quant${NC}"
+echo -e "  • Nginx config: ${BOLD}drfx-quant${NC}"
 echo ""
 echo -ne "${RED}➤ Are you sure? Type 'YES' to confirm: ${NC}"
 read -r CONFIRM
@@ -42,14 +42,14 @@ fi
 
 echo ""
 echo -e "${CYAN}▸ Stopping PM2 process...${NC}"
-pm2 stop drfx-quantum 2>/dev/null || true
-pm2 delete drfx-quantum 2>/dev/null || true
+pm2 stop drfx-quant 2>/dev/null || true
+pm2 delete drfx-quant 2>/dev/null || true
 pm2 save 2>/dev/null || true
 echo -e "  ${GREEN}✓${NC} PM2 process removed"
 
 echo -e "${CYAN}▸ Removing Nginx config...${NC}"
-rm -f /etc/nginx/sites-enabled/drfx-quantum
-rm -f /etc/nginx/sites-available/drfx-quantum
+rm -f /etc/nginx/sites-enabled/drfx-quant
+rm -f /etc/nginx/sites-available/drfx-quant
 nginx -t > /dev/null 2>&1 && systemctl reload nginx 2>/dev/null || true
 echo -e "  ${GREEN}✓${NC} Nginx config removed"
 

@@ -113,7 +113,7 @@ NAT traversal: STUN (discover) + TURN relay fallback ← coturn
 2. **mediasoup deps + install** (in the app dir):
    ```bash
    sudo apt-get install -y build-essential python3 python3-pip
-   cd /var/www/drfx-quantum && npm install mediasoup
+   cd /var/www/drfx-quant && npm install mediasoup
    ```
 3. **coturn**:
    ```bash

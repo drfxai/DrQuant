@@ -8,7 +8,7 @@
 set -e
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
-APP_DIR="/var/www/drfx-quantum"
+APP_DIR="/var/www/drfx-quant"
 # Directory this installer (and the repo) live in — used to locate migrations
 # and the optional Quantum Chat installer even after we cd into $APP_DIR.
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -40,7 +40,7 @@ while true; do
   [ "$ADMIN_PASSWORD" != "$ADMIN_PASSWORD2" ] && echo -e "${RED}  Mismatch${NC}" && continue; break
 done
 
-DB_NAME="drfx_quantum"; DB_USER="drfx"; DB_PASS=$(openssl rand -hex 16)
+DB_NAME="drfx_quant"; DB_USER="drfx"; DB_PASS=$(openssl rand -hex 16)
 
 echo ""; echo -e "${BOLD}── Optional API Keys (Enter to skip) ──${NC}"; echo ""
 echo -ne "${YELLOW}➤ OpenRouter API key: ${NC}"; read -r OPENROUTER_KEY
@@ -184,7 +184,7 @@ SQL
 then echo -e "  ${GREEN}✓${NC} Table privileges granted"; else echo -e "  ${YELLOW}⚠${NC} Grant step had warnings"; fi
 
 echo ""; echo -e "${BOLD}── Step 4: Nginx ──${NC}"; echo ""
-cat > /etc/nginx/sites-available/drfx-quantum << NGINX
+cat > /etc/nginx/sites-available/drfx-quant << NGINX
 server {
     listen 80;
     server_name $DOMAIN;
@@ -205,7 +205,7 @@ server {
     }
 }
 NGINX
-ln -sf /etc/nginx/sites-available/drfx-quantum /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/drfx-quant /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t > /dev/null 2>&1 && systemctl restart nginx
 echo -e "  ${GREEN}✓${NC} Nginx configured"
@@ -220,8 +220,8 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: a
 fi
 
 echo ""; echo -e "${BOLD}── Step 5: Start ──${NC}"; echo ""
-pm2 delete drfx-quantum > /dev/null 2>&1 || true
-pm2 start server.js --name drfx-quantum --cwd "$APP_DIR"
+pm2 delete drfx-quant > /dev/null 2>&1 || true
+pm2 start server.js --name drfx-quant --cwd "$APP_DIR"
 pm2 save > /dev/null 2>&1; pm2 startup systemd -u root --hp /root > /dev/null 2>&1 || true
 echo -e "  ${GREEN}✓${NC} Running with PM2"
 
@@ -296,8 +296,8 @@ echo -e "${GREEN}  ║  🌐 ${BOLD}http://$DOMAIN${NC}${GREEN}"
 echo -e "${GREEN}  ║  👤 ${BOLD}$ADMIN_EMAIL${NC}${GREEN}"
 echo -e "${GREEN}  ║  🗄️  ${BOLD}PostgreSQL ($DB_NAME)${NC}${GREEN}"
 echo -e "${GREEN}  ╠══════════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}  ║  ${NC}pm2 logs drfx-quantum       ${GREEN}# Logs${NC}"
-echo -e "${GREEN}  ║  ${NC}pm2 restart drfx-quantum     ${GREEN}# Restart${NC}"
+echo -e "${GREEN}  ║  ${NC}pm2 logs drfx-quant       ${GREEN}# Logs${NC}"
+echo -e "${GREEN}  ║  ${NC}pm2 restart drfx-quant     ${GREEN}# Restart${NC}"
 echo -e "${GREEN}  ║  ${NC}nano $APP_DIR/.env   ${GREEN}# Config${NC}"
 echo -e "${GREEN}  ║  ${NC}sudo bash uninstall.sh       ${GREEN}# Uninstall${NC}"
 echo -e "${GREEN}  ╚══════════════════════════════════════════════════╝${NC}"

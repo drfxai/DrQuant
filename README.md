@@ -155,7 +155,7 @@ sudo bash update.sh
 ### Everyday management
 
 ```bash
-sudo bash /var/www/drfx-quantum/manage.sh
+sudo bash /var/www/drfx-quant/manage.sh
 ```
 
 `manage.sh` is a read-only reference card: it prints the current configuration, live resource usage, and the exact commands to change each part of the deployment (domain, admin, port, database, SSL, firewall, logs).
@@ -183,7 +183,7 @@ DB_USER=drfx
 DB_PASS=your_db_password
 DB_HOST=localhost
 DB_PORT=5432
-DB_NAME=drfx_quantum
+DB_NAME=drfx_quant
 
 # AI (optional — get a key at openrouter.ai)
 OPENROUTER_API_KEY=sk-or-...

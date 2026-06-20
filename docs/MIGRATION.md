@@ -8,15 +8,15 @@ This runbook is written for the platform exactly as it is deployed:
 
 | Thing | Where it lives (current server) |
 |---|---|
-| Running app (PM2 `cwd`) | `/var/www/drfx-quantum` (a **copy target**, not a git repo) |
+| Running app (PM2 `cwd`) | `/var/www/drfx-quant` (a **copy target**, not a git repo) |
 | Git checkout (deploy source) | `/root/DrFXQuant` (`~/DrFXQuant`) |
-| Database | one PostgreSQL DB `drfx_quantum`, owned by role `drfx`, on `localhost:5432` |
+| Database | one PostgreSQL DB `drfx_quant`, owned by role `drfx`, on `localhost:5432` |
 | Ledger tables | same DB (`wallets`, `transactions`, `ledger_entries`, `audit_log`, `escrows`, …) |
 | App tables | same DB (`users`, `chats`, `messages`, `products`, `product_purchases`, `payments`, `posts`, …) |
-| Environment | `/var/www/drfx-quantum/.env` (mode `600`) |
-| Uploads / files | `/var/www/drfx-quantum/uploads` |
-| Process manager | PM2 process **`drfx-quantum`** (`pm2 start server.js --name drfx-quantum --cwd /var/www/drfx-quantum`) |
-| Reverse proxy | `/etc/nginx/sites-available/drfx-quantum` (+ symlink in `sites-enabled`) |
+| Environment | `/var/www/drfx-quant/.env` (mode `600`) |
+| Uploads / files | `/var/www/drfx-quant/uploads` |
+| Process manager | PM2 process **`drfx-quant`** (`pm2 start server.js --name drfx-quant --cwd /var/www/drfx-quant`) |
+| Reverse proxy | `/etc/nginx/sites-available/drfx-quant` (+ symlink in `sites-enabled`) |
 | TLS certs | `/etc/letsencrypt/…` (Let's Encrypt, via certbot) |
 
 > The host app and the qntm-ledger engine **share one database**. There is no
@@ -62,8 +62,8 @@ OLD_IP=203.0.113.10            # current server
 NEW_IP=198.51.100.20           # target server
 DOMAIN=chat.drfx.com           # your real domain (must match .env DOMAIN/ALLOWED_ORIGINS)
 ADMIN_EMAIL=admin@drfx.com     # for certbot
-APP_DIR=/var/www/drfx-quantum
-DB=drfx_quantum
+APP_DIR=/var/www/drfx-quant
+DB=drfx_quant
 DB_USER=drfx
 ```
 
@@ -73,13 +73,13 @@ DB_USER=drfx
 
 | Component | Source | Migration method |
 |---|---|---|
-| Node app, `qntm-ledger/`, `routes/`, `realtime/`, `middleware/`, `services/`, `migrations/`, frontend `public/` | `/var/www/drfx-quantum` | `rsync` the whole tree (minus `node_modules`), then `npm install` to rebuild native modules |
-| Database (app + ledger tables) | PostgreSQL `drfx_quantum` | `pg_dump -Fc` → `pg_restore --single-transaction` |
+| Node app, `qntm-ledger/`, `routes/`, `realtime/`, `middleware/`, `services/`, `migrations/`, frontend `public/` | `/var/www/drfx-quant` | `rsync` the whole tree (minus `node_modules`), then `npm install` to rebuild native modules |
+| Database (app + ledger tables) | PostgreSQL `drfx_quant` | `pg_dump -Fc` → `pg_restore --single-transaction` |
 | DB role + password | PostgreSQL globals | `pg_dumpall --roles-only` → restore (keeps `DATABASE_URL` valid) |
-| `.env` (JWT secret, DB creds, API keys, NOWPayments secrets, TV secret) | `/var/www/drfx-quantum/.env` | copy verbatim, `chmod 600` |
-| Uploads (product files, user uploads, images, avatars) | `/var/www/drfx-quantum/uploads` | `rsync` / tarball |
+| `.env` (JWT secret, DB creds, API keys, NOWPayments secrets, TV secret) | `/var/www/drfx-quant/.env` | copy verbatim, `chmod 600` |
+| Uploads (product files, user uploads, images, avatars) | `/var/www/drfx-quant/uploads` | `rsync` / tarball |
 | PM2 process | runtime | re-create with one command + `pm2 save` + `pm2 startup` |
-| nginx | `/etc/nginx/sites-available/drfx-quantum` | copy the site file (edit IP/domain if needed) |
+| nginx | `/etc/nginx/sites-available/drfx-quant` | copy the site file (edit IP/domain if needed) |
 | TLS | `/etc/letsencrypt` | **re-issue** with certbot after DNS cutover (recommended) |
 
 > **Why `.env` must be copied verbatim:** it holds `JWT_SECRET` (changing it logs
@@ -146,7 +146,7 @@ systemctl enable --now postgresql
 ```bash
 # On NEW server:
 mkdir -p "$APP_DIR"
-rsync -avzP --exclude node_modules -e ssh root@$OLD_IP:/var/www/drfx-quantum/ "$APP_DIR/"
+rsync -avzP --exclude node_modules -e ssh root@$OLD_IP:/var/www/drfx-quant/ "$APP_DIR/"
 git clone https://github.com/drfxai/DrFXQuant.git /root/DrFXQuant   # for future deploys
 ```
 
@@ -168,7 +168,7 @@ the only writer, so stopping it freezes all state.
 
 ```bash
 # On OLD server:
-pm2 stop drfx-quantum
+pm2 stop drfx-quant
 ```
 
 *(Optional, to show visitors a friendly page instead of a dead port during the
@@ -193,7 +193,7 @@ sudo -u postgres pg_dump -Fp --no-owner --no-privileges -d "$DB" | gzip > "$BK/$
 # App config + uploads + nginx site
 cp "$APP_DIR/.env"                              "$BK/env.backup"
 tar -czf "$BK/uploads.tgz" -C "$APP_DIR" uploads
-cp /etc/nginx/sites-available/drfx-quantum      "$BK/nginx-drfx-quantum.conf"
+cp /etc/nginx/sites-available/drfx-quant        "$BK/nginx-drfx-quant.conf"
 
 # Integrity fingerprint of the SOURCE (save it to compare after restore)
 sudo -u postgres psql -d "$DB" -At -f /root/DrFXQuant/scripts/verify-ledger.sql | tee "$BK/fingerprint-OLD.txt"
@@ -215,7 +215,7 @@ rsync -avzP -e ssh root@$OLD_IP:/root/drfx-migration-*/ /root/drfx-restore/
 cd /root/drfx-restore && sha256sum -c SHA256SUMS    # MUST say OK for every file
 
 # Pull the tiny delta written since the Phase-A bulk sync (app is stopped, so this is final)
-rsync -avzP --exclude node_modules -e ssh root@$OLD_IP:/var/www/drfx-quantum/ "$APP_DIR/"
+rsync -avzP --exclude node_modules -e ssh root@$OLD_IP:/var/www/drfx-quant/ "$APP_DIR/"
 ```
 
 **B4. Restore the database on the NEW server — atomically.**
@@ -265,16 +265,16 @@ ls "$APP_DIR/uploads" | head        # sanity: files are present
 
 ```bash
 # On NEW server:
-cp "$BK/nginx-drfx-quantum.conf" /etc/nginx/sites-available/drfx-quantum
-ln -sf /etc/nginx/sites-available/drfx-quantum /etc/nginx/sites-enabled/
+cp "$BK/nginx-drfx-quant.conf" /etc/nginx/sites-available/drfx-quant
+ln -sf /etc/nginx/sites-available/drfx-quant /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 
 cd "$APP_DIR"
-pm2 start server.js --name drfx-quantum --cwd "$APP_DIR"
+pm2 start server.js --name drfx-quant --cwd "$APP_DIR"
 pm2 save
 pm2 startup systemd -u root --hp /root      # then run the exact line it prints
-pm2 logs drfx-quantum --lines 50            # confirm a clean boot (no MODULE_NOT_FOUND / DB errors)
+pm2 logs drfx-quant --lines 50              # confirm a clean boot (no MODULE_NOT_FOUND / DB errors)
 ```
 
 On boot the app runs its **idempotent** schema setup (`initDB()` +
@@ -376,9 +376,9 @@ Checklist — confirm each:
       (then reclaim it back) and confirm a new `ledger_entries` pair appears and
       `ledger_signed_sum` is still `0`.
 - [ ] **Uploads serve** — an existing avatar/product image loads; a new upload
-      saves to `/var/www/drfx-quantum/uploads` and displays.
+      saves to `/var/www/drfx-quant/uploads` and displays.
 - [ ] **Realtime works** — a chat message delivers over Socket.io.
-- [ ] **PM2 boot clean** — `pm2 logs drfx-quantum` shows no `MODULE_NOT_FOUND`,
+- [ ] **PM2 boot clean** — `pm2 logs drfx-quant` shows no `MODULE_NOT_FOUND`,
       no DB permission errors.
 
 ---
@@ -396,9 +396,9 @@ the platform has no application-level read-only mode. If you must keep reads
 serving, you can additionally set the database to refuse writes:
 
 ```sql
-ALTER DATABASE drfx_quantum SET default_transaction_read_only = on;
+ALTER DATABASE drfx_quant SET default_transaction_read_only = on;
 -- ...take the dump...   then on rollback/abort:
-ALTER DATABASE drfx_quantum SET default_transaction_read_only = off;
+ALTER DATABASE drfx_quant SET default_transaction_read_only = off;
 ```
 
 This narrows downtime to the dump+transfer+restore, not the whole validation.
@@ -424,7 +424,7 @@ Outline (PostgreSQL 12+):
    The `-R` writes `standby.signal` + `primary_conninfo`. Start it; it now streams
    and stays current. Verify lag with `SELECT * FROM pg_stat_replication;` on the
    primary.
-3. **Cutover:** briefly `pm2 stop drfx-quantum` on the old box (so the last writes
+3. **Cutover:** briefly `pm2 stop drfx-quant` on the old box (so the last writes
    flush), confirm the replica has caught up (`pg_last_wal_replay_lsn()` matches
    the primary's flush LSN), then promote: `sudo -u postgres pg_ctl promote -D
    /var/lib/postgresql/<ver>/main` (or `SELECT pg_promote();`). Start the app on
@@ -447,9 +447,9 @@ Nothing was lost — the new server never took traffic. Recovery:
 
 ```bash
 # On OLD server: bring the platform back exactly as it was
-pm2 start drfx-quantum
+pm2 start drfx-quant
 # (revert any temporary nginx maintenance/read-only changes; if you set the DB
-#  read-only in 6a, run: ALTER DATABASE drfx_quantum SET default_transaction_read_only = off;)
+#  read-only in 6a, run: ALTER DATABASE drfx_quant SET default_transaction_read_only = off;)
 ```
 
 DNS still points at the old server, so users are served immediately. Fix the
@@ -457,7 +457,7 @@ issue on the new box and retry the cutover later.
 
 ### 7b. If a problem appears *after* DNS cutover
 
-Revert DNS `A`/`AAAA` back to `$OLD_IP` and `pm2 start drfx-quantum` on the old
+Revert DNS `A`/`AAAA` back to `$OLD_IP` and `pm2 start drfx-quant` on the old
 server. Note: any writes made on the new server after cutover live only on the
 new server — that is exactly why §5 validation happens **before** the DNS switch
 (using the `hosts`/`--resolve` trick), so you cut over only once you are
@@ -468,7 +468,7 @@ writes.
 ### 7c. Restore the whole system from the backup set (clean-room DR)
 
 The artifacts produced in **B2** (`$DB.dump`, `$DB.sql.gz`, `roles.sql`,
-`uploads.tgz`, `env.backup`, `nginx-drfx-quantum.conf`, `SHA256SUMS`) are a
+`uploads.tgz`, `env.backup`, `nginx-drfx-quant.conf`, `SHA256SUMS`) are a
 complete recovery kit. On any fresh Ubuntu box:
 
 ```bash
@@ -478,31 +478,31 @@ apt update -y && apt install -y nodejs build-essential git nginx postgresql post
 # 2) Verify the kit, then restore the database (atomic)
 cd /root/drfx-restore && sha256sum -c SHA256SUMS
 sudo -u postgres psql -f roles.sql
-sudo -u postgres createdb -O drfx drfx_quantum
-sudo -u postgres pg_restore --single-transaction --exit-on-error -d drfx_quantum drfx_quantum.dump
-#   or: zcat drfx_quantum.sql.gz | sudo -u postgres psql --single-transaction -v ON_ERROR_STOP=1 -d drfx_quantum
-sudo -u postgres psql -d drfx_quantum -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO drfx; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO drfx;"
+sudo -u postgres createdb -O drfx drfx_quant
+sudo -u postgres pg_restore --single-transaction --exit-on-error -d drfx_quant drfx_quant.dump
+#   or: zcat drfx_quant.sql.gz | sudo -u postgres psql --single-transaction -v ON_ERROR_STOP=1 -d drfx_quant
+sudo -u postgres psql -d drfx_quant -c "GRANT ALL ON ALL TABLES IN SCHEMA public TO drfx; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO drfx;"
 
 # 3) Application code
 git clone https://github.com/drfxai/DrFXQuant.git /root/DrFXQuant
-mkdir -p /var/www/drfx-quantum && cp -r /root/DrFXQuant/{server.js,database.js,package.json,routes,public,middleware,services,migrations,realtime,qntm-ledger,scripts} /var/www/drfx-quantum/
+mkdir -p /var/www/drfx-quant && cp -r /root/DrFXQuant/{server.js,database.js,package.json,routes,public,middleware,services,migrations,realtime,qntm-ledger,scripts} /var/www/drfx-quant/
 
 # 4) Config + uploads
-cp /root/drfx-restore/env.backup /var/www/drfx-quantum/.env && chmod 600 /var/www/drfx-quantum/.env
-tar -xzf /root/drfx-restore/uploads.tgz -C /var/www/drfx-quantum
+cp /root/drfx-restore/env.backup /var/www/drfx-quant/.env && chmod 600 /var/www/drfx-quant/.env
+tar -xzf /root/drfx-restore/uploads.tgz -C /var/www/drfx-quant
 
 # 5) Dependencies + start
-cd /var/www/drfx-quantum && npm install --production
-pm2 start server.js --name drfx-quantum --cwd /var/www/drfx-quantum && pm2 save
+cd /var/www/drfx-quant && npm install --production
+pm2 start server.js --name drfx-quant --cwd /var/www/drfx-quant && pm2 save
 
 # 6) nginx + TLS
-cp /root/drfx-restore/nginx-drfx-quantum.conf /etc/nginx/sites-available/drfx-quantum
-ln -sf /etc/nginx/sites-available/drfx-quantum /etc/nginx/sites-enabled/ && rm -f /etc/nginx/sites-enabled/default
+cp /root/drfx-restore/nginx-drfx-quant.conf /etc/nginx/sites-available/drfx-quant
+ln -sf /etc/nginx/sites-available/drfx-quant /etc/nginx/sites-enabled/ && rm -f /etc/nginx/sites-enabled/default
 nginx -t && systemctl reload nginx
 certbot --nginx -d "$DOMAIN" --agree-tos -m "$ADMIN_EMAIL" --non-interactive
 
 # 7) Prove integrity
-sudo -u postgres psql -d drfx_quantum -At -f /root/DrFXQuant/scripts/verify-ledger.sql
+sudo -u postgres psql -d drfx_quant -At -f /root/DrFXQuant/scripts/verify-ledger.sql
 ```
 
 ### 7d. Ongoing backups (so DR is always possible)
@@ -511,8 +511,8 @@ Schedule the same dump nightly and keep several days offsite. Minimal cron:
 
 ```bash
 # /etc/cron.d/drfx-backup  — nightly 03:17, keep 14 days
-17 3 * * * postgres pg_dump -Fc -d drfx_quantum -f /var/backups/drfx/drfx_quantum-$(date +\%F).dump && \
-           tar -czf /var/backups/drfx/uploads-$(date +\%F).tgz -C /var/www/drfx-quantum uploads && \
+17 3 * * * postgres pg_dump -Fc -d drfx_quant -f /var/backups/drfx/drfx_quant-$(date +\%F).dump && \
+           tar -czf /var/backups/drfx/uploads-$(date +\%F).tgz -C /var/www/drfx-quant uploads && \
            find /var/backups/drfx -type f -mtime +14 -delete
 ```
 
@@ -525,8 +525,8 @@ copy offsite — e.g. `rclone`/`aws s3 cp` — so a lost server doesn't lose bac
 
 - ✅ **Complete migration guide** — §4 (staged Phase A + short-window Phase B).
 - ✅ **Exact commands** — provision, dump, transfer, restore, deploy, start, DNS,
-  TLS — all with the real paths (`/var/www/drfx-quantum`), DB (`drfx_quantum`),
-  role (`drfx`), and process name (`drfx-quantum`).
+  TLS — all with the real paths (`/var/www/drfx-quant`), DB (`drfx_quant`),
+  role (`drfx`), and process name (`drfx-quant`).
 - ✅ **Verification SQL** — `scripts/verify-ledger.sql` + the inline invariant
   queries in §5; the two `[MUST=0]` rows and the content hashes are the integrity
   proof.

@@ -31,11 +31,11 @@ IMPORTANT - how the code reaches your server:
 
 install.sh is a one-shot installer. It will:
   - Install Node.js 20, PostgreSQL, Nginx, PM2, and (optionally) certbot.
-  - Create the `drfx_quantum` PostgreSQL database and a `drfx` user.
-  - Copy the application to /var/www/drfx-quantum (including the routes,
+  - Create the `drfx_quant` PostgreSQL database and a `drfx` user.
+  - Copy the application to /var/www/drfx-quant (including the routes,
     public assets, middleware, services, realtime, migrations, and the
     Quantum Chat browser client served at /qc).
-  - Generate /var/www/drfx-quantum/.env with secure random secrets
+  - Generate /var/www/drfx-quant/.env with secure random secrets
     (JWT secret, TradingView webhook secret, etc.).
   - Create the base database tables, then apply every migration in
     migrations/*.sql (this creates the TradingView signal/webhook tables).
@@ -66,7 +66,7 @@ When it finishes:
 
 Post-install steps for the trading features:
   - The TradingView webhook shared secret was auto-generated. Find it in:
-        /var/www/drfx-quantum/.env   (TRADINGVIEW_WEBHOOK_SECRET=...)
+        /var/www/drfx-quant/.env   (TRADINGVIEW_WEBHOOK_SECRET=...)
     Use that same secret in your TradingView alert payloads.
   - Create a channel named 'signals' inside the app so incoming webhook
     signals have a channel to broadcast to.
@@ -75,12 +75,12 @@ Post-install steps for the trading features:
     NOWPAYMENTS_* values.
 
 Everyday management:
-  sudo bash /var/www/drfx-quantum/manage.sh   # reference card: current config,
+  sudo bash /var/www/drfx-quant/manage.sh   # reference card: current config,
                                    # live resource usage, how to change each part
-  pm2 logs drfx-quantum            # view live logs
-  pm2 restart drfx-quantum         # restart after editing .env
+  pm2 logs drfx-quant            # view live logs
+  pm2 restart drfx-quant         # restart after editing .env
   pm2 status                       # process status
-  nano /var/www/drfx-quantum/.env  # edit configuration
+  nano /var/www/drfx-quant/.env  # edit configuration
   sudo bash uninstall.sh           # remove the app
 
 
@@ -90,10 +90,10 @@ Everyday management:
 
 App won't start / 502 Bad Gateway:
   pm2 status                       # is the process online or crash-looping?
-  pm2 logs drfx-quantum --lines 50 --nostream
+  pm2 logs drfx-quant --lines 50 --nostream
   curl -i http://127.0.0.1:3000/   # does the backend answer locally?
   - "Cannot find module './realtime/...'" -> the realtime/ directory is missing
-    from /var/www/drfx-quantum. Re-run install.sh (it copies realtime/ and now
+    from /var/www/drfx-quant. Re-run install.sh (it copies realtime/ and now
     fails fast if it is absent), or copy the folder in from a fresh clone.
   - "ECONNREFUSED 127.0.0.1:5432" / DB auth errors -> PostgreSQL isn't running
     or DATABASE_URL in .env is wrong.
@@ -104,10 +104,10 @@ TradingView webhook returns 500:
 
 Login / admin not working:
   - The admin user is created/updated from ADMIN_EMAIL / ADMIN_PASSWORD in
-    /var/www/drfx-quantum/.env on each boot.
+    /var/www/drfx-quant/.env on each boot.
 
 PostgreSQL:
-  sudo -u postgres psql -d drfx_quantum -c "\dt"     # list tables
+  sudo -u postgres psql -d drfx_quant -c "\dt"     # list tables
 
 
 ============================================================================
@@ -136,11 +136,11 @@ PostgreSQL:
  4. FILE / PATH REFERENCE
 ============================================================================
 
-  Install dir      /var/www/drfx-quantum
-  Config           /var/www/drfx-quantum/.env            (chmod 600)
-  Process manager  PM2 process name: drfx-quantum
+  Install dir      /var/www/drfx-quant
+  Config           /var/www/drfx-quant/.env            (chmod 600)
+  Process manager  PM2 process name: drfx-quant
   Web server       Nginx, proxying to 127.0.0.1:3000
-  Database         PostgreSQL db "drfx_quantum", user "drfx"
+  Database         PostgreSQL db "drfx_quant", user "drfx"
 
 ============================================================================
  5. QUANTUM CHAT (optional)
