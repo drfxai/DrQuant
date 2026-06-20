@@ -787,7 +787,10 @@
   });
 
   // ---------- boot ----------
-  if(!cfg.token){ openSet(); }   // first run: ask for connection
+  // When opened from (or embedded in) the main app, reuse the admin's existing
+  // session token from same-origin localStorage so no re-entry is needed.
+  try{ if(!cfg.token){ var _t=localStorage.getItem("dq_t"); if(_t){ cfg.token=_t; cfg.base=""; } } }catch(_e){}
+  if(!cfg.token){ openSet(); } else { refreshIntegrity(); go("dashboard"); }   // first run asks for connection; embedded reuses dq_t
   setConn(false);
 })();
 </script>

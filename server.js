@@ -57,6 +57,10 @@ app.use(express.static(path.join(__dirname, "public")));
 // Quantum Chat browser client — served for the in-app /quantum-chat.html panel.
 // The canonical module lives in quantum-chat/web/ (deployed by install.sh).
 app.use("/qc", express.static(path.join(__dirname, "quantum-chat", "web")));
+// QNTM Control Deck (admin instrument panel) - served as a static shell. The HTML
+// carries no secrets; every figure and action requires an admin token that the
+// /api/qntm/admin* routes enforce, so serving the shell openly is safe.
+app.use("/control-deck", express.static(path.join(__dirname, "qntm-ledger", "control-deck")));
 
 // Global API rate limit + stricter limits on the auth endpoints (brute force).
 app.use("/api", globalLimiter);
