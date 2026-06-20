@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>DrFX Quant — Admin</title>
+<meta name="theme-color" content="#060d1f"/>
+<link rel="icon" type="image/svg+xml" href="/icon.svg"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#060d1f; --t1:#e7eeff; --t2:#9fb2d8; --t3:#64748a; --t4:#4a5878;
+  --pri:#1c84ff; --pri2:#2f6bff; --acc:#8cc4ff; --cyan:#38bdf8; --purple:#a78bfa;
+  --gold:#ffd24a; --green:#34d27a; --red:#ff5a76;
+  --card:rgba(14,22,48,.62); --cb:rgba(120,160,255,.12); --cb2:rgba(120,160,255,.20);
+  --chip:rgba(28,132,255,.14); --shadow:0 12px 34px rgba(0,0,0,.42);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{
+  font-family:'Outfit',system-ui,-apple-system,sans-serif;color:var(--t1);overflow:hidden;
+  background:
+    radial-gradient(1100px 640px at 80% -12%,rgba(28,132,255,.16),transparent 60%),
+    radial-gradient(900px 600px at 10% 110%,rgba(120,90,255,.12),transparent 60%),
+    radial-gradient(ellipse 120% 90% at 50% -10%,#0c1838,#080f26 46%,#05091c 86%);
+}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:rgba(120,160,255,.18);border-radius:20px}
+::-webkit-scrollbar-thumb:hover{background:rgba(120,160,255,.30)}
+
+/* ---- layout shell : one screen, no page scroll ---- */
+.shell{height:100dvh;display:grid;grid-template-rows:auto auto 1fr;gap:13px;padding:13px 16px}
+.grid{display:grid;grid-template-columns:minmax(300px,.92fr) 1.6fr;gap:13px;min-height:0}
+.col-charts{display:grid;grid-template-rows:1.04fr .96fr;gap:13px;min-height:0}
+.card{
+  background:var(--card);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--cb);border-radius:18px;padding:15px 16px;min-height:0;
+  display:flex;flex-direction:column;box-shadow:var(--shadow);animation:rise .5s ease both
+}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---- topbar ---- */
+.topbar{display:flex;align-items:center;gap:14px}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.logo{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex-shrink:0;
+  background:linear-gradient(135deg,#1f8bff,#2f6bff);box-shadow:0 6px 18px rgba(28,132,255,.45)}
+.logo svg{width:21px;height:21px}
+.brand h1{font-size:16px;font-weight:700;margin:0;letter-spacing:.2px;white-space:nowrap}
+.brand .sub{font-size:11px;color:var(--t3);font-weight:500;margin-top:1px}
+.brand .sub b{color:var(--acc);font-weight:600}
+.tb-spacer{flex:1}
+.live{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--t2);font-weight:500;
+  background:rgba(52,210,122,.10);border:1px solid rgba(52,210,122,.22);padding:6px 11px;border-radius:20px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(52,210,122,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,210,122,.5)}70%{box-shadow:0 0 0 7px rgba(52,210,122,0)}100%{box-shadow:0 0 0 0 rgba(52,210,122,0)}}
+.who{font-size:11.5px;color:var(--t2);display:flex;align-items:center;gap:8px}
+.who b{color:var(--t1);font-weight:600}
+.btn{font-family:inherit;cursor:pointer;border:1px solid var(--cb2);background:rgba(26,40,78,.5);
+  color:var(--t1);font-size:12.5px;font-weight:600;padding:8px 13px;border-radius:11px;display:inline-flex;
+  align-items:center;gap:7px;transition:.16s;white-space:nowrap}
+.btn:hover{background:rgba(44,66,120,.6);border-color:rgba(120,160,255,.4)}
+.btn svg{width:15px;height:15px}
+.btn.ghost{background:transparent}
+.btn.pri{background:linear-gradient(135deg,#1f8bff,#2f6bff);border-color:transparent;box-shadow:0 6px 16px rgba(28,132,255,.4)}
+.btn.pri:hover{filter:brightness(1.08)}
+.spin{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---- KPI cards ---- */
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.kpi{background:var(--card);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border:1px solid var(--cb);border-radius:16px;padding:13px 15px;display:flex;flex-direction:column;
+  gap:7px;position:relative;overflow:hidden;box-shadow:var(--shadow);animation:rise .5s ease both}
+.kpi::after{content:"";position:absolute;inset:0 0 auto auto;width:74px;height:74px;border-radius:50%;
+  filter:blur(26px);opacity:.5;background:var(--kc,var(--pri));transform:translate(28%,-38%)}
+.kpi .ico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;
+  background:rgba(28,132,255,.14);color:var(--kc,var(--pri));position:relative;z-index:1}
+.kpi .ico svg{width:17px;height:17px}
+.kpi .num{font-size:24px;font-weight:700;line-height:1;letter-spacing:.3px;position:relative;z-index:1}
+.kpi .lbl{font-size:11px;color:var(--t2);font-weight:500;position:relative;z-index:1}
+.kpi .delta{font-size:10.5px;font-weight:600;color:var(--t3);position:relative;z-index:1}
+.kpi .delta b{color:var(--green)}
+
+/* ---- card headings ---- */
+.ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.ch h2{font-size:13px;font-weight:700;margin:0;letter-spacing:.3px}
+.ch .hint{font-size:10.5px;color:var(--t3);font-weight:500}
+
+/* ---- donut ---- */
+.donut-row{display:flex;align-items:center;gap:16px;flex:1;min-height:0}
+.donut-wrap{position:relative;flex-shrink:0;display:grid;place-items:center}
+.donut-center{position:absolute;text-align:center}
+.dc-num{font-size:26px;font-weight:700;line-height:1}
+.dc-lbl{font-size:10px;color:var(--t3);font-weight:600;letter-spacing:.6px;text-transform:uppercase;margin-top:2px}
+.legend{display:flex;flex-direction:column;gap:9px;flex:1;min-width:0}
+.lg{display:flex;align-items:center;gap:9px;font-size:12px}
+.lg .sw{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.lg .lt{color:var(--t2);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lg .lv{font-weight:700;color:var(--t1)}
+.lg .lp{font-size:10.5px;color:var(--t3);font-weight:600;min-width:34px;text-align:right}
+
+/* composition stacked bar */
+.comp{margin-top:12px}
+.comp-bar{display:flex;height:9px;border-radius:6px;overflow:hidden;background:rgba(120,160,255,.08)}
+.comp-bar span{transition:width .6s ease}
+.comp-leg{display:flex;gap:14px;margin-top:9px;flex-wrap:wrap}
+.comp-leg .ci{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2)}
+.comp-leg .ci .sw{width:8px;height:8px;border-radius:2px}
+.comp-leg .ci b{color:var(--t1);font-weight:700}
+
+/* ---- bar chart ---- */
+.bars{flex:1;min-height:0;display:flex;align-items:flex-end}
+.bars svg{width:100%;height:100%}
+
+/* ---- users panel ---- */
+.col-users{min-height:0}
+.users-head{display:flex;align-items:center;gap:11px;margin-bottom:12px}
+.search{flex:1;position:relative}
+.search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--t3)}
+.search input{width:100%;background:rgba(12,19,42,.72);border:1px solid var(--cb);border-radius:12px;
+  color:var(--t1);font-family:inherit;font-size:13px;padding:10px 12px 10px 36px;outline:none;transition:.16s}
+.search input:focus{border-color:rgba(28,132,255,.55);box-shadow:0 0 0 3px rgba(28,132,255,.14)}
+.search input::placeholder{color:var(--t4)}
+.utotal{font-size:11.5px;color:var(--t3);font-weight:600;white-space:nowrap}
+.utotal b{color:var(--t1)}
+
+.users-list{flex:1;overflow:auto;min-height:0;margin:0 -6px;padding:0 6px}
+.urow{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;
+  padding:9px 10px;border-radius:13px;transition:.14s;border:1px solid transparent}
+.urow:hover{background:rgba(28,132,255,.06);border-color:var(--cb)}
+.uav{width:40px;height:40px;border-radius:11px;flex-shrink:0;display:grid;place-items:center;overflow:hidden;position:relative;
+  background:rgba(28,132,255,.14);border:1px solid var(--cb);font-size:18px;font-weight:600;color:var(--acc)}
+.uav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.uinfo{min-width:0}
+.un{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden}
+.un .nm{overflow:hidden;text-overflow:ellipsis}
+.ue{font-size:11.5px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.badge{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:6px;letter-spacing:.4px;text-transform:uppercase;flex-shrink:0}
+.b-pro{background:rgba(255,210,74,.16);color:var(--gold)}
+.b-free{background:rgba(120,160,255,.12);color:var(--t2)}
+.b-admin{background:rgba(167,139,250,.18);color:var(--purple)}
+.b-block{background:rgba(255,90,118,.16);color:var(--red)}
+.uact{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.iact{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;cursor:pointer;
+  border:1px solid var(--cb);background:rgba(26,40,78,.4);color:var(--t2);transition:.14s}
+.iact svg{width:15px;height:15px}
+.iact:hover{background:rgba(44,66,120,.6);color:var(--t1)}
+.iact.gold:hover{background:rgba(255,210,74,.16);color:var(--gold);border-color:rgba(255,210,74,.35)}
+.iact.red:hover{background:rgba(255,90,118,.16);color:var(--red);border-color:rgba(255,90,118,.35)}
+.iact.green:hover{background:rgba(52,210,122,.16);color:var(--green);border-color:rgba(52,210,122,.35)}
+.iact[disabled]{opacity:.32;pointer-events:none}
+
+.users-foot{display:flex;align-items:center;justify-content:space-between;padding-top:11px;margin-top:2px;border-top:1px solid var(--cb)}
+.pgi{font-size:11.5px;color:var(--t3);font-weight:600}
+.pgb{display:flex;gap:7px}
+.empty{flex:1;display:grid;place-items:center;color:var(--t3);font-size:13px;text-align:center;gap:8px}
+.skel{height:58px;border-radius:13px;margin:6px 4px;background:linear-gradient(90deg,rgba(120,160,255,.05),rgba(120,160,255,.12),rgba(120,160,255,.05));background-size:200% 100%;animation:sh 1.3s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+
+/* ---- gate ---- */
+.gate{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:24px;
+  background:radial-gradient(ellipse 120% 90% at 50% -10%,#0c1838,#05091c 86%)}
+.gate .box{max-width:380px;text-align:center;background:var(--card);border:1px solid var(--cb);
+  border-radius:22px;padding:34px 30px;box-shadow:var(--shadow)}
+.gate .glogo{width:54px;height:54px;border-radius:15px;margin:0 auto 16px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#1f8bff,#2f6bff);box-shadow:0 8px 22px rgba(28,132,255,.45)}
+.gate .glogo svg{width:28px;height:28px}
+.gate h2{margin:0 0 8px;font-size:19px;font-weight:700}
+.gate p{margin:0 0 20px;font-size:13.5px;color:var(--t2);line-height:1.5}
+
+/* ---- modal ---- */
+.modal-overlay{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:24px;
+  background:rgba(2,5,16,.66);backdrop-filter:blur(4px);animation:fade .18s ease}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal{max-width:380px;width:100%;background:rgba(11,18,44,.98);border:1px solid var(--cb2);
+  border-radius:18px;padding:24px;box-shadow:var(--shadow);animation:rise .22s ease both}
+.modal h3{margin:0 0 8px;font-size:17px;font-weight:700}
+.modal p{margin:0 0 20px;font-size:13px;color:var(--t2);line-height:1.5}
+.modal p b{color:var(--t1)}
+.modal-act{display:flex;gap:10px;justify-content:flex-end}
+
+/* ---- toast ---- */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);z-index:70;
+  background:rgba(11,18,44,.97);border:1px solid var(--cb2);border-radius:13px;padding:12px 18px;
+  font-size:13px;font-weight:500;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.28s;display:flex;align-items:center;gap:9px}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{border-color:rgba(52,210,122,.4)} #toast.ok .ti{color:var(--green)}
+#toast.err{border-color:rgba(255,90,118,.4)} #toast.err .ti{color:var(--red)}
+#toast .ti{width:17px;height:17px;flex-shrink:0}
+
+@media (max-width:1080px){
+  body{overflow:auto}
+  .shell{height:auto;min-height:100dvh}
+  .grid{grid-template-columns:1fr}
+  .col-charts{grid-template-rows:none;grid-auto-rows:minmax(220px,auto)}
+  .col-users{min-height:420px}
+  .kpis{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width:560px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .who{display:none}
+  .brand h1{font-size:15px}
+}
+</style>
+</head>
+<body>
+
+<!-- access gate -->
+<div id="gate" class="gate" hidden>
+  <div class="box">
+    <div class="glogo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg></div>
+    <h2 id="gateTitle">Admin access required</h2>
+    <p id="gateMsg">Sign in to the DrFX Quant app with an admin account, then return to this page.</p>
+    <a class="btn pri" href="/" style="text-decoration:none">Go to DrFX Quant →</a>
+  </div>
+</div>
+
+<div id="app" class="shell" hidden>
+  <!-- topbar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 17 9 11 13 15 21 7"/><polyline points="14 7 21 7 21 14"/></svg></div>
+      <div>
+        <h1>DrFX Quant <span style="color:var(--acc)">Admin</span></h1>
+        <div class="sub">Control dashboard · <b id="clock">—</b></div>
+      </div>
+    </div>
+    <div class="tb-spacer"></div>
+    <div class="live"><span class="dot"></span><span id="updated">live</span></div>
+    <div class="who" id="who"></div>
+    <button class="btn ghost" id="refreshBtn" title="Refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+    </button>
+    <a class="btn" href="/" style="text-decoration:none">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+      App
+    </a>
+  </header>
+
+  <!-- KPIs -->
+  <section class="kpis" id="kpis"></section>
+
+  <!-- main grid -->
+  <main class="grid">
+    <div class="col-charts">
+      <!-- membership donut + composition -->
+      <div class="card">
+        <div class="ch"><h2>Membership</h2><span class="hint" id="proRate">—</span></div>
+        <div class="donut-row">
+          <div class="donut-wrap" id="donutWrap"></div>
+          <div class="legend" id="donutLegend"></div>
+        </div>
+        <div class="comp">
+          <div class="comp-bar" id="compBar"></div>
+          <div class="comp-leg" id="compLeg"></div>
+        </div>
+      </div>
+      <!-- signups bar chart -->
+      <div class="card">
+        <div class="ch"><h2>New members</h2><span class="hint">last 7 days · recent sign-ups</span></div>
+        <div class="bars" id="signupBars"></div>
+      </div>
+    </div>
+
+    <!-- user management -->
+    <div class="card col-users">
+      <div class="users-head">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="search" type="text" placeholder="Search members by name, @username or email…" autocomplete="off"/>
+        </div>
+        <div class="utotal" id="utotal"></div>
+      </div>
+      <div class="users-list" id="usersList"></div>
+      <div class="users-foot">
+        <div class="pgi" id="pgInfo">—</div>
+        <div class="pgb">
+          <button class="btn ghost" id="prevBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg> Prev
+          </button>
+          <button class="btn ghost" id="nextBtn">Next
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="modal" class="modal-overlay" hidden></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const TOKEN = localStorage.getItem("dq_t");
+const $ = (s)=>document.querySelector(s);
+
+/* ---------- API ---------- */
+async function api(path, opts={}){
+  const r = await fetch("/api"+path, {
+    ...opts,
+    headers:{ "Content-Type":"application/json", ...(TOKEN?{Authorization:"Bearer "+TOKEN}:{}), ...(opts.headers||{}) }
+  });
+  if(r.status===401){ showGate("auth"); throw new Error("unauthorized"); }
+  if(r.status===403){ showGate("forbidden"); throw new Error("forbidden"); }
+  let data=null; try{ data=await r.json(); }catch(_){}
+  if(!r.ok) throw new Error((data&&data.error)||("HTTP "+r.status));
+  return data;
+}
+function showGate(kind){
+  $("#app").hidden=true; $("#gate").hidden=false;
+  if(kind==="forbidden"){
+    $("#gateTitle").textContent="Not an admin account";
+    $("#gateMsg").textContent="This account doesn't have admin privileges. Sign in with an admin account to view the dashboard.";
+  }
+}
+
+/* ---------- helpers ---------- */
+const fmt = (n)=> (Number(n)||0).toLocaleString("en-US");
+const esc = (s)=> String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const isImg = (a)=> a && (a.startsWith("/")||a.startsWith("http")||a.startsWith("data:"));
+function pct(v,t){ t=t||0; return t? Math.round(v/t*100) : 0; }
+function fmtDate(d){ try{ return new Date(d).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }catch(_){ return ""; } }
+
+let state = { stats:null, me:null, page:1, q:"", pages:1, total:0, users:[] };
+
+/* ---------- KPIs ---------- */
+const kpiIco = {
+  users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  star:'<path d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81C14.67.88 13.43 0 12 0S9.33.88 8.67 2.19c-1.39-.46-2.9-.2-3.91.81s-1.27 2.52-.81 3.91C2.88 9.33 2 10.57 2 12s.88 2.67 2.19 3.34c-.46 1.39-.2 2.9.81 3.91s2.52 1.27 3.91.81C9.33 23.12 10.57 24 12 24s2.67-.88 3.34-2.19c1.39.46 2.9.2 3.91-.81s1.27-2.52.81-3.91C23.12 14.67 24 13.43 24 12z"/>',
+  msg:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  chat:'<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
+  free:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+};
+function kpiCard(c){
+  return `<div class="kpi" style="--kc:${c.color}">
+    <div class="ico"><svg viewBox="0 0 24 24" fill="${c.fill?'currentColor':'none'}" stroke="${c.fill?'none':'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${kpiIco[c.icon]}</svg></div>
+    <div class="num">${fmt(c.value)}</div>
+    <div class="lbl">${c.label}</div>
+    <div class="delta">${c.delta||""}</div>
+  </div>`;
+}
+function renderKpis(s){
+  const cards = [
+    {icon:"users", color:"#1c84ff", value:s.totalUsers, label:"Total members", delta:`<b>+${fmt(s.newToday)}</b> today`},
+    {icon:"star", color:"#ffd24a", fill:true, value:s.activeUsers, label:"Pro members", delta:`${pct(s.activeUsers,s.totalUsers)}% of base`},
+    {icon:"free", color:"#8cc4ff", value:s.freeUsers, label:"Free members", delta:`${pct(s.freeUsers,s.totalUsers)}% of base`},
+    {icon:"msg", color:"#38bdf8", value:s.totalMessages, label:"Messages", delta:`<b>+${fmt(s.msgsToday)}</b> today`},
+    {icon:"chat", color:"#a78bfa", value:s.totalChats, label:"Chats", delta:`${fmt(s.groups)} groups · ${fmt(s.channels)} ch`},
+    {icon:"shield", color:"#ff5a76", value:s.blockedUsers, label:"Blocked", delta:s.blockedUsers?`needs review`:`all clear`}
+  ];
+  $("#kpis").innerHTML = cards.map(kpiCard).join("");
+}
+
+/* ---------- donut (inline SVG) ---------- */
+function donut(segments, size=150, thickness=20){
+  const r=(size-thickness)/2, cx=size/2, cy=size/2, C=2*Math.PI*r;
+  const total=segments.reduce((a,b)=>a+b.value,0)||1;
+  let off=0, arcs="";
+  segments.forEach(seg=>{
+    const len=(seg.value/total)*C;
+    if(seg.value>0){
+      arcs+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${thickness}" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    }
+    off+=len;
+  });
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="rgba(120,160,255,.08)" stroke-width="${thickness}"/>${arcs}</svg>`;
+}
+function renderMembership(s){
+  const segs=[
+    {label:"Pro members", color:"#ffd24a", value:s.activeUsers},
+    {label:"Free members", color:"#1c84ff", value:s.freeUsers}
+  ];
+  $("#donutWrap").innerHTML = donut(segs) +
+    `<div class="donut-center"><div class="dc-num">${fmt(s.totalUsers)}</div><div class="dc-lbl">Members</div></div>`;
+  const legendRows = segs.concat([{label:"Blocked", color:"#ff5a76", value:s.blockedUsers}]);
+  $("#donutLegend").innerHTML = legendRows.map(seg=>`
+    <div class="lg"><span class="sw" style="background:${seg.color}"></span>
+      <span class="lt">${seg.label}</span>
+      <span class="lv">${fmt(seg.value)}</span>
+      <span class="lp">${pct(seg.value,s.totalUsers)}%</span></div>`).join("");
+  $("#proRate").textContent = pct(s.activeUsers,s.totalUsers)+"% Pro";
+
+  // composition: DMs / Groups / Channels
+  const dms=Math.max(0, s.totalChats - s.groups - s.channels);
+  const comp=[
+    {label:"Direct", color:"#38bdf8", value:dms},
+    {label:"Groups", color:"#a78bfa", value:s.groups},
+    {label:"Channels", color:"#1c84ff", value:s.channels}
+  ];
+  const ct=comp.reduce((a,b)=>a+b.value,0)||1;
+  $("#compBar").innerHTML = comp.map(c=>`<span style="width:${c.value/ct*100}%;background:${c.color}"></span>`).join("");
+  $("#compLeg").innerHTML = comp.map(c=>`<div class="ci"><span class="sw" style="background:${c.color}"></span>${c.label} <b>${fmt(c.value)}</b></div>`).join("");
+}
+
+/* ---------- signups bar chart ---------- */
+function renderSignups(users){
+  const days=7, today=new Date(); today.setHours(0,0,0,0);
+  const lbl=["Su","Mo","Tu","We","Th","Fr","Sa"];
+  const buckets=[];
+  for(let i=days-1;i>=0;i--){ const d=new Date(today); d.setDate(d.getDate()-i); buckets.push({t:d.getTime(),label:lbl[d.getDay()],value:0}); }
+  (users||[]).forEach(u=>{ const c=new Date(u.created_at); c.setHours(0,0,0,0); const b=buckets.find(x=>x.t===c.getTime()); if(b) b.value++; });
+  const max=Math.max(1,...buckets.map(b=>b.value));
+  const W=320,H=130, pad=18, gap=10, n=buckets.length, bw=(W-gap*(n-1))/n;
+  let rects="",labels="",vals="";
+  buckets.forEach((b,i)=>{
+    const bh=Math.max(3,(b.value/max)*(H-pad-20)); const x=i*(bw+gap); const y=(H-pad)-bh;
+    rects+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="4" fill="url(#bg)"/>`;
+    labels+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="10" font-weight="600" fill="#64748a" font-family="Outfit">${b.label}</text>`;
+    if(b.value>0) vals+=`<text x="${(x+bw/2).toFixed(1)}" y="${(y-5).toFixed(1)}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#9fb2d8" font-family="Outfit">${b.value}</text>`;
+  });
+  $("#signupBars").innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:100%">
+    <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3aa0ff"/><stop offset="1" stop-color="#1c84ff" stop-opacity=".35"/>
+    </linearGradient></defs>${rects}${labels}${vals}</svg>`;
+}
+
+/* ---------- users table ---------- */
+function badges(u){
+  let b="";
+  if(u.role==="admin") b+=`<span class="badge b-admin">Admin</span>`;
+  b += u.subscription_status==="active" ? `<span class="badge b-pro">Pro</span>` : `<span class="badge b-free">Free</span>`;
+  if(u.blocked) b+=`<span class="badge b-block">Blocked</span>`;
+  return b;
+}
+function avatarEl(u){
+  const ini = esc((u.name||u.username||u.email||"?").slice(0,1).toUpperCase());
+  if(isImg(u.avatar)) return `<div class="uav">${ini}<img src="${esc(u.avatar)}" alt="" onerror="this.remove()"/></div>`;
+  const inner = (u.avatar && u.avatar.length<=3) ? esc(u.avatar) : ini;
+  return `<div class="uav">${inner}</div>`;
+}
+function userRow(u){
+  const self = state.me && u.id===state.me.id;
+  const isPro = u.subscription_status==="active";
+  return `<div class="urow" data-id="${u.id}">
+    ${avatarEl(u)}
+    <div class="uinfo">
+      <div class="un"><span class="nm">${esc(u.name||u.username||u.email)}</span>${badges(u)}</div>
+      <div class="ue">${esc(u.email)}${u.username?" · @"+esc(u.username):""} · joined ${fmtDate(u.created_at)}</div>
+    </div>
+    <div class="uact">
+      <button class="iact gold" data-act="pro" title="${isPro?'Revoke Pro':'Grant Pro (30d)'}">
+        ${isPro
+          ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.1 6.6.9-4.8 4.6 1.2 6.5L12 17.8 6.1 20.2l1.2-6.5L2.5 9l6.6-.9z"/></svg>'}
+      </button>
+      <button class="iact ${u.blocked?'green':'red'}" data-act="block" title="${u.blocked?'Unblock':'Block'}" ${self?'disabled':''}>
+        ${u.blocked
+          ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/></svg>'}
+      </button>
+      <button class="iact red" data-act="del" title="Delete" ${self?'disabled':''}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+function renderUsers(){
+  const list=$("#usersList");
+  if(!state.users.length){
+    list.innerHTML=`<div class="empty"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#4a5878" stroke-width="1.6"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><div>${state.q?"No members match “"+esc(state.q)+"”":"No members yet"}</div></div>`;
+  } else {
+    list.innerHTML = state.users.map(userRow).join("");
+  }
+  $("#utotal").innerHTML = `<b>${fmt(state.total)}</b> member${state.total===1?"":"s"}`;
+  $("#pgInfo").textContent = `Page ${state.page} of ${state.pages||1}`;
+  $("#prevBtn").disabled = state.page<=1;
+  $("#nextBtn").disabled = state.page>=(state.pages||1);
+}
+
+/* ---------- data loads ---------- */
+async function loadStats(){
+  const s = await api("/admin/stats");
+  state.stats=s;
+  renderKpis(s); renderMembership(s);
+  markUpdated();
+}
+async function loadUsers(){
+  const qs = `?page=${state.page}${state.q?("&q="+encodeURIComponent(state.q)):""}`;
+  const d = await api("/admin/users"+qs);
+  state.users=d.users||[]; state.total=d.total||0; state.pages=d.pages||1; state.page=d.page||1;
+  renderUsers();
+  // build the signups chart from the most recent page (page 1, default view)
+  if(state.page===1 && !state.q) renderSignups(state.users);
+}
+function markUpdated(){
+  const t=new Date();
+  $("#updated").textContent = "updated "+t.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"});
+}
+
+/* ---------- actions ---------- */
+async function doAction(act, id){
+  const u = state.users.find(x=>x.id===id); if(!u) return;
+  try{
+    if(act==="pro"){
+      const makePro = u.subscription_status!=="active";
+      await api(`/admin/users/${id}/subscription`, {method:"POST", body:JSON.stringify(makePro?{status:"active",days:30}:{status:"free"})});
+      toast(makePro?`${u.name||u.email} upgraded to Pro`:`Pro removed from ${u.name||u.email}`, "ok");
+    } else if(act==="block"){
+      await api(`/admin/users/${id}/${u.blocked?"unblock":"block"}`, {method:"POST"});
+      toast(u.blocked?`${u.name||u.email} unblocked`:`${u.name||u.email} blocked`, "ok");
+    } else if(act==="del"){
+      await api(`/admin/users/${id}`, {method:"DELETE"});
+      toast(`${u.name||u.email} deleted`, "ok");
+    }
+    await Promise.all([loadUsers(), loadStats()]);
+  }catch(e){ toast(e.message||"Action failed", "err"); }
+}
+function confirmDelete(id){
+  const u = state.users.find(x=>x.id===id); if(!u) return;
+  const m=$("#modal");
+  m.innerHTML = `<div class="modal">
+    <h3>Delete member?</h3>
+    <p>This permanently removes <b>${esc(u.name||u.email)}</b> and all of their messages, memberships and payment records. This cannot be undone.</p>
+    <div class="modal-act">
+      <button class="btn ghost" id="mCancel">Cancel</button>
+      <button class="btn" id="mOk" style="background:linear-gradient(135deg,#ff5a76,#e0364f);border-color:transparent">Delete</button>
+    </div></div>`;
+  m.hidden=false;
+  $("#mCancel").onclick=closeModal;
+  $("#mOk").onclick=()=>{ closeModal(); doAction("del", id); };
+}
+function closeModal(){ $("#modal").hidden=true; $("#modal").innerHTML=""; }
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg, kind){
+  const el=$("#toast");
+  const ic = kind==="ok"
+    ? '<svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+    : '<svg class="ti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
+  el.className=""; el.classList.add(kind||"ok");
+  el.innerHTML = ic + "<span>"+esc(msg)+"</span>";
+  void el.offsetWidth; el.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove("show"), 2600);
+}
+
+/* ---------- events ---------- */
+$("#usersList").addEventListener("click",(e)=>{
+  const btn=e.target.closest(".iact"); if(!btn) return;
+  const row=e.target.closest(".urow"); const id=parseInt(row.dataset.id); const act=btn.dataset.act;
+  if(act==="del") confirmDelete(id); else doAction(act, id);
+});
+let searchT;
+$("#search").addEventListener("input",(e)=>{
+  clearTimeout(searchT);
+  searchT=setTimeout(()=>{ state.q=e.target.value.trim(); state.page=1; loadUsers().catch(err=>toast(err.message,"err")); }, 350);
+});
+$("#prevBtn").onclick=()=>{ if(state.page>1){ state.page--; loadUsers(); } };
+$("#nextBtn").onclick=()=>{ if(state.page<state.pages){ state.page++; loadUsers(); } };
+$("#refreshBtn").onclick=()=>{ const ic=$("#refreshBtn").firstElementChild; ic.classList.add("spin"); Promise.all([loadStats(),loadUsers()]).finally(()=>setTimeout(()=>ic.classList.remove("spin"),500)); };
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape"){ closeModal(); } });
+
+function tickClock(){ $("#clock").textContent = new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",second:"2-digit"}); }
+
+/* ---------- boot ---------- */
+async function boot(){
+  if(!TOKEN){ showGate("auth"); return; }
+  try{
+    // who am I (also validates token); admin gate is enforced by /admin/* (403 → gate)
+    try{ state.me = await api("/auth/me"); }catch(_){}
+    if(state.me){ $("#who").innerHTML = `signed in as <b>${esc(state.me.name||state.me.email)}</b>`; }
+    await loadStats();
+    await loadUsers();
+    $("#app").hidden=false;
+    tickClock(); setInterval(tickClock,1000);
+    setInterval(()=>{ loadStats().catch(()=>{}); }, 30000); // refresh stats every 30s
+  }catch(e){
+    // gate already shown for 401/403; otherwise surface a soft error
+    if(!/(unauthorized|forbidden)/.test(e.message)){ $("#app").hidden=false; toast("Could not load: "+e.message, "err"); }
+  }
+}
+boot();
+</script>
+</body>
+</html>
