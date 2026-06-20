@@ -64,7 +64,7 @@ echo -e "  ${GREEN}OK${NC} Backed up .env"
 echo -e "${CYAN}> Updating application files...${NC}"
 cp "$SRC_DIR/server.js" "$SRC_DIR/database.js" "$SRC_DIR/package.json" "$APP_DIR/"
 cp -r "$SRC_DIR/routes" "$SRC_DIR/public" "$APP_DIR/"
-for d in middleware services migrations realtime qntm-ledger; do
+for d in middleware services migrations realtime qntm-ledger scripts; do
   [ -d "$SRC_DIR/$d" ] && cp -r "$SRC_DIR/$d" "$APP_DIR/"
 done
 if [ -d "$SRC_DIR/quantum-chat/web" ]; then
@@ -149,6 +149,26 @@ if grep -q '^LIVE_SFU=on' "$APP_DIR/.env" 2>/dev/null; then
     echo -e "${YELLOW}    Restore high-FPS streaming:  cd $SRC_DIR && sudo bash setup-live-sfu.sh${NC}"
   fi
 fi
+
+# 8b) QNTM initial airdrop - idempotently grant any account that does not yet
+#     have its initial QNTM. Runs with --execute, but is safe on EVERY deploy:
+#     already-granted users are skipped via their idempotency key, and the runner
+#     self-aborts if the reward_pool cannot cover the remainder. Turn it off with
+#     AIRDROP_ON_DEPLOY=off in .env. Non-fatal - the service is already restarted
+#     above, so a hiccup here never blocks the deploy (it retries next update).
+AIRDROP_FLAG="$(grep -E '^AIRDROP_ON_DEPLOY=' "$APP_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')"
+case "${AIRDROP_FLAG:-on}" in
+  off|0|false|no|n|OFF|FALSE|No|N|Off|False)
+    echo -e "  ${YELLOW}-${NC} QNTM airdrop skipped (AIRDROP_ON_DEPLOY=${AIRDROP_FLAG})" ;;
+  *)
+    if [ -f "$APP_DIR/scripts/airdrop-initial-qntm.js" ]; then
+      echo -e "${CYAN}> QNTM initial airdrop (idempotent; tops up new accounts)...${NC}"
+      ( cd "$APP_DIR" && node scripts/airdrop-initial-qntm.js --execute ) \
+        || echo -e "  ${YELLOW}! airdrop exited non-zero - deploy unaffected, retries next update${NC}"
+    else
+      echo -e "  ${YELLOW}-${NC} airdrop runner missing (scripts/airdrop-initial-qntm.js) - skipped"
+    fi ;;
+esac
 
 echo ""
 echo -e "${GREEN}${BOLD}  Update complete.${NC}"
