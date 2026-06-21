@@ -139,7 +139,8 @@
       '#dqw-root .dqw-inp:focus{border-color:' + w.em + ';box-shadow:0 0 0 3px ' + w.emSoft + ',0 0 16px ' + w.emGlow + '}' +
       '#dqw-root .dqw-inp::placeholder{color:' + w.txt4 + '}' +
       '#dqw-root .dqw-back{display:inline-flex;align-items:center;gap:5px;background:none;border:none;color:' + w.em + ';font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;padding:0;margin-bottom:8px;text-shadow:0 0 10px ' + w.emGlow + '}' +
-      '#dqw-root .dqw-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:11px;font-weight:700;border:1px solid ' + w.cardB + ';background:' + w.emSoft + ';color:' + w.em + ';box-shadow:0 0 12px ' + w.emSoft + '}' +
+      '#dqw-root .dqw-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:.2px;border:1px solid ' + w.cardB + ';background:' + w.emSoft + ';color:' + w.em + ';box-shadow:0 0 6px ' + w.emSoft + '}' +
+      '#dqw-root .dqw-dot{width:5px;height:5px;border-radius:50%;background:' + w.em + ';box-shadow:0 0 6px ' + w.emGlow + '}' +
       // keyframes
       '@keyframes dqwGlow{0%,100%{box-shadow:' + w.shadow + ',0 0 0 1px ' + w.emSoft + ',inset 0 1px 0 rgba(255,255,255,.05)}50%{box-shadow:' + w.shadow + ',0 0 26px ' + w.emGlow + ',inset 0 1px 0 rgba(255,255,255,.05)}}' +
       '@keyframes dqwFloat{0%,100%{transform:translate(0,0)}50%{transform:translate(0,-16px)}}' +
@@ -199,7 +200,7 @@
             '<div class="dqw-qbadge">Q</div>' +
             '<div><div style="color:' + w.em + ';font-size:10px;letter-spacing:1.5px;font-weight:800;text-shadow:0 0 10px ' + w.emGlow + '">QNTM BALANCE</div><div style="color:' + w.txt3 + ';font-size:11px;font-weight:500">Internal platform credits</div></div>' +
           '</div>' +
-          '<span class="dqw-pill">\u25CF Live</span>' +
+          '<span class="dqw-pill"><span class="dqw-dot"></span>Live</span>' +
         '</div>' +
         '<div style="position:relative" class="dqw-bal">' + fmtQ(w_.available_balance) + '<span class="dqw-balq">QNTM</span></div>' +
         extra +
