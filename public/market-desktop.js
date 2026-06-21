@@ -447,6 +447,31 @@
     }
   };
 
+  // Some in-overlay controls call a tab renderer DIRECTLY (e.g. the Companies/
+  // Creators/All sub-tabs call mkCompanies; store edits call mkCreator / mkMyStore)
+  // instead of going through mkRender. On desktop those bare calls would paint the
+  // mobile view straight into #mk-body and wipe the frame. Wrap each so a direct
+  // call redirects into #mkx-center, while calls made *during* an active mkRender
+  // id-swap (when #mkx-center is momentarily renamed to mk-body) run unchanged.
+  function wrapTabRenderer(orig) {
+    if (typeof orig !== 'function') return orig;
+    return function () {
+      if (!isDesk()) return orig.apply(this, arguments);
+      var center = document.getElementById('mkx-center');
+      if (!center) return orig.apply(this, arguments); // mid-swap, or no frame yet
+      var body = document.getElementById('mk-body');
+      if (!body) return orig.apply(this, arguments);
+      var prevId = body.id;
+      body.id = '__mkx_outer__';
+      center.id = 'mk-body';
+      try { return orig.apply(this, arguments); }
+      finally { center.id = 'mkx-center'; body.id = prevId || 'mk-body'; }
+    };
+  }
+  window.mkCompanies = wrapTabRenderer(window.mkCompanies);
+  window.mkCreator = wrapTabRenderer(window.mkCreator);
+  window.mkMyStore = wrapTabRenderer(window.mkMyStore);
+
   // If the viewport crosses the desktop/mobile boundary while Market is open,
   // re-render so the right layout takes over (mobile<->desktop).
   var _wasDesk = isDesk();
