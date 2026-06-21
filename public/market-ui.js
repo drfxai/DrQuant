@@ -50,7 +50,10 @@
       "#mk-overlay .mkx-burst{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:6}",
       "#mk-overlay .mkx-burst svg{width:108px;height:108px;filter:drop-shadow(0 8px 22px rgba(255,77,109,.55));animation:mkxBurst .9s ease forwards}",
       "@keyframes mkxBurst{0%{transform:scale(.2) rotate(-12deg);opacity:0}14%{transform:scale(1.18) rotate(7deg);opacity:1}30%{transform:scale(.9) rotate(-3deg)}46%{transform:scale(1.05) rotate(0)}70%{transform:scale(1);opacity:1}100%{transform:scale(1.3);opacity:0}}",
-      "#mk-overlay video{border-radius:0}"
+      "#mk-overlay video{border-radius:0}",
+      "#mk-overlay .mkx-neon{border-radius:50%;line-height:0;box-sizing:border-box;transition:transform .14s ease;animation:mkxNeon 3.4s ease-in-out infinite}",
+      "#mk-overlay .mkx-story:active .mkx-neon{transform:scale(.92)}",
+      "@keyframes mkxNeon{0%,100%{box-shadow:0 0 0 2px var(--mkem),0 0 11px var(--mkeg)}50%{box-shadow:0 0 0 2px var(--mkem),0 0 22px var(--mkeg)}}"
     ].join("");
     document.head.appendChild(s);
   }
@@ -61,6 +64,11 @@
     // gradient-ring wrapper around the app avatar()
     var inner = '<div class="mkx-rin" style="background:' + t.bg + '"><div class="mkx-av">' + avatar(av, size) + "</div></div>";
     return '<div class="mkx-ring"' + (grad ? ' style="background:' + grad + '"' : "") + ">" + inner + "</div>";
+  }
+
+  // neon-glow avatar (no story ring) for the explore rail
+  function neonAvatar(av, em, emg) {
+    return '<div class="mkx-neon" style="--mkem:' + em + ';--mkeg:' + emg + '">' + avatar(av, 58) + "</div>";
   }
 
   // ============================ EXPLORE FEED ============================
@@ -93,25 +101,28 @@
   // stories / creator rail at the top of the feed
   async function mkxLoadRail() {
     var rail = document.getElementById("mkx-rail"); if (!rail) return;
+    var dark = !(typeof S !== "undefined" && S.theme === "light");
+    var EM = dark ? "#16e29a" : "#0b9d6a";
+    var EMG = dark ? "rgba(22,226,154,.55)" : "rgba(11,157,106,.42)";
+    var GRAD = dark ? "linear-gradient(135deg,#0fd98a,#36e36b)" : "linear-gradient(135deg,#0bbf7e,#3fcf6a)";
+    var GRADG = dark ? "rgba(34,220,120,.5)" : "rgba(20,180,110,.4)";
     var meAv = (S.user && S.user.avatar) || "\uD83E\uDDD1\u200D\uD83D\uDCBB";
     var yours =
       '<button class="mk-newpost mkx-story" type="button">' +
-        '<div class="mkx-ring" style="background:linear-gradient(135deg,' + t.bd + "," + t.bl + ')">' +
-          '<div class="mkx-rin" style="background:' + t.bg + '"><div class="mkx-av" style="position:relative">' + avatar(meAv, 52) +
-            '<span style="position:absolute;bottom:-1px;right:-1px;width:21px;height:21px;border-radius:50%;background:' + t.pg + ";border:2.5px solid " + t.bg + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;line-height:1;font-weight:600">+</span>' +
-          "</div></div>" +
+        '<div class="mkx-neon" style="--mkem:' + EM + ';--mkeg:' + EMG + ';position:relative">' + avatar(meAv, 58) +
+          '<span style="position:absolute;bottom:-1px;right:-1px;width:21px;height:21px;border-radius:50%;background:' + GRAD + ";border:2.5px solid " + t.bg + ';display:flex;align-items:center;justify-content:center;color:#04140d;font-size:15px;line-height:1;font-weight:800;box-shadow:0 2px 8px ' + GRADG + '">+</span>' +
         "</div>" +
-        '<span class="mkx-slbl" style="color:' + t.t2 + '">Add post</span>' +
+        '<span class="mkx-slbl" style="color:' + EM + ';text-shadow:0 0 8px ' + EMG + ';font-weight:700">Add post</span>' +
       "</button>";
     rail.innerHTML = yours + '<div style="color:' + t.t4 + ';font-size:12px;display:flex;align-items:center;padding:0 4px">Loading creators&#8230;</div>';
     try {
       var d = await api("/market/creators?sort=followers&limit=20");
       var cs = ((d && d.creators) || []).filter(function (c) { return !c.is_me; });
       var items = cs.map(function (c) {
-        var em = c.store_kind === "company" ? "\uD83C\uDFE2" : "\uD83E\uDDD1\u200D\uD83D\uDCBB";
+        var em2 = c.store_kind === "company" ? "\uD83C\uDFE2" : "\uD83E\uDDD1\u200D\uD83D\uDCBB";
         return '<button class="mk-openc mkx-story" data-h="' + esc(c.username) + '" type="button">' +
-          ringAvatar(c.avatar || em, 52) +
-          '<span class="mkx-slbl" style="color:' + t.t2 + '">' + esc(c.name || c.username) + "</span></button>";
+          neonAvatar(c.avatar || em2, EM, EMG) +
+          '<span class="mkx-slbl" style="color:' + EM + ';text-shadow:0 0 8px ' + EMG + ';font-weight:700">' + esc(c.name || c.username) + "</span></button>";
       }).join("");
       rail.innerHTML = yours + items;
     } catch (e) { rail.innerHTML = yours; }
