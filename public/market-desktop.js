@@ -47,7 +47,8 @@
       `.mkx-navi{display:flex;align-items:center;gap:13px;padding:12px 14px;border-radius:13px;cursor:pointer;color:${D.t2};font-size:14.5px;font-weight:600;border:none;background:none;width:100%;text-align:left;font-family:inherit;margin-bottom:3px;transition:background .15s,color .15s}`,
       `.mkx-navi:hover{background:rgba(255,255,255,.04);color:${D.t1}}`,
       `.mkx-navi.on{background:${D.grad};color:#fff;box-shadow:0 8px 22px ${D.glow}}`,
-      `.mkx-main{flex:1;min-width:0;overflow-y:auto;padding:20px 26px 34px}`,
+      `.mkx-main{flex:1;min-width:0;overflow-y:auto;padding:20px 30px 34px}`,
+      `.mkx-mainwrap{max-width:980px;margin:0 auto;width:100%}`,
       `.mkx-search{flex:1;display:flex;align-items:center;gap:11px;padding:13px 18px;border-radius:14px;background:${D.panel};border:1px solid ${D.bd};color:${D.t2};font-size:14px;min-width:0}`,
       `.mkx-bell{width:46px;height:46px;flex-shrink:0;border-radius:13px;background:${D.panel};border:1px solid ${D.bd};display:flex;align-items:center;justify-content:center;color:${D.t2};cursor:pointer;position:relative}`,
       `.mkx-tab{flex-shrink:0;padding:10px 20px;border-radius:12px;border:1px solid ${D.bd};background:${D.panel};color:${D.t2};font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}`,
@@ -64,7 +65,8 @@
       `.mkx-vall{background:none;border:none;color:${D.pur};font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}`,
       `.mkx-rfoll{padding:6px 15px;border-radius:9px;border:1px solid ${D.ind};background:rgba(99,102,241,.08);color:#aeb8ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0}`,
       `.mkx-rav{display:inline-block;border-radius:50%;padding:2px;line-height:0;flex-shrink:0;background:linear-gradient(135deg,#5b6bff,#a855f7 52%,#22d3ee);box-shadow:0 0 10px rgba(124,108,255,.32)}`,
-      `@media (max-width:1199px){.mkx-rail{display:none}}`
+      `@media (max-width:1200px){.mkx-feedgrid{grid-template-columns:1fr}}`,
+      `@media (max-width:1023px){.mkx-rail{display:none}}`
     ].join('');
     document.head.appendChild(s);
   }
@@ -185,7 +187,7 @@
       `<div style='font-size:30px;font-weight:800;color:${D.t1};letter-spacing:-.5px'>Market Explore</div>` +
       `<div style='color:${D.t2};font-size:14px;margin-top:4px;margin-bottom:18px'>Discover top trading indicators, strategies and tools from the community.</div>`;
     var foot = `<div style='text-align:center;color:${D.t3};font-size:11.5px;margin-top:30px;line-height:1.6'>Trading involves risk. Past performance is not indicative of future results. Quantum Market is a community-driven platform for educational and informational purposes only.</div>`;
-    return `<main class='mkx-main'>${search}${head}${tabs()}<div class='mkx-feedgrid'>${gridHTML}</div>${foot}</main>`;
+    return `<main class='mkx-main'><div class='mkx-mainwrap'>${search}${head}${tabs()}<div class='mkx-feedgrid'>${gridHTML}</div>${foot}</div></main>`;
   }
 
   /* ---- right rail: trending creators (live) ---- */
@@ -269,9 +271,9 @@
       if (ov) ov.remove();
     } catch (e) {}
   }
-  function wireNav(body) {
-    var els = body.querySelectorAll('[data-nav]');
-    els.forEach(function (b) {
+  function wireNavScope(scope) {
+    if (!scope) return;
+    scope.querySelectorAll('[data-nav]').forEach(function (b) {
       b.addEventListener('click', function () {
         var n = b.getAttribute('data-nav');
         if (n === 'wallet') { if (window.openWallet) openWallet(); return; }
@@ -282,11 +284,29 @@
       });
     });
   }
+  function wireNav(body) { wireNavScope(body); }
+
+  // Populate the right rail, parsing each card in ISOLATION so a quirk in one
+  // section can never swallow the others (the prior single-innerHTML concat was
+  // the bug that blanked QNTM Token / Featured / Create & Earn).
+  function setRail(railEl, creators) {
+    if (!railEl) return;
+    railEl.innerHTML = '';
+    [trending(creators), token(), featured(), createEarn()].forEach(function (html) {
+      try {
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        while (tmp.firstChild) railEl.appendChild(tmp.firstChild);
+      } catch (e) {}
+    });
+    wireNavScope(railEl);
+  }
 
   /* ---- the desktop explore renderer ---- */
   async function exploreDesktop(body) {
     injectCSS();
-    body.innerHTML = `<div class='mkx-desk'>${sidebar()}${mainShell(feedLoading())}${rail(null)}</div>`;
+    body.innerHTML = `<div class='mkx-desk'>${sidebar()}${mainShell(feedLoading())}<aside class='mkx-rail'></aside></div>`;
+    setRail(body.querySelector('.mkx-rail'), null);
     wireNav(body);
     try {
       var qs = 'sort=' + MK.sort + '&type=' + encodeURIComponent(MK.type) + '&q=' + encodeURIComponent(MK.q || '') + '&limit=30';
@@ -295,8 +315,7 @@
       var creators = ((res[1] && res[1].creators) || []).filter(function (c) { return !c.is_me; });
       var grid = body.querySelector('.mkx-feedgrid');
       if (grid) grid.innerHTML = posts.length ? posts.map(card).join('') : emptyGrid();
-      var railEl = body.querySelector('.mkx-rail');
-      if (railEl) railEl.innerHTML = trending(creators) + token() + featured() + createEarn();
+      setRail(body.querySelector('.mkx-rail'), creators);
     } catch (e) {
       var g2 = body.querySelector('.mkx-feedgrid');
       if (g2) g2.innerHTML = emptyGrid(typeof mkErrMsg === 'function' ? mkErrMsg(e) : 'Could not load feed');
