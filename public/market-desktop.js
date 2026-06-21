@@ -33,7 +33,7 @@
   };
 
   function mkxPrice(v) { return (Number(v) || 0).toLocaleString('en-US') + ' QNTM'; }
-  function ringAv(av, size, rc, rg) { return `<div class='mkx-ringav' style='--rc:${rc};--rg:${rg}'>${avatar(av, size)}</div>`; }
+  function ringAv(av, size) { return `<span class='mkx-rav'>${avatar(av, size)}</span>`; }
 
   function injectCSS() {
     if (document.getElementById('mkx-desk-css')) return;
@@ -63,8 +63,7 @@
       `.mkx-rcard{border:1px solid ${D.bd};border-radius:18px;background:${D.card};padding:17px;margin-bottom:18px}`,
       `.mkx-vall{background:none;border:none;color:${D.pur};font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}`,
       `.mkx-rfoll{padding:6px 15px;border-radius:9px;border:1px solid ${D.ind};background:rgba(99,102,241,.08);color:#aeb8ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0}`,
-      `.mkx-ringav{border-radius:50%;line-height:0;flex-shrink:0;animation:mkxRingP 3.6s ease-in-out infinite}`,
-      `@keyframes mkxRingP{0%,100%{box-shadow:0 0 0 2px var(--rc),0 0 9px var(--rg)}50%{box-shadow:0 0 0 2px var(--rc),0 0 16px var(--rg)}}`,
+      `.mkx-rav{display:inline-block;border-radius:50%;padding:2px;line-height:0;flex-shrink:0;background:linear-gradient(135deg,#5b6bff,#a855f7 52%,#22d3ee);box-shadow:0 0 10px rgba(124,108,255,.32)}`,
       `@media (max-width:1199px){.mkx-rail{display:none}}`
     ].join('');
     document.head.appendChild(s);
@@ -191,17 +190,25 @@
 
   /* ---- right rail: trending creators (live) ---- */
   function trending(creators) {
-    var rows = (creators || []).slice(0, 5).map(function (c, i) {
-      var foll = c.is_me ? '' : `<button class='mk-foll mkx-rfoll${c.is_following ? ' on' : ''}' data-uid='${c.id}' data-on='${c.is_following ? 1 : 0}' type='button'>${c.is_following ? 'Following' : 'Follow'}</button>`;
-      return `<div style='display:flex;align-items:center;gap:11px;padding:9px 0'>` +
-        `<span style='color:${D.t3};font-size:13px;font-weight:700;width:12px;flex-shrink:0'>${i + 1}</span>` +
-        `<div class='mk-openc' data-h='${esc(c.username)}' style='cursor:pointer'>${ringAv(c.avatar || '\uD83E\uDDD1\u200D\uD83D\uDCBB', 38, D.cyan, 'rgba(34,211,238,.45)')}</div>` +
-        `<div class='mk-openc' data-h='${esc(c.username)}' style='flex:1;min-width:0;cursor:pointer'><div style='display:flex;align-items:center;gap:3px;color:${D.t1};font-weight:700;font-size:13.5px'>${esc(c.name || c.username)}${c.verified ? goldSeal(13) : ''}</div><div style='color:${D.t3};font-size:11px'>@${esc(c.username)}</div><div style='color:${D.t2};font-size:11px;margin-top:1px'>${mkNum(c.follower_count || 0)} Followers</div></div>` +
+    var list = (creators || []).slice(0, 5);
+    var rows = list.map(function (c, i) {
+      var foll = c.is_me
+        ? `<span style='font-size:11px;font-weight:700;color:${D.t3};flex-shrink:0'>You</span>`
+        : `<button class='mk-foll mkx-rfoll${c.is_following ? ' on' : ''}' data-uid='${c.id}' data-on='${c.is_following ? 1 : 0}' type='button'>${c.is_following ? 'Following' : 'Follow'}</button>`;
+      var sep = i === list.length - 1 ? '' : ';border-bottom:1px solid rgba(255,255,255,.055)';
+      return `<div style='display:flex;align-items:center;gap:12px;padding:12px 0${sep}'>` +
+        `<span style='color:${D.t3};font-size:13px;font-weight:800;width:14px;text-align:center;flex-shrink:0'>${i + 1}</span>` +
+        `<div class='mk-openc' data-h='${esc(c.username)}' style='cursor:pointer;flex-shrink:0'>${ringAv(c.avatar || '\uD83E\uDDD1\u200D\uD83D\uDCBB', 40)}</div>` +
+        `<div class='mk-openc' data-h='${esc(c.username)}' style='flex:1;min-width:0;cursor:pointer'>` +
+          `<div style='display:flex;align-items:center;gap:4px;color:${D.t1};font-weight:700;font-size:13.5px;line-height:1.25'>${esc(c.name || c.username)}${c.verified ? goldSeal(13) : ''}</div>` +
+          `<div style='color:${D.t3};font-size:11.5px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>@${esc(c.username)}</div>` +
+          `<div style='color:${D.t2};font-size:11px;margin-top:2px'>${mkNum(c.follower_count || 0)} followers</div>` +
+        `</div>` +
         foll +
       `</div>`;
     }).join('');
-    if (!rows) rows = `<div style='color:${D.t3};font-size:12.5px;padding:8px 0'>No creators yet.</div>`;
-    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'><span style='font-weight:800;font-size:15px;color:${D.t1}'>Trending Creators</span><button class='mkx-vall' data-nav='creators' type='button'>View all</button></div>${rows}</div>`;
+    if (!rows) rows = `<div style='color:${D.t3};font-size:13px;padding:16px 2px;text-align:center'>No creators yet.</div>`;
+    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px'><span style='font-weight:800;font-size:15.5px;color:${D.t1}'>Trending Creators</span><button class='mkx-vall' data-nav='creators' type='button'>View all</button></div>${rows}</div>`;
   }
 
   /* ---- right rail: QNTM token (placeholder chart, pending backend) ---- */
@@ -215,18 +222,20 @@
 
   /* ---- right rail: featured products (placeholder, pending backend) ---- */
   function featured() {
-    var rows = [
+    var data = [
       ['Quantum Reversal Indicator', '@everalKing', '4.9', '200'],
       ['Supply & Demand Zones', '@ZoneTrader', '4.8', '180'],
       ['AI News Sentiment Bot', '@NewsAlgo', '4.9', '500']
-    ].map(function (p) {
-      return `<div style='display:flex;align-items:center;gap:11px;padding:9px 0'>` +
-        `<div style='width:46px;height:46px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,${D.ind}33,${D.pur}22);display:flex;align-items:center;justify-content:center;color:${D.t2}'>${ic(`<path d='M3 3v18h18'/><path d='M7 13l3-3 3 3 4-5'/>`, 22)}</div>` +
-        `<div style='flex:1;min-width:0'><div style='color:${D.t1};font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>${p[0]}</div><div style='color:${D.t3};font-size:11px'>${p[1]}</div></div>` +
-        `<div style='text-align:right;flex-shrink:0'><div style='color:#fbbf24;font-size:12px;font-weight:700'>\u2605 ${p[2]}</div><div style='color:${D.cyan};font-size:12px;font-weight:700;margin-top:2px'>${p[3]} QNTM</div></div>` +
+    ];
+    var rows = data.map(function (p, i) {
+      var sep = i === data.length - 1 ? '' : ';border-bottom:1px solid rgba(255,255,255,.055)';
+      return `<div style='display:flex;align-items:center;gap:12px;padding:12px 0${sep}'>` +
+        `<div style='width:44px;height:44px;border-radius:12px;flex-shrink:0;background:linear-gradient(135deg,${D.ind}33,${D.pur}22);border:1px solid ${D.bd};display:flex;align-items:center;justify-content:center;color:${D.t2}'>${ic(`<path d='M3 3v18h18'/><path d='M7 13l3-3 3 3 4-5'/>`, 22)}</div>` +
+        `<div style='flex:1;min-width:0'><div style='color:${D.t1};font-weight:700;font-size:13px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>${p[0]}</div><div style='color:${D.t3};font-size:11.5px;margin-top:2px'>${p[1]}</div></div>` +
+        `<div style='text-align:right;flex-shrink:0'><div style='color:#fbbf24;font-size:12px;font-weight:800'>\u2605 ${p[2]}</div><div style='color:${D.cyan};font-size:12px;font-weight:700;margin-top:3px'>${p[3]} QNTM</div></div>` +
       `</div>`;
     }).join('');
-    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'><span style='font-weight:800;font-size:15px;color:${D.t1}'>Featured Products</span><button class='mkx-vall' data-nav='featured' type='button'>View all</button></div>${rows}</div>`;
+    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px'><span style='font-weight:800;font-size:15.5px;color:${D.t1}'>Featured Products</span><button class='mkx-vall' data-nav='featured' type='button'>View all</button></div>${rows}</div>`;
   }
 
   /* ---- right rail: create & earn ---- */
