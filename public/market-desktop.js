@@ -61,7 +61,9 @@
       `.mkx-pill{font-size:9px;font-weight:800;letter-spacing:.5px;padding:3px 8px;border-radius:7px;text-transform:uppercase}`,
       `.mkx-act{display:flex;align-items:center;gap:7px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:700;padding:0}`,
       `.mkx-rail{width:330px;flex-shrink:0;overflow-y:auto;padding:18px 18px 24px;background:${D.panel2};border-left:1px solid ${D.bd};display:flex;flex-direction:column;gap:16px}`,
-      `.mkx-rcard{border:1px solid ${D.bd};border-radius:18px;background:${D.card};padding:17px;flex:1 1 0;min-height:0;display:flex;flex-direction:column}`,
+      `.mkx-rcard{border:1px solid ${D.bd};border-radius:18px;background:${D.card};padding:17px;display:flex;flex-direction:column;flex:0 0 auto;min-height:0}`,
+      `.mkx-rscroll{overflow-y:auto;overflow-x:hidden;max-height:420px;margin:0 -4px;padding:0 4px}`,
+      `.mkx-rscroll::-webkit-scrollbar{width:6px}.mkx-rscroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:6px}`,
       `.mkx-vall{background:none;border:none;color:${D.pur};font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}`,
       `.mkx-rfoll{padding:6px 15px;border-radius:9px;border:1px solid ${D.ind};background:rgba(99,102,241,.08);color:#aeb8ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0}`,
       `.mkx-rav{display:inline-block;border-radius:50%;padding:2px;line-height:0;flex-shrink:0;background:linear-gradient(135deg,#5b6bff,#a855f7 52%,#22d3ee);box-shadow:0 0 10px rgba(124,108,255,.32)}`,
@@ -210,7 +212,7 @@
 
   /* ---- right rail: trending creators (live) ---- */
   function trending(creators) {
-    var list = (creators || []).slice(0, 5);
+    var list = (creators || []).slice(0, 20);
     var rows = list.map(function (c, i) {
       var foll = c.is_me
         ? `<span style='font-size:11px;font-weight:700;color:${D.t3};flex-shrink:0'>You</span>`
@@ -228,7 +230,7 @@
       `</div>`;
     }).join('');
     if (!rows) rows = `<div style='color:${D.t3};font-size:13px;padding:16px 2px;text-align:center'>No creators yet.</div>`;
-    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px'><span style='font-weight:800;font-size:15.5px;color:${D.t1}'>Trending Creators</span><button class='mkx-vall' data-nav='creators' type='button'>View all</button></div>${rows}</div>`;
+    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;flex-shrink:0'><span style='font-weight:800;font-size:15.5px;color:${D.t1}'>Trending Creators</span><button class='mkx-vall' data-nav='creators' type='button'>View all</button></div><div class='mkx-rscroll'>${rows}</div></div>`;
   }
 
   /* ---- right rail: QNTM token (placeholder chart, pending backend) ---- */
