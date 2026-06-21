@@ -189,8 +189,8 @@
   /* ---- center: search + heading + grid + footer (reusable pieces) ---- */
   function searchBar() {
     return `<div style='display:flex;align-items:center;gap:14px;margin-bottom:22px'>` +
-        `<div class='mkx-search'>${ic(`<circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/>`, 18)}<span>Search for products, creators and posts...</span></div>` +
-        `<div class='mkx-bell'>${ic(`<path d='M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9'/><path d='M13.73 21a2 2 0 0 1-3.46 0'/>`, 20)}<span style='position:absolute;top:11px;right:13px;width:7px;height:7px;border-radius:50%;background:${D.pur};box-shadow:0 0 8px ${D.pglow}'></span></div>` +
+        `<label class='mkx-search' style='cursor:text'>${ic(`<circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/>`, 18)}<input id='mkx-search-input' type='text' autocomplete='off' placeholder='Search for products, creators and posts...' value='${esc((typeof MK !== 'undefined' && MK.q) || '')}' style='flex:1;min-width:0;background:none;border:none;outline:none;color:${D.t1};font-size:14px;font-family:inherit'/></label>` +
+        `<button class='mkx-bell' id='mkx-bell' type='button' title='Notifications'>${ic(`<path d='M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9'/><path d='M13.73 21a2 2 0 0 1-3.46 0'/>`, 20)}<span style='position:absolute;top:11px;right:13px;width:7px;height:7px;border-radius:50%;background:${D.pur};box-shadow:0 0 8px ${D.pglow}'></span></button>` +
       `</div>`;
   }
   function exploreHead() {
@@ -233,11 +233,24 @@
 
   /* ---- right rail: QNTM token (placeholder chart, pending backend) ---- */
   function token() {
-    var pts = '0,40 18,36 34,38 52,30 70,33 88,24 106,27 124,18 142,22 160,12 178,16 196,8 214,11 232,4';
-    var chart = `<svg viewBox='0 0 232 48' width='100%' height='70' preserveAspectRatio='none' style='margin-top:12px'><defs><linearGradient id='mkxtok' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='#5b6bff'/><stop offset='1' stop-color='#a855f7'/></linearGradient><linearGradient id='mkxtokf' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='rgba(124,108,255,.32)'/><stop offset='1' stop-color='rgba(124,108,255,0)'/></linearGradient></defs><polygon points='0,48 ${pts} 232,48' fill='url(#mkxtokf)'/><polyline points='${pts}' fill='none' stroke='url(#mkxtok)' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
-    return `<div class='mkx-rcard'><div style='font-weight:800;font-size:15px;color:${D.t1};margin-bottom:10px'>QNTM Token</div>` +
-      `<div style='display:flex;align-items:baseline;gap:8px'><span style='font-size:26px;font-weight:800;color:${D.t1}'>1.245</span><span style='color:${D.cyan};font-weight:700;font-size:14px'>QNTM</span></div>` +
-      `<div style='color:${D.green};font-size:13px;font-weight:700;margin-top:2px'>+6.78% <span style='color:${D.t3};font-weight:500'>(24h)</span></div>${chart}</div>`;
+    function row(id, label, last) {
+      var bb = last ? '' : ';border-bottom:1px solid rgba(255,255,255,.055)';
+      return `<div style='display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0${bb}'>` +
+        `<span style='color:${D.t2};font-size:12.5px'>${label}</span>` +
+        `<div style='text-align:right'><div id='${id}' style='color:${D.t1};font-weight:800;font-size:13.5px'>\u2014</div><div id='${id}-usd' style='color:${D.t3};font-size:10.5px;margin-top:1px'>\u2014</div></div>` +
+      `</div>`;
+    }
+    return `<div class='mkx-rcard'>` +
+      `<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px'>` +
+        `<span style='font-weight:800;font-size:15px;color:${D.t1}'>QNTM Token</span>` +
+        `<span style='font-size:9.5px;font-weight:800;letter-spacing:.5px;color:${D.green};background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.3);padding:2px 8px;border-radius:7px'>LIVE</span>` +
+      `</div>` +
+      `<div style='display:flex;align-items:baseline;gap:7px'><span style='font-size:29px;font-weight:800;color:${D.t1}'>$0.01</span><span style='color:${D.t3};font-weight:600;font-size:13px'>/ QNTM</span></div>` +
+      `<div style='color:${D.t3};font-size:11px;margin:3px 0 8px'>Fixed internal price \u00b7 1 QNTM = $0.01</div>` +
+      row('mkx-tok-pool', 'Reward Pool', false) +
+      row('mkx-tok-held', 'Held by Users', false) +
+      row('mkx-tok-dist', 'From Reward Pool', true) +
+    `</div>`;
   }
 
   /* ---- right rail: featured products (placeholder, pending backend) ---- */
@@ -324,6 +337,7 @@
       } catch (e) {}
     });
     wireNavScope(railEl);
+    loadToken();
   }
 
   // Load real XP/level for the signed-in user and fill the sidebar badge + bar.
@@ -340,6 +354,30 @@
       if (lvlEl) lvlEl.textContent = 'LVL ' + level;
       if (barEl) barEl.style.width = Math.max(0, Math.min(100, Math.round(xp / xpMax * 100))) + '%';
       if (txtEl) txtEl.textContent = xp.toLocaleString('en-US') + ' / ' + xpMax.toLocaleString('en-US') + ' XP';
+    } catch (e) {}
+  }
+
+  // Load the live QNTM economy figures (GET /qntm/wallets/supply) and fill the
+  // rail token card with the reward pool / held by users / from reward pool,
+  // each shown in QNTM and USD (fixed 1 QNTM = $0.01).
+  async function loadToken() {
+    try {
+      var d = await api('/qntm/wallets/supply');
+      if (!d) return;
+      var price = Number(d.priceUsd) || 0.01;
+      var fmtUsd = function (n) {
+        if (!isFinite(n)) return "$0";
+        return "$" + (typeof mkNum === 'function' ? mkNum(n) : Math.round(n).toLocaleString('en-US'));
+      };
+      var fmtQ = function (n) { return (typeof mkNum === 'function' ? mkNum(n) : Math.round(n).toLocaleString('en-US')) + ' QNTM'; };
+      var put = function (id, qobj) {
+        var n = Number((qobj && qobj.qntm) || 0) || 0;
+        var el = document.getElementById(id); if (el) el.textContent = fmtQ(n);
+        var us = document.getElementById(id + '-usd'); if (us) us.textContent = fmtUsd(n * price);
+      };
+      put('mkx-tok-pool', d.rewardPool);
+      put('mkx-tok-held', d.heldByUsers);
+      put('mkx-tok-dist', d.fromRewardPool);
     } catch (e) {}
   }
 
@@ -397,20 +435,64 @@
     return body.querySelector('#mkx-center');
   }
 
+  var _searchTimer = null;
+
+  // Fetch the Explore feed and fill ONLY the grid (so the search box keeps focus
+  // while typing). Called on first render and on every search keystroke / chip.
+  async function loadFeed(center) {
+    if (!center) return;
+    var grid = center.querySelector('.mkx-feedgrid');
+    if (!grid) return;
+    grid.innerHTML = feedLoading();
+    try {
+      var qs = 'sort=' + MK.sort + '&type=' + encodeURIComponent(MK.type) + '&q=' + encodeURIComponent((typeof MK !== 'undefined' && MK.q) || '') + '&limit=30';
+      var d = await api('/market/explore?' + qs);
+      var posts = (d && d.posts) || [];
+      grid.innerHTML = posts.length ? posts.map(card).join('') : emptyGrid();
+    } catch (e) {
+      grid.innerHTML = emptyGrid(typeof mkErrMsg === 'function' ? mkErrMsg(e) : 'Could not load feed');
+    }
+  }
+
+  // Notifications: there is no notification system yet, so the bell opens a
+  // simple empty-state panel ("No notifications yet").
+  function openNotifications() {
+    if (typeof modal !== 'function') return;
+    modal('Notifications', function (body) {
+      body.innerHTML =
+        `<div style='text-align:center;padding:26px 14px 10px'>` +
+          `<div style='display:flex;justify-content:center;margin-bottom:14px;color:${t.t3}'><svg width='46' height='46' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'><path d='M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9'/><path d='M13.73 21a2 2 0 0 1-3.46 0'/></svg></div>` +
+          `<div style='color:${t.t1};font-weight:700;font-size:16px'>No notifications yet</div>` +
+          `<div style='color:${t.t3};font-size:13px;margin-top:6px;line-height:1.5'>You are all caught up. New activity will appear here.</div>` +
+        `</div>`;
+    });
+  }
+
+  // Wire the live search input (debounced; updates only the feed grid to keep
+  // focus) and the notifications bell inside the Explore center.
+  function wireExploreCenter(center) {
+    if (!center) return;
+    var input = center.querySelector('#mkx-search-input');
+    if (input) {
+      input.oninput = function () {
+        if (typeof MK !== 'undefined') MK.q = input.value;
+        clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(function () { loadFeed(center); }, 280);
+      };
+      input.onkeydown = function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); clearTimeout(_searchTimer); loadFeed(center); }
+      };
+    }
+    var bell = center.querySelector('#mkx-bell');
+    if (bell) bell.onclick = function () { openNotifications(); };
+  }
+
   // Render the Explore feed into the center (search + heading + tabs + grid).
   async function renderExploreCenter(center) {
     if (!center) return;
     center.innerHTML = exploreCenterHTML(feedLoading());
-    try {
-      var qs = 'sort=' + MK.sort + '&type=' + encodeURIComponent(MK.type) + '&q=' + encodeURIComponent(MK.q || '') + '&limit=30';
-      var d = await api('/market/explore?' + qs);
-      var posts = (d && d.posts) || [];
-      var grid = center.querySelector('.mkx-feedgrid');
-      if (grid) grid.innerHTML = posts.length ? posts.map(card).join('') : emptyGrid();
-    } catch (e) {
-      var g2 = center.querySelector('.mkx-feedgrid');
-      if (g2) g2.innerHTML = emptyGrid(typeof mkErrMsg === 'function' ? mkErrMsg(e) : 'Could not load feed');
-    }
+    wireExploreCenter(center);
+    await loadFeed(center);
   }
 
   /* ---- wrap the mobile renderers ---- */
