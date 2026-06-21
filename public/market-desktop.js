@@ -74,13 +74,13 @@
   /* ---- left sidebar ---- */
   function sidebar() {
     var nav = [
-      ['market', 'Explore', `<circle cx='12' cy='12' r='9'/><polygon points='15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5'/>`],
-      ['companies', 'Companies', `<path d='M3 21h18M5 21V8l7-5 7 5v13'/><path d='M9 12h.01M9 16h.01M15 12h.01M15 16h.01'/>`],
-      ['create', 'Create', `<rect x='3' y='3' width='18' height='18' rx='3'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/>`],
-      ['store', 'My Store', `<path d='M4 9h16l-1.18-4.13A1 1 0 0 0 17.86 4H6.14a1 1 0 0 0-.96.87L4 9z'/><path d='M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9'/><path d='M9.5 20v-6h5v6'/>`]
+      ['explore', 'Explore', `<rect x='3' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='14' width='7' height='7' rx='1.5'/><rect x='3' y='14' width='7' height='7' rx='1.5'/>`],
+      ['companies', 'Companies', `<path d='M3 21h18'/><path d='M5 21V7l8-4v18'/><path d='M19 21V11l-6-4'/><line x1='9' y1='9' x2='9' y2='9.01'/><line x1='9' y1='13' x2='9' y2='13.01'/>`],
+      ['create', 'Create', `<circle cx='12' cy='12' r='9'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/>`],
+      ['store', 'My Store', `<path d='M3 9l1-5h16l1 5'/><path d='M5 9v11h14V9'/><path d='M9 22V12h6v10'/>`]
     ];
     var items = nav.map(function (n) {
-      var on = n[0] === 'market';
+      var on = n[0] === 'explore';
       return `<button class='mkx-navi${on ? ' on' : ''}' data-nav='${n[0]}' type='button'>${ic(n[2], 20)}<span>${n[1]}</span></button>`;
     }).join('');
 
@@ -274,22 +274,14 @@
     scope.querySelectorAll('[data-nav]').forEach(function (b) {
       b.addEventListener('click', function () {
         var n = b.getAttribute('data-nav');
+        // sidebar tabs mirror the mobile bottom nav exactly, via the same mkSetTab()
+        if (n === 'explore' || n === 'companies' || n === 'create' || n === 'store') {
+          if (typeof mkSetTab === 'function') { try { return mkSetTab(n); } catch (e) {} }
+          return;
+        }
         if (n === 'wallet') { if (window.openWallet) openWallet(); return; }
         if (n === 'upgrade' || n === 'publish') { if (window.openSub) openSub(); return; }
-        if (n === 'create') {
-          if (typeof window.mkCompose === 'function') { try { return mkCompose(); } catch (e) {} }
-          if (window.openSub) openSub();
-          return;
-        }
-        if (n === 'store') {
-          if (typeof window.mkGoCreator === 'function' && typeof S !== 'undefined' && S.user && S.user.username) { try { return mkGoCreator(S.user.username); } catch (e) {} }
-          return;
-        }
-        if (n === 'market') {
-          try { if (typeof MK !== 'undefined') { MK.handle = null; } if (typeof mkRender === 'function') mkRender(); } catch (e) {}
-          return;
-        }
-        if (n === 'companies' || n === 'creators' || n === 'featured') { return; }
+        if (n === 'creators' || n === 'featured') { return; }
         // home (brand logo) -> leave Market
         closeMarket();
       });
