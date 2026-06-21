@@ -1701,6 +1701,11 @@ function mkProductForm(p){
       <input id="mkpf-badge" class="gi" style="font-size:14px;margin-bottom:12px" maxlength="12" value="${ed?esc(p.badge||''):''}" placeholder="NEW, HOT, PRO..."/>
       <label style="${mkLbl()}">Description</label>
       <textarea id="mkpf-desc" class="gi" rows="4" style="resize:none;font-size:14px;margin-bottom:14px" placeholder="What it does, how to use it, what's included...">${ed?esc(p.description||''):''}</textarea>
+      <label style="${mkLbl()}">TradingView public link</label>
+      <input id="mkpf-tvpub" class="gi" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-size:14px;margin-bottom:12px" value="${ed?esc(p.tv_public_url||''):''}" placeholder="https://www.tradingview.com/script/..."/>
+      <label style="${mkLbl()}">TradingView invite-only link</label>
+      <input id="mkpf-tvinv" class="gi" type="url" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" style="font-size:14px;margin-bottom:6px" value="${ed?esc(p.tv_invite_url||''):''}" placeholder="https://www.tradingview.com/script/ (invite-only)"/>
+      <div style="color:${t.t4};font-size:11px;line-height:1.5;margin-bottom:14px">Add at least one. Buyers get this access link only after a successful purchase.</div>
       <div style="display:flex;gap:8px">${ed?`<button id="mkpf-arch" type="button" style="${mkGhostBtn()};flex:1;color:#ff6b6b;border-color:rgba(255,107,107,.4)">Archive</button>`:''}<button id="mkpf-save" class="pb" style="flex:2">${ed?'Save changes':'Publish'}</button></div>`;
     const renderCover=()=>{const cc=body.querySelector('#mkpf-cover');cc.innerHTML=cover?`<img src="${esc(cover)}" alt="" style="width:100%;border-radius:12px;max-height:180px;object-fit:cover"/>`:`<div style="width:100%;height:120px;border-radius:12px;border:1px dashed ${t.ba};display:flex;align-items:center;justify-content:center;background:${t.ch}">${mkChartGlyph(34)}</div>`;};
     renderCover();
@@ -1711,13 +1716,18 @@ function mkProductForm(p){
     body.querySelector('#mkpf-save').onclick=async()=>{
       const name=body.querySelector('#mkpf-name').value.trim();
       if(!name){mkToast('Name is required');return;}
-      const payload={type:body.querySelector('#mkpf-type').value,name,subtitle:body.querySelector('#mkpf-sub').value.trim(),price_qntm:Number(body.querySelector('#mkpf-price').value)||0,category:body.querySelector('#mkpf-cat').value.trim(),badge:body.querySelector('#mkpf-badge').value.trim(),description:body.querySelector('#mkpf-desc').value.trim(),cover};
+      const tvPub=body.querySelector('#mkpf-tvpub').value.trim();
+      const tvInv=body.querySelector('#mkpf-tvinv').value.trim();
+      const tvOk=(s)=>{if(!s)return true;try{const u=new URL(s);return(u.protocol==='http:'||u.protocol==='https:')&&/(^|\.)tradingview\.com$/i.test(u.hostname);}catch(e){return false;}};
+      if(!tvOk(tvPub)||!tvOk(tvInv)){mkToast('Enter a valid TradingView link (https://www.tradingview.com/script/...)');return;}
+      if(!tvPub&&!tvInv){mkToast('Add at least one TradingView access link (public or invite-only)');return;}
+      const payload={type:body.querySelector('#mkpf-type').value,name,subtitle:body.querySelector('#mkpf-sub').value.trim(),price_qntm:Number(body.querySelector('#mkpf-price').value)||0,category:body.querySelector('#mkpf-cat').value.trim(),badge:body.querySelector('#mkpf-badge').value.trim(),description:body.querySelector('#mkpf-desc').value.trim(),cover,tv_public_url:tvPub,tv_invite_url:tvInv};
       const btn=body.querySelector('#mkpf-save');btn.disabled=true;btn.textContent='Saving...';
       try{if(ed)await api(`/market/products/${p.id}`,{method:'PUT',body:JSON.stringify(payload)});else await api('/market/products',{method:'POST',body:JSON.stringify(payload)});close();mkToast(ed?'Saved':'Published!');mkRefreshStore();}catch(e){btn.disabled=false;btn.textContent=ed?'Save changes':'Publish';mkToast(mkErrMsg(e));}
     };
   });
 }
-async function mkEditProduct(id){try{const d=await api(`/market/products/${id}`);mkProductForm(d.product);}catch(e){mkToast(mkErrMsg(e));}}
+async function mkEditProduct(id){try{const d=await api(`/market/products/${id}`);const _p=Object.assign({},d.product,{tv_public_url:(d.access&&d.access.public_url)||'',tv_invite_url:(d.access&&d.access.invite_url)||''});mkProductForm(_p);}catch(e){mkToast(mkErrMsg(e));}}
 
 // ---- Edit post ----
 async function mkEditPost(id){
@@ -1794,21 +1804,48 @@ function mkOpenProduct(id){
     api(`/market/products/${id}`).then(d=>{
       const p=d.product,o=p.owner||{};
       const buyArea=p.bought_by_me?`<button disabled style="padding:12px 28px;border-radius:11px;border:1px solid ${t.ba};background:transparent;color:${t.on};font-weight:800;font-size:14px;font-family:inherit">&#10003; Owned</button>`:`<button class="mkop-buy" data-pid="${p.id}" style="${mkPrimBtn()};padding:12px 32px">Get now</button>`;
+      const accessHtml=mkAccessBlock(d,p);
       body.innerHTML=`
-        <div style="margin:-8px -8px 0"><div style="position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:${t.ch}">${p.cover?`<img src="${esc(p.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,${t.ch},${t.cd})">${mkChartGlyph(54)}</div>`}<span style="position:absolute;top:10px;left:10px;font-size:10px;font-weight:800;letter-spacing:.5px;color:#fff;background:${t.pg};padding:4px 10px;border-radius:8px">${mkTypeLabel(p.type).toUpperCase()}</span></div></div>
+        <div style="margin:-8px -8px 0"><div class="mkop-cover" data-img="${esc(p.cover||'')}" style="position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:${t.ch};cursor:${p.cover?'zoom-in':'default'}">${p.cover?`<img src="${esc(p.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,${t.ch},${t.cd})">${mkChartGlyph(54)}</div>`}<span style="position:absolute;top:10px;left:10px;font-size:10px;font-weight:800;letter-spacing:.5px;color:#fff;background:${t.pg};padding:4px 10px;border-radius:8px">${mkTypeLabel(p.type).toUpperCase()}</span></div></div>
         <div style="margin-top:14px;color:${t.t1};font-weight:800;font-size:19px;line-height:1.2">${esc(p.name)}</div>
         ${p.subtitle?`<div style="color:${t.t3};font-size:13px;margin-top:3px">${esc(p.subtitle)}</div>`:''}
         <div style="margin-top:10px;display:flex;align-items:center;gap:12px">${mkStars(p.rating_avg,true)}<span style="color:${t.t4};font-size:12px">${mkNum(p.sales_count)} sold</span></div>
         <button class="mkop-owner" data-h="${esc(o.username)}" style="display:flex;align-items:center;gap:10px;margin:14px 0;padding:10px;border:1px solid ${t.bd};border-radius:12px;background:${t.ch};cursor:pointer;width:100%;text-align:left;font-family:inherit">${avatar(o.avatar||'\uD83E\uDDD1\u200D\uD83D\uDCBB',38)}<div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:4px;color:${t.t1};font-weight:700;font-size:13px">${esc(o.name||o.username||'')}${o.verified?goldSeal(13):''}</div><div style="color:${t.t3};font-size:11px">@${esc(o.username||'')} &#183; View store</div></div><span style="color:${t.t4}">${ic('<polyline points="9 18 15 12 9 6"/>',16)}</span></button>
         ${p.description?`<div style="color:${t.t2};font-size:13.5px;line-height:1.6;white-space:pre-wrap;margin-bottom:14px">${esc(p.description)}</div>`:''}
+        ${accessHtml}
         ${(p.tags&&p.tags.length)?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px">${p.tags.map(tag=>`<span style="font-size:11px;color:${t.ac};background:${t.act};padding:4px 10px;border-radius:8px">#${esc(tag)}</span>`).join('')}</div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:14px;border-top:1px solid ${t.bd}"><div style="font-size:20px">${mkPriceTag(p.price_qntm)}</div>${buyArea}</div>`;
       const ow=body.querySelector('.mkop-owner');if(ow)ow.onclick=()=>{close();mkGoCreator(o.username);};
-      const bb=body.querySelector('.mkop-buy');if(bb)bb.onclick=()=>mkBuy(bb);
+      const bb=body.querySelector('.mkop-buy');if(bb)bb.onclick=async()=>{const r=await mkBuy(bb);if(r){close();mkOpenProduct(id);}};
+      const cvb=body.querySelector('.mkop-cover');if(cvb&&cvb.dataset.img)cvb.onclick=()=>mkLightbox(cvb.dataset.img);
     }).catch(e=>{body.innerHTML=mkEmpty("Couldn't load",mkErrMsg(e));});
   });
 }
 
+function mkAccessBlock(d,p){
+  const owned=!!(p&&p.bought_by_me)||!!(d&&d.access&&(d.access.public_url||d.access.invite_url));
+  const a=(d&&d.access)||{};
+  const link=(url,label,sub)=>`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="mkop-tv" style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid ${t.ba};border-radius:12px;background:${t.act};text-decoration:none;margin-bottom:8px"><span style="display:flex;color:${t.ac}">${ic('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',18)}</span><span style="flex:1;min-width:0"><span style="display:block;color:${t.t1};font-weight:700;font-size:13px">${label}</span><span style="display:block;color:${t.t3};font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sub}</span></span><span style="color:${t.ac};font-weight:700;font-size:12px;flex-shrink:0">Open &#8599;</span></a>`;
+  if(owned){
+    let inner='';
+    if(a.public_url)inner+=link(a.public_url,'Open in TradingView (public)',a.public_url);
+    if(a.invite_url)inner+=link(a.invite_url,'TradingView invite-only access',a.invite_url);
+    if(!inner)inner=`<div style="color:${t.t3};font-size:12.5px">The seller hasn't added a TradingView access link yet.</div>`;
+    return `<div style="margin:6px 0 14px;padding:13px;border:1px solid ${t.ba};border-radius:14px;background:${t.ch}"><div style="display:flex;align-items:center;gap:7px;margin-bottom:10px;color:${t.on};font-weight:800;font-size:12.5px">${ic('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',15)} Your TradingView access</div>${inner}<div style="color:${t.t4};font-size:11px;margin-top:4px;line-height:1.5">Open the link, then add the indicator to your chart. For invite-only scripts, request access with your TradingView username if prompted.</div></div>`;
+  }
+  if(d&&d.has_access_link){
+    return `<div style="margin:6px 0 14px;padding:12px 13px;border:1px dashed ${t.bd};border-radius:14px;background:${t.ch};display:flex;align-items:center;gap:9px"><span style="display:flex;color:${t.t3}">${ic('<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',16)}</span><div style="color:${t.t3};font-size:12.5px;line-height:1.45">This product includes a <b style="color:${t.t2}">TradingView access link</b>, unlocked after purchase.</div></div>`;
+  }
+  return '';
+}
+function mkLightbox(url){
+  if(!url)return;
+  const ov=ce('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(3,6,15,.93);display:flex;align-items:center;justify-content:center;padding:24px;cursor:zoom-out;animation:dqfade .2s ease';
+  ov.innerHTML=`<img src="${esc(url)}" alt="" style="max-width:100%;max-height:100%;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6)"/><button type="button" aria-label="Close" style="position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:22px;cursor:pointer">&times;</button>`;
+  ov.onclick=()=>{ov.remove();};
+  document.body.appendChild(ov);
+}
 function mkOpenPost(id){
   modal('Post',(body,close)=>{
     body.innerHTML=mkLoader();
@@ -1845,12 +1882,18 @@ function mkCommentRow(c){
 }
 
 // ---- Purchases / picker ----
+function mkPurchaseRow(pr){
+  const a=(pr&&pr.access)||{};
+  const tvUrl=a.public_url||a.invite_url||'';
+  const tv=tvUrl?`<a href="${esc(tvUrl)}" target="_blank" rel="noopener noreferrer" class="mkpur-tv" style="display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid ${t.ba};background:${t.act};color:${t.ac};font-size:12px;font-weight:700;text-decoration:none;flex-shrink:0">${ic('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',15)} TradingView</a>`:'';
+  return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid ${t.bd};border-radius:12px;background:${t.ch}"><button type="button" class="mkpur-item" data-id="${pr.id}" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;background:none;border:none;cursor:pointer;text-align:left;font-family:inherit;padding:0"><div style="width:48px;height:48px;border-radius:10px;overflow:hidden;background:${t.cd};flex-shrink:0;display:flex;align-items:center;justify-content:center">${pr.cover?`<img src="${esc(pr.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:mkChartGlyph(24)}</div><div style="flex:1;min-width:0"><div style="color:${t.t1};font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(pr.name)}</div><div style="color:${t.t3};font-size:11.5px">${mkTypeLabel(pr.type)}${pr.owner?(' &#183; @'+esc(pr.owner.username)):''}</div></div></button>${tv}</div>`;
+}
 function mkPurchases(){
   modal('My purchases',(body,close)=>{
     body.innerHTML=mkLoader();
     api('/market/purchases').then(d=>{
       if(!d.purchases||!d.purchases.length){body.innerHTML=mkEmpty('No purchases yet','Items you buy will appear here.');return;}
-      body.innerHTML=`<div style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto">${d.purchases.map(pr=>`<button type="button" class="mkpur-item" data-id="${pr.id}" style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid ${t.bd};border-radius:12px;background:${t.ch};cursor:pointer;text-align:left;font-family:inherit"><div style="width:48px;height:48px;border-radius:10px;overflow:hidden;background:${t.cd};flex-shrink:0;display:flex;align-items:center;justify-content:center">${pr.cover?`<img src="${esc(pr.cover)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:mkChartGlyph(24)}</div><div style="flex:1;min-width:0"><div style="color:${t.t1};font-weight:700;font-size:14px">${esc(pr.name)}</div><div style="color:${t.t3};font-size:11.5px">${mkTypeLabel(pr.type)}${pr.owner?(' &#183; @'+esc(pr.owner.username)):''}</div></div><span style="color:${t.on};font-size:11px;font-weight:700;flex-shrink:0">&#10003; Owned</span></button>`).join('')}</div>`;
+      body.innerHTML=`<div style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow-y:auto">${d.purchases.map(mkPurchaseRow).join('')}</div>`;
       body.querySelectorAll('.mkpur-item').forEach(b=>{b.onclick=()=>{close();mkOpenProduct(b.dataset.id);};});
     }).catch(e=>{body.innerHTML=mkEmpty("Couldn't load",mkErrMsg(e));});
   });
@@ -1871,7 +1914,7 @@ function mkGoCreator(h){if(!h)return;MK.handle=h;MK.cur=null;MK.ctab='store';con
 function mkRefreshStore(){if(MK.handle)mkCreator(MK.handle,true);else if(MK.tab==='store')mkMyStore();else mkRender();}
 async function mkToggleLike(btn){const id=btn.dataset.pid;try{const d=await api(`/market/posts/${id}/like`,{method:'POST'});btn.dataset.on=d.liked?'1':'0';btn.style.color=d.liked?'#ff4d6d':t.t3;if(MK&&MK.cur&&MK.cur.posts){const _pp=MK.cur.posts.find(x=>String(x.id)===String(id));if(_pp){_pp.liked_by_me=d.liked;_pp.like_count=d.like_count;}}btn.innerHTML=mkHeart(d.liked)+`<span class="mk-like-n">${d.like_count}</span>`;}catch(e){mkToast(mkErrMsg(e));}}
 async function mkToggleFollow(btn){const uid=btn.dataset.uid;try{const d=await api(`/market/follow/${uid}`,{method:'POST'});const on=d.following;document.querySelectorAll(`.mk-foll[data-uid="${uid}"]`).forEach(b=>{b.dataset.on=on?'1':'0';b.textContent=on?'Following':'Follow';b.style.cssText=on?mkFollOff():mkFollOn();});if(MK.cur&&MK.cur.creator&&String(MK.cur.creator.id)===String(uid)){MK.cur.creator.is_following=on;MK.cur.creator.follower_count=d.follower_count;}}catch(e){mkToast(mkErrMsg(e));}}
-async function mkBuy(btn){const id=btn.dataset.pid;if(btn.disabled)return;btn.disabled=true;const old=btn.textContent;btn.textContent='...';try{const d=await api(`/market/products/${id}/buy`,{method:'POST'});btn.textContent='Owned';btn.style.cssText=`padding:8px 14px;border-radius:9px;border:1px solid ${t.ba};background:transparent;color:${t.on};font-weight:700;font-size:12.5px;font-family:inherit;flex-shrink:0`;mkToast(d.already_owned?'Already in your library':'Added to your library');}catch(e){btn.disabled=false;btn.textContent=old;mkToast(mkErrMsg(e));}}
+async function mkBuy(btn){const id=btn.dataset.pid;if(btn.disabled)return null;btn.disabled=true;const old=btn.textContent;btn.textContent='...';try{const d=await api(`/market/products/${id}/buy`,{method:'POST'});btn.textContent='Owned';btn.style.cssText=`padding:8px 14px;border-radius:9px;border:1px solid ${t.ba};background:transparent;color:${t.on};font-weight:700;font-size:12.5px;font-family:inherit;flex-shrink:0`;mkToast(d.already_owned?'Already in your library':'Added to your library');return d;}catch(e){btn.disabled=false;btn.textContent=old;mkToast(mkErrMsg(e));return null;}}
 // ============================== END MARKET ==============================
 
 function openUserProfile(u){

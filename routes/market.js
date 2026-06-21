@@ -47,6 +47,34 @@ const money = (v) => {
 const PRODUCT_TYPES = ["indicator", "strategy", "bot", "bundle", "course", "script"];
 const MEDIA_TYPES = ["text", "image", "video"];
 
+// A TradingView access link: ONLY a valid http(s) URL on tradingview.com is
+// accepted (never plain text / numbers). Returns the normalized URL string,
+// "" for an empty value, or null if a non-empty value is not a valid TV link.
+function tvLink(v) {
+  const s = trimStr(v, 500);
+  if (!s) return "";
+  let u;
+  try { u = new URL(s); } catch (e) { return null; }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  const host = u.hostname.toLowerCase().replace(/^www\./, "");
+  if (host !== "tradingview.com" && !host.endsWith(".tradingview.com")) return null;
+  return u.toString();
+}
+// The access links for a product row, as an object with only the present keys.
+// NEVER spread into the public shapeProduct(); exposed only to owner/buyer.
+function accessLinks(p) {
+  const out = {};
+  const pub = (p && p.tv_public_url ? String(p.tv_public_url) : "").trim();
+  const inv = (p && p.tv_invite_url ? String(p.tv_invite_url) : "").trim();
+  if (pub) out.public_url = pub;
+  if (inv) out.invite_url = inv;
+  return out;
+}
+function hasAccessLink(p) {
+  return !!((p && p.tv_public_url && String(p.tv_public_url).trim()) ||
+            (p && p.tv_invite_url && String(p.tv_invite_url).trim()));
+}
+
 // Public shape for a user as a creator (never leaks email/role internals).
 function shapeCreator(u, { me } = {}) {
   if (!u) return null;
@@ -695,14 +723,17 @@ router.get("/products/:id", async (req, res) => {
   if (!id) return res.status(400).json({ error: "Bad id" });
   try {
     const { rows: [p] } = await pool.query(
-      `SELECT ${PRODUCT_OWNER_JOIN},
+      `SELECT ${PRODUCT_OWNER_JOIN}, p.tv_public_url, p.tv_invite_url,
               EXISTS(SELECT 1 FROM product_purchases pp WHERE pp.product_id=p.id AND pp.buyer_id=$1 AND pp.status='completed') AS bought_by_me
          FROM products p JOIN users u ON u.id = p.owner_id
         WHERE p.id = $2`,
       [me, id]
     );
     if (!p || (p.status !== "active" && p.owner_id !== me)) return res.status(404).json({ error: "Product not found" });
-    res.json({ product: shapeProduct(p) });
+    const owned = p.owner_id === me || !!p.bought_by_me;
+    const out = { product: shapeProduct(p), has_access_link: hasAccessLink(p) };
+    if (owned) out.access = accessLinks(p); // links ONLY for the owner or a completed buyer
+    res.json(out);
   } catch (e) {
     console.error("[market] product:", e.message);
     res.status(500).json({ error: "Could not load product" });
@@ -725,14 +756,22 @@ router.post("/products", async (req, res) => {
   const status = ["active", "draft"].includes(b.status) ? b.status : "active";
   let tags = Array.isArray(b.tags) ? b.tags.slice(0, 10).map((x) => trimStr(x, 30)).filter(Boolean) : [];
   if (!name) return res.status(400).json({ error: "Name is required" });
+  // TradingView access link (public and/or invite-only) — only a valid TV URL is
+  // accepted, and at least one of the two is required when listing a product.
+  const tv_public_url = tvLink(b.tv_public_url);
+  const tv_invite_url = tvLink(b.tv_invite_url);
+  if (tv_public_url === null || tv_invite_url === null)
+    return res.status(400).json({ error: "Please enter a valid TradingView link (e.g. https://www.tradingview.com/script/...)." });
+  if (!tv_public_url && !tv_invite_url)
+    return res.status(400).json({ error: "A TradingView access link is required — add the public or the invite-only link." });
 
   try {
     const becameCreator = await pool.query("UPDATE users SET is_creator = TRUE WHERE id=$1 AND is_creator = FALSE", [me]);
     if (becameCreator.rowCount === 1) await rewards.grantCreatorReward(me); // first time as creator -> grant bonus (non-blocking)
     const { rows: [p] } = await pool.query(
-      `INSERT INTO products (owner_id, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [me, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status]
+      `INSERT INTO products (owner_id, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status, tv_public_url, tv_invite_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      [me, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status, tv_public_url, tv_invite_url]
     );
     res.json({ product: shapeProduct(p) });
   } catch (e) {
@@ -766,6 +805,8 @@ router.put("/products/:id", async (req, res) => {
     if (b.badge !== undefined) put("badge", trimStr(b.badge, 20));
     if (b.status !== undefined && ["active", "draft", "archived"].includes(b.status)) put("status", b.status);
     if (b.tags !== undefined && Array.isArray(b.tags)) put("tags", b.tags.slice(0, 10).map((x) => trimStr(x, 30)).filter(Boolean));
+    if (b.tv_public_url !== undefined) { const v = tvLink(b.tv_public_url); if (v === null) return res.status(400).json({ error: "Please enter a valid TradingView link." }); put("tv_public_url", v); }
+    if (b.tv_invite_url !== undefined) { const v = tvLink(b.tv_invite_url); if (v === null) return res.status(400).json({ error: "Please enter a valid TradingView link." }); put("tv_invite_url", v); }
     if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
     sets.push("updated_at = NOW()");
     params.push(id);
@@ -808,12 +849,12 @@ router.post("/products/:id/buy", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows: [p] } = await client.query("SELECT id, owner_id, price_qntm, status FROM products WHERE id=$1 FOR UPDATE", [id]);
+    const { rows: [p] } = await client.query("SELECT id, owner_id, price_qntm, status, tv_public_url, tv_invite_url FROM products WHERE id=$1 FOR UPDATE", [id]);
     if (!p || p.status !== "active") { await client.query("ROLLBACK"); return res.status(404).json({ error: "Product not available" }); }
     if (p.owner_id === me) { await client.query("ROLLBACK"); return res.status(400).json({ error: "You already own this product" }); }
 
     const existing = await client.query("SELECT id FROM product_purchases WHERE product_id=$1 AND buyer_id=$2 AND status='completed'", [id, me]);
-    if (existing.rowCount) { await client.query("ROLLBACK"); return res.json({ purchased: true, already_owned: true }); }
+    if (existing.rowCount) { await client.query("ROLLBACK"); return res.json({ purchased: true, already_owned: true, access: accessLinks(p) }); }
 
     // Settle on the QNTM ledger INSIDE this same transaction so the license row
     // and the balance movements commit together (or roll back together). Free
@@ -839,7 +880,7 @@ router.post("/products/:id/buy", async (req, res) => {
     await client.query("UPDATE products SET sales_count = sales_count + 1 WHERE id=$1", [id]);
     await client.query("UPDATE users SET sales_count = sales_count + 1 WHERE id=$1", [p.owner_id]);
     await client.query("COMMIT");
-    res.json({ purchased: true, settlement });
+    res.json({ purchased: true, settlement, access: accessLinks(p) });
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
     // Insufficient QNTM (or other ledger error) -> surface a clean, mapped status.
@@ -862,7 +903,7 @@ router.get("/purchases", async (req, res) => {
   const me = req.user.id;
   try {
     const { rows } = await pool.query(
-      `SELECT ${PRODUCT_OWNER_JOIN}, pp.created_at AS purchased_at, pp.price_qntm AS paid_qntm
+      `SELECT ${PRODUCT_OWNER_JOIN}, p.tv_public_url, p.tv_invite_url, pp.created_at AS purchased_at, pp.price_qntm AS paid_qntm
          FROM product_purchases pp
          JOIN products p ON p.id = pp.product_id
          JOIN users u ON u.id = p.owner_id
@@ -871,7 +912,7 @@ router.get("/purchases", async (req, res) => {
       [me]
     );
     res.json({
-      purchases: rows.map((r) => ({ ...shapeProduct(r), bought_by_me: true, purchased_at: r.purchased_at, paid_qntm: Number(r.paid_qntm) })),
+      purchases: rows.map((r) => ({ ...shapeProduct(r), bought_by_me: true, purchased_at: r.purchased_at, paid_qntm: Number(r.paid_qntm), access: accessLinks(r) })),
     });
   } catch (e) {
     console.error("[market] purchases:", e.message);

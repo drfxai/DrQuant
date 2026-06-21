@@ -90,6 +90,11 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_owner  ON products(owner_id, status);
 CREATE INDEX IF NOT EXISTS idx_products_listed ON products(status, type, sales_count DESC) WHERE status = 'active';
 
+-- TradingView access links (public and/or invite-only). Returned by the API
+-- ONLY to the product owner or a completed buyer (never in public listings).
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tv_public_url TEXT DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tv_invite_url TEXT DEFAULT '';
+
 -- ---------------------------------------------------------------------------
 -- 4. PRODUCT PURCHASES  (license ledger). One active license per buyer/product.
 --    NOTE: actual QNTM settlement / escrow is intentionally NOT performed here;
