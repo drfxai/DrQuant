@@ -296,7 +296,7 @@
   function setRail(railEl, creators) {
     if (!railEl) return;
     railEl.innerHTML = '';
-    [trending(creators), token(), featured(), createEarn()].forEach(function (html) {
+    [trending(creators), token(), featured()].forEach(function (html) {
       try {
         var tmp = document.createElement('div');
         tmp.innerHTML = html;
