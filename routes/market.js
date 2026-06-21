@@ -865,4 +865,39 @@ router.get("/purchases", async (req, res) => {
   }
 });
 
+// ============================================================================
+// XP / LEVEL  (gamification surfaced on the desktop Explore sidebar)
+// ============================================================================
+
+// GET /api/market/me/stats  → XP + level for the signed-in user.
+// XP = 1000 base (level 1) + 100 per like received + 100 per post authored.
+// Level rises every 1000 XP, capped at level 10 (10000 XP). "Likes received"
+// is the sum of like_count across the user's non-deleted posts.
+router.get("/me/stats", async (req, res) => {
+  const pool = req.app.get("pool");
+  const me = req.user.id;
+  try {
+    const { rows: [r] } = await pool.query(
+      `SELECT COALESCE(COUNT(*),0)::int          AS posts,
+              COALESCE(SUM(po.like_count),0)::int AS likes
+         FROM posts po
+        WHERE po.author_id = $1 AND po.deleted_at IS NULL`,
+      [me]
+    );
+    const posts = (r && r.posts) || 0;
+    const likes = (r && r.likes) || 0;
+    const BASE = 1000, LIKE_XP = 100, POST_XP = 100, PER_LEVEL = 1000, MAX_LEVEL = 10;
+    const xp = BASE + likes * LIKE_XP + posts * POST_XP;
+    const level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(xp / PER_LEVEL)));
+    res.json({
+      posts, likes, xp, level,
+      xp_max: MAX_LEVEL * PER_LEVEL,
+      like_xp: LIKE_XP, post_xp: POST_XP, per_level: PER_LEVEL, max_level: MAX_LEVEL,
+    });
+  } catch (e) {
+    console.error("[market] me/stats:", e.message);
+    res.status(500).json({ error: "Could not load stats" });
+  }
+});
+
 module.exports = router;

@@ -65,6 +65,8 @@
       `.mkx-vall{background:none;border:none;color:${D.pur};font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}`,
       `.mkx-rfoll{padding:6px 15px;border-radius:9px;border:1px solid ${D.ind};background:rgba(99,102,241,.08);color:#aeb8ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0}`,
       `.mkx-rav{display:inline-block;border-radius:50%;padding:2px;line-height:0;flex-shrink:0;background:linear-gradient(135deg,#5b6bff,#a855f7 52%,#22d3ee);box-shadow:0 0 10px rgba(124,108,255,.32)}`,
+      `.mkx-prof{margin-top:14px;padding:12px 10px 11px;border-top:1px solid ${D.bd};border-radius:0 0 12px 12px;cursor:pointer;transition:background .15s}`,
+      `.mkx-prof:hover{background:rgba(255,255,255,.05)}`,
       `@media (max-width:1200px){.mkx-feedgrid{grid-template-columns:1fr}}`,
       `@media (max-width:1023px){.mkx-rail{display:none}}`
     ].join('');
@@ -103,19 +105,18 @@
       `</div>`;
 
     var u = (typeof S !== 'undefined' && S.user) || {};
-    var lvl = 7, xp = 6430, xpMax = 10000;
     var prof =
-      `<div style='margin-top:16px;padding-top:14px;border-top:1px solid ${D.bd}'>` +
+      `<div class='mkx-prof' data-nav='store' title='Open My Store'>` +
         `<div style='display:flex;align-items:center;gap:11px'>` +
-          ringAv(u.avatar || '\uD83E\uDDD1\u200D\uD83D\uDCBB', 42, D.cyan, 'rgba(34,211,238,.5)') +
-          `<div style='flex:1;min-width:0'><div style='display:flex;align-items:center;gap:4px;color:${D.t1};font-weight:700;font-size:14px'>${esc(u.name || 'DrFX')}${goldSeal(14)}</div><div style='color:${D.pur};font-size:11.5px'>Quantum Founder</div></div>` +
-          `<span style='color:${D.t3};font-size:18px;cursor:pointer'>\u22EE</span>` +
+          ringAv(u.avatar || '\uD83E\uDDD1\u200D\uD83D\uDCBB', 42) +
+          `<div style='flex:1;min-width:0'><div style='display:flex;align-items:center;gap:4px;color:${D.t1};font-weight:700;font-size:14px'>${esc(u.name || u.username || 'You')}${u.verified ? goldSeal(14) : ''}</div><div style='color:${D.pur};font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>@${esc(u.username || '')}</div></div>` +
+          `<span style='color:${D.t3};display:flex;flex-shrink:0'>${ic(`<polyline points='9 18 15 12 9 6'/>`, 16)}</span>` +
         `</div>` +
         `<div style='display:flex;align-items:center;gap:9px;margin-top:11px'>` +
-          `<span style='font-size:9px;font-weight:800;color:#fff;background:${D.grad};padding:3px 8px;border-radius:7px;flex-shrink:0'>LVL ${lvl}</span>` +
-          `<div style='flex:1'><div style='height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden'><div style='height:100%;width:${Math.round(xp / xpMax * 100)}%;background:${D.grad}'></div></div></div>` +
+          `<span id='mkx-lvl' style='font-size:9px;font-weight:800;color:#fff;background:${D.grad};padding:3px 8px;border-radius:7px;flex-shrink:0'>LVL 1</span>` +
+          `<div style='flex:1'><div style='height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden'><div id='mkx-xpbar' style='height:100%;width:10%;background:${D.grad};transition:width .6s cubic-bezier(.22,.61,.36,1)'></div></div></div>` +
         `</div>` +
-        `<div style='text-align:right;color:${D.t3};font-size:9.5px;margin-top:4px'>${xp.toLocaleString('en-US')} / ${xpMax.toLocaleString('en-US')} XP</div>` +
+        `<div id='mkx-xptxt' style='text-align:right;color:${D.t3};font-size:9.5px;margin-top:4px'>1,000 / 10,000 XP</div>` +
       `</div>`;
 
     return `<aside class='mkx-side'>${brand}<div>${items}</div><div style='flex:1'></div>${elite}${prof}</aside>`;
@@ -305,12 +306,30 @@
     wireNavScope(railEl);
   }
 
+  // Load real XP/level for the signed-in user and fill the sidebar badge + bar.
+  // XP/level are computed server-side (GET /market/me/stats) from the user's
+  // posts and the likes their posts have received.
+  async function loadXP() {
+    try {
+      var d = await api('/market/me/stats');
+      if (!d) return;
+      var lvlEl = document.getElementById('mkx-lvl');
+      var barEl = document.getElementById('mkx-xpbar');
+      var txtEl = document.getElementById('mkx-xptxt');
+      var xp = d.xp || 1000, level = d.level || 1, xpMax = d.xp_max || 10000;
+      if (lvlEl) lvlEl.textContent = 'LVL ' + level;
+      if (barEl) barEl.style.width = Math.max(0, Math.min(100, Math.round(xp / xpMax * 100))) + '%';
+      if (txtEl) txtEl.textContent = xp.toLocaleString('en-US') + ' / ' + xpMax.toLocaleString('en-US') + ' XP';
+    } catch (e) {}
+  }
+
   /* ---- the desktop explore renderer ---- */
   async function exploreDesktop(body) {
     injectCSS();
     body.innerHTML = `<div class='mkx-desk'>${sidebar()}${mainShell(feedLoading())}<aside class='mkx-rail'></aside></div>`;
     setRail(body.querySelector('.mkx-rail'), null);
     wireNav(body);
+    loadXP();
     try {
       var qs = 'sort=' + MK.sort + '&type=' + encodeURIComponent(MK.type) + '&q=' + encodeURIComponent(MK.q || '') + '&limit=30';
       var res = await Promise.all([api('/market/explore?' + qs), api('/market/creators?sort=followers&limit=20')]);
