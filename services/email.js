@@ -46,7 +46,24 @@ function fromAddress() {
 async function sendMail({ to, subject, text, html }) {
   const t = transport();
   if (!t) throw new Error("SMTP is not configured (set SMTP_HOST in .env)");
-  return t.sendMail({ from: fromAddress(), to, subject, text, html });
+  try {
+    return await t.sendMail({ from: fromAddress(), to, subject, text, html });
+  } catch (e) {
+    // Surface what the SMTP server actually said, so a misconfiguration is
+    // diagnosable instead of a generic "failed". nodemailer puts the server's
+    // raw reply in e.response and a category in e.code:
+    //   EAUTH                  -> wrong SMTP username/password (or API key used
+    //                             instead of the SMTP key)
+    //   EENVELOPE / 550        -> sender/recipient rejected; with Brevo the From
+    //                             address or its domain must be a verified sender
+    //   ESOCKET / ECONNECTION  -> can't reach host:port (wrong port/secure, or
+    //   / ETIMEDOUT               the VPS blocks outbound SMTP — try port 2525)
+    const detail = (e && (e.response || e.message)) || "unknown error";
+    const cat = e && (e.code || e.responseCode) ? " [" + (e.code || e.responseCode) + "]" : "";
+    const wrapped = new Error("SMTP send failed" + cat + ": " + detail);
+    wrapped.cause = e;
+    throw wrapped;
+  }
 }
 
 function otpHtml(code) {
