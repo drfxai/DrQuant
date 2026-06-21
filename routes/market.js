@@ -571,12 +571,26 @@ router.get("/creators/:handle", async (req, res) => {
         ORDER BY po.created_at DESC LIMIT 30`,
       [me, u.id]
     );
+    // XP / level for this creator (same formula as /me/stats): 1000 base +
+    // 100 per like received + 100 per post; level every 1000 XP, capped at 10.
+    const { rows: [xpRow] } = await pool.query(
+      `SELECT COALESCE(COUNT(*),0)::int AS posts, COALESCE(SUM(po.like_count),0)::int AS likes
+         FROM posts po WHERE po.author_id = $1 AND po.deleted_at IS NULL`,
+      [u.id]
+    );
+    const _xpPosts = (xpRow && xpRow.posts) || 0;
+    const _xpLikes = (xpRow && xpRow.likes) || 0;
+    const _xp = 1000 + _xpLikes * 100 + _xpPosts * 100;
+    const _level = Math.max(1, Math.min(10, Math.floor(_xp / 1000)));
     res.json({
       creator: shapeCreator(u, { me }),
       products: products.map(shapeProduct),
       posts: posts.map(shapePost),
       product_count: products.length,
       post_count: posts.length,
+      xp: _xp,
+      level: _level,
+      xp_max: 10000,
     });
   } catch (e) {
     console.error("[market] creator profile:", e.message);

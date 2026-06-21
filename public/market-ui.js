@@ -251,7 +251,7 @@
         '<div style="color:' + t.pr + ';font-size:13px;margin-top:2px">@' + esc(c.username) + (c.founded_year ? " &#183; <span style=\"color:" + t.t3 + '">Est. ' + esc(String(c.founded_year)) + "</span>" : "") + "</div>" +
         (c.headline ? '<div style="color:' + t.t2 + ';font-size:13.5px;margin-top:9px;line-height:1.5">' + esc(c.headline) + "</div>" : "") +
         (c.bio ? '<div style="color:' + t.t3 + ';font-size:13px;margin-top:6px;line-height:1.5;white-space:pre-wrap">' + esc(c.bio) + "</div>" : "") +
-        '<div style="display:flex;justify-content:space-around;gap:10px;margin-top:16px;padding:13px;border:1px solid ' + t.bd + ";border-radius:16px;background:" + t.cd + '">' + stat(mkNum(c.follower_count), "Followers") + stat(mkNum(c.following_count), "Following") + stat(mkNum(c.sales_count), "Sales") + stat((Number(c.rating_avg) || 0).toFixed(1), "Rating") + "</div>" +
+        '<div style="display:flex;justify-content:space-around;gap:10px;margin-top:16px;padding:13px;border:1px solid ' + t.bd + ";border-radius:16px;background:" + t.cd + '">' + stat(mkNum(c.follower_count), "Followers") + stat(mkNum(c.following_count), "Following") + stat(mkNum(c.sales_count), "Sales") + stat((Number(d.xp) || 1000).toLocaleString(), "XP") + "</div>" +
         manage +
       "</div>" +
       '<div style="display:flex;border-bottom:1px solid ' + t.bd + ";margin-top:8px;position:sticky;top:0;background:" + t.bg + ';z-index:2">' + tabs + "</div>" +
