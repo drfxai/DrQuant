@@ -74,12 +74,10 @@
   /* ---- left sidebar ---- */
   function sidebar() {
     var nav = [
-      ['home', 'Dashboard', `<rect x='3' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='14' width='7' height='7' rx='1.5'/><rect x='3' y='14' width='7' height='7' rx='1.5'/>`],
-      ['chat', 'Quantum Chat', `<path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'/>`],
-      ['vpn', 'VPN', `<path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/>`],
-      ['market', 'Market', `<path d='M3 3v18h18'/><rect x='6.5' y='11' width='3' height='6' rx='1'/><rect x='11.5' y='7' width='3' height='10' rx='1'/><rect x='16.5' y='13' width='3' height='4' rx='1'/>`],
+      ['market', 'Explore', `<circle cx='12' cy='12' r='9'/><polygon points='15.5 8.5 13.5 13.5 8.5 15.5 10.5 10.5'/>`],
       ['companies', 'Companies', `<path d='M3 21h18M5 21V8l7-5 7 5v13'/><path d='M9 12h.01M9 16h.01M15 12h.01M15 16h.01'/>`],
-      ['wallet', 'Wallet', `<rect x='2' y='6' width='20' height='13' rx='3'/><path d='M2 10h20'/><circle cx='17' cy='13' r='1.3'/>`]
+      ['create', 'Create', `<rect x='3' y='3' width='18' height='18' rx='3'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/>`],
+      ['store', 'My Store', `<path d='M4 9h16l-1.18-4.13A1 1 0 0 0 17.86 4H6.14a1 1 0 0 0-.96.87L4 9z'/><path d='M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9'/><path d='M9.5 20v-6h5v6'/>`]
     ];
     var items = nav.map(function (n) {
       var on = n[0] === 'market';
@@ -88,13 +86,13 @@
 
     var brand =
       `<div class='mkx-brand' data-nav='home'>` +
-        `<svg width='38' height='38' viewBox='0 0 24 24' fill='none'>` +
-          `<defs><linearGradient id='mkxbg' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#5b6bff'/><stop offset='1' stop-color='#a855f7'/></linearGradient></defs>` +
-          `<path d='M12 2.6l8 4.6v9.2l-8 4.6-8-4.6V7.2z' fill='none' stroke='url(#mkxbg)' stroke-width='1.4'/>` +
-          `<path d='M12 6l4.5 2.6v5.8L12 17l-4.5-2.6V8.6z' fill='url(#mkxbg)' opacity='.32'/>` +
-          `<circle cx='12' cy='12' r='2.5' fill='url(#mkxbg)'/>` +
+        `<svg width='38' height='38' viewBox='0 0 24 24' fill='none' style='filter:drop-shadow(0 0 8px rgba(22,226,154,.55))'>` +
+          `<defs><linearGradient id='mkxvolt' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#0fd98a'/><stop offset='.5' stop-color='#36e36b'/><stop offset='1' stop-color='#f5c451'/></linearGradient></defs>` +
+          `<path d='M12 2.6l8 4.6v9.2l-8 4.6-8-4.6V7.2z' fill='none' stroke='url(#mkxvolt)' stroke-width='1.5'/>` +
+          `<path d='M12 6l4.5 2.6v5.8L12 17l-4.5-2.6V8.6z' fill='url(#mkxvolt)' opacity='.34'/>` +
+          `<circle cx='12' cy='12' r='2.5' fill='url(#mkxvolt)'/>` +
         `</svg>` +
-        `<div style='line-height:1.04'><div style='font-size:16px;font-weight:800;letter-spacing:.5px;color:${D.t1}'>QUANTUM</div><div style='font-size:16px;font-weight:800;letter-spacing:.5px;background:${D.grad};-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent'>MARKET</div><div style='font-size:10px;color:${D.pur};font-weight:600;margin-top:1px'>by DrFX</div></div>` +
+        `<div style='line-height:1.04'><div style='font-size:16px;font-weight:800;letter-spacing:.6px;color:#eafff5;text-shadow:0 0 10px rgba(22,226,154,.5)'>QUANTUM</div><div style='font-size:16px;font-weight:800;letter-spacing:.6px;background:linear-gradient(95deg,#0fd98a 0%,#36e36b 45%,#f5c451 100%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent'>MARKET</div><div style='font-size:10px;color:#f5c451;font-weight:700;margin-top:1px;letter-spacing:.3px'>by DrFX</div></div>` +
       `</div>`;
 
     var elite =
@@ -278,8 +276,21 @@
         var n = b.getAttribute('data-nav');
         if (n === 'wallet') { if (window.openWallet) openWallet(); return; }
         if (n === 'upgrade' || n === 'publish') { if (window.openSub) openSub(); return; }
-        if (n === 'market' || n === 'creators' || n === 'featured') { return; }
-        // dashboard / home / chat / vpn / companies -> leave Market (backends pending)
+        if (n === 'create') {
+          if (typeof window.mkCompose === 'function') { try { return mkCompose(); } catch (e) {} }
+          if (window.openSub) openSub();
+          return;
+        }
+        if (n === 'store') {
+          if (typeof window.mkGoCreator === 'function' && typeof S !== 'undefined' && S.user && S.user.username) { try { return mkGoCreator(S.user.username); } catch (e) {} }
+          return;
+        }
+        if (n === 'market') {
+          try { if (typeof MK !== 'undefined') { MK.handle = null; } if (typeof mkRender === 'function') mkRender(); } catch (e) {}
+          return;
+        }
+        if (n === 'companies' || n === 'creators' || n === 'featured') { return; }
+        // home (brand logo) -> leave Market
         closeMarket();
       });
     });
