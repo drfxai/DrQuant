@@ -76,18 +76,19 @@
     var extra = "";
     if (gt0(pend) || gt0(lock)) {
       var chips = [];
-      if (gt0(pend)) chips.push('<span style="color:' + t.t2 + '">Pending <b style="color:' + t.t1 + '">' + fmtQ(pend) + '</b></span>');
-      if (gt0(lock)) chips.push('<span style="color:' + t.t2 + '">Locked <b style="color:' + t.t1 + '">' + fmtQ(lock) + '</b></span>');
+      if (gt0(pend)) chips.push('<span style="color:rgba(255,255,255,.72)">Pending <b style="color:#fff">' + fmtQ(pend) + '</b></span>');
+      if (gt0(lock)) chips.push('<span style="color:rgba(255,255,255,.72)">Locked <b style="color:#fff">' + fmtQ(lock) + '</b></span>');
       extra = '<div style="display:flex;gap:16px;margin-top:12px;font-size:12px">' + chips.join('') + '</div>';
     }
     var card =
-      '<div style="position:relative;overflow:hidden;border-radius:20px;padding:22px;margin-bottom:16px;background:linear-gradient(135deg,rgba(36,48,92,.55),rgba(16,24,52,.5));border:1px solid ' + t.bl + ';box-shadow:0 10px 30px rgba(0,0,0,.3)">' +
-        '<div style="position:absolute;top:-34px;right:-22px;width:128px;height:128px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.28),transparent 70%);pointer-events:none"></div>' +
-        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
-          '<div style="width:34px;height:34px;border-radius:10px;background:' + t.pg + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;box-shadow:0 4px 14px ' + t.pgw + '">Q</div>' +
-          '<div><div style="color:' + t.t3 + ';font-size:10px;letter-spacing:1.2px;font-weight:700">QNTM BALANCE</div><div style="color:' + t.t4 + ';font-size:11px">Internal platform credits</div></div>' +
+      '<div style="position:relative;overflow:hidden;border-radius:22px;padding:22px;margin-bottom:16px;background:linear-gradient(135deg,#1f7bff 0%,#5b5bff 52%,#8b5cf6 100%);border:1px solid rgba(255,255,255,.16);box-shadow:0 14px 34px rgba(47,80,255,.38)">' +
+        '<div style="position:absolute;top:-40px;right:-26px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.26),transparent 68%);pointer-events:none"></div>' +
+        '<div style="position:absolute;bottom:-52px;left:-30px;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.5),transparent 70%);pointer-events:none"></div>' +
+        '<div style="position:relative;display:flex;align-items:center;gap:10px;margin-bottom:16px">' +
+          '<div style="width:36px;height:36px;border-radius:11px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.28);display:flex;align-items:center;justify-content:center;color:#fff;font-size:16px;font-weight:800;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)">Q</div>' +
+          '<div><div style="color:rgba(255,255,255,.85);font-size:10px;letter-spacing:1.4px;font-weight:800">QNTM BALANCE</div><div style="color:rgba(255,255,255,.6);font-size:11px;font-weight:500">Internal platform credits</div></div>' +
         '</div>' +
-        '<div style="color:' + t.t1 + ';font-size:34px;font-weight:800;letter-spacing:-.5px;line-height:1">' + fmtQ(w.available_balance) + '<span style="font-size:15px;color:' + t.t3 + ';font-weight:600;margin-left:6px">QNTM</span></div>' +
+        '<div style="position:relative;color:#fff;font-size:36px;font-weight:800;letter-spacing:-.5px;line-height:1;text-shadow:0 2px 12px rgba(0,0,0,.18)">' + fmtQ(w.available_balance) + '<span style="font-size:15px;color:rgba(255,255,255,.72);font-weight:600;margin-left:6px">QNTM</span></div>' +
         extra +
       '</div>';
 
@@ -111,7 +112,10 @@
     return card + actions +
       '<div style="color:' + t.t2 + ';font-size:12px;font-weight:700;margin-bottom:10px">Recent activity</div>' +
       '<div id="dqw-hist">' + hist + '</div>' +
-      '<div style="text-align:center;color:' + t.t4 + ';font-size:10.5px;margin-top:14px;display:flex;align-items:center;justify-content:center;gap:5px">' + ic('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) + ' Internal credits \u00b7 not redeemable for cash</div>';
+      '<div style="text-align:center;margin-top:20px;padding:4px 0 2px">' +
+        '<div style="color:' + t.t3 + ';font-size:12px;font-weight:500">The future of trading starts here.</div>' +
+        '<div style="font-size:14.5px;font-weight:800;letter-spacing:.3px;margin-top:3px;background:' + t.pg + ';-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:' + t.pr + '">Build. Trade. Win.</div>' +
+      '</div>';
   }
 
   // --- send (transfer) form ------------------------------------------------
