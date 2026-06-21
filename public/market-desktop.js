@@ -1,0 +1,315 @@
+'use strict';
+/* ============================================================================
+   market-desktop.js — DrFX Quant
+   Desktop (>=1024px) "Quantum Market" skin for the Market Explore overlay.
+
+   This module WRAPS the mobile window.mkExplore defined in market-ui.js. On a
+   wide screen it paints the image-matched 3-column dashboard (left nav rail +
+   center feed + right info rail) into #mk-body; on narrow screens it defers to
+   the original mobile renderer, untouched. It loads AFTER market-ui.js so it
+   captures that override and re-wraps it.
+
+   SKIN ONLY (per request): the center feed and Trending Creators use LIVE data
+   (/market/explore, /market/creators). The QNTM Token chart, Featured Products
+   and gamification (LVL / XP) are presentational PLACEHOLDERS pending backends.
+   Every functional .mk-* class + data-* attribute is preserved, so the existing
+   delegated handlers (follow / like / comment / open creator / open product /
+   type chips / sort) keep working with no changes. If this file fails to load,
+   the marketplace degrades gracefully to the mobile design on every screen.
+   ========================================================================== */
+(function () {
+  if (typeof window === 'undefined') return;
+  var _mobileExplore = window.mkExplore;
+
+  function isDesk() { try { return window.matchMedia('(min-width:1024px)').matches; } catch (e) { return window.innerWidth >= 1024; } }
+
+  var D = {
+    bg: '#0a0e1a', panel: '#10142a', card: '#121731', panel2: '#0c1020',
+    bd: 'rgba(255,255,255,.06)', bd2: 'rgba(124,108,255,.28)',
+    t1: '#eef1fb', t2: '#9aa3c0', t3: '#5f6a8c',
+    ind: '#6366f1', pur: '#a855f7', cyan: '#22d3ee', green: '#34d399',
+    grad: 'linear-gradient(135deg,#5b6bff 0%,#a855f7 100%)',
+    glow: 'rgba(99,102,241,.45)', pglow: 'rgba(168,85,247,.4)'
+  };
+
+  function mkxPrice(v) { return (Number(v) || 0).toLocaleString('en-US') + ' QNTM'; }
+  function ringAv(av, size, rc, rg) { return `<div class='mkx-ringav' style='--rc:${rc};--rg:${rg}'>${avatar(av, size)}</div>`; }
+
+  function injectCSS() {
+    if (document.getElementById('mkx-desk-css')) return;
+    var s = document.createElement('style'); s.id = 'mkx-desk-css';
+    s.textContent = [
+      `.mkx-desk{position:fixed;inset:0;z-index:60;background:${D.bg};display:flex;font-family:'Outfit',sans-serif;color:${D.t1};overflow:hidden;-webkit-font-smoothing:antialiased}`,
+      `.mkx-desk *{box-sizing:border-box}`,
+      `.mkx-desk ::-webkit-scrollbar{width:8px;height:8px}.mkx-desk ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.09);border-radius:8px}.mkx-desk ::-webkit-scrollbar-track{background:transparent}`,
+      `.mkx-side{width:258px;flex-shrink:0;background:${D.panel2};border-right:1px solid ${D.bd};display:flex;flex-direction:column;padding:22px 16px;overflow-y:auto}`,
+      `.mkx-brand{display:flex;align-items:center;gap:11px;padding:0 6px 22px;cursor:pointer}`,
+      `.mkx-navi{display:flex;align-items:center;gap:13px;padding:12px 14px;border-radius:13px;cursor:pointer;color:${D.t2};font-size:14.5px;font-weight:600;border:none;background:none;width:100%;text-align:left;font-family:inherit;margin-bottom:3px;transition:background .15s,color .15s}`,
+      `.mkx-navi:hover{background:rgba(255,255,255,.04);color:${D.t1}}`,
+      `.mkx-navi.on{background:${D.grad};color:#fff;box-shadow:0 8px 22px ${D.glow}}`,
+      `.mkx-main{flex:1;min-width:0;overflow-y:auto;padding:20px 26px 34px}`,
+      `.mkx-search{flex:1;display:flex;align-items:center;gap:11px;padding:13px 18px;border-radius:14px;background:${D.panel};border:1px solid ${D.bd};color:${D.t2};font-size:14px;min-width:0}`,
+      `.mkx-bell{width:46px;height:46px;flex-shrink:0;border-radius:13px;background:${D.panel};border:1px solid ${D.bd};display:flex;align-items:center;justify-content:center;color:${D.t2};cursor:pointer;position:relative}`,
+      `.mkx-tab{flex-shrink:0;padding:10px 20px;border-radius:12px;border:1px solid ${D.bd};background:${D.panel};color:${D.t2};font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}`,
+      `.mkx-tab.on{background:${D.grad};color:#fff;border-color:transparent;box-shadow:0 8px 20px ${D.glow}}`,
+      `.mkx-feedgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin-top:18px}`,
+      `.mkx-card{border:1px solid ${D.bd};border-radius:18px;background:${D.card};overflow:hidden;display:flex;flex-direction:column;transition:border-color .2s,transform .2s}`,
+      `.mkx-card:hover{border-color:${D.bd2};transform:translateY(-2px)}`,
+      `.mkx-foll{padding:7px 17px;border-radius:10px;border:1px solid ${D.ind};background:rgba(99,102,241,.1);color:#aeb8ff;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0}`,
+      `.mkx-foll.on{background:transparent;color:${D.t2};border-color:${D.bd}}`,
+      `.mkx-pill{font-size:9px;font-weight:800;letter-spacing:.5px;padding:3px 8px;border-radius:7px;text-transform:uppercase}`,
+      `.mkx-act{display:flex;align-items:center;gap:7px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:700;padding:0}`,
+      `.mkx-rail{width:330px;flex-shrink:0;overflow-y:auto;padding:20px 18px 34px;background:${D.panel2};border-left:1px solid ${D.bd}}`,
+      `.mkx-rcard{border:1px solid ${D.bd};border-radius:18px;background:${D.card};padding:17px;margin-bottom:18px}`,
+      `.mkx-vall{background:none;border:none;color:${D.pur};font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit}`,
+      `.mkx-rfoll{padding:6px 15px;border-radius:9px;border:1px solid ${D.ind};background:rgba(99,102,241,.08);color:#aeb8ff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0}`,
+      `.mkx-ringav{border-radius:50%;line-height:0;flex-shrink:0;animation:mkxRingP 3.6s ease-in-out infinite}`,
+      `@keyframes mkxRingP{0%,100%{box-shadow:0 0 0 2px var(--rc),0 0 9px var(--rg)}50%{box-shadow:0 0 0 2px var(--rc),0 0 16px var(--rg)}}`,
+      `@media (max-width:1199px){.mkx-rail{display:none}}`
+    ].join('');
+    document.head.appendChild(s);
+  }
+
+  /* ---- left sidebar ---- */
+  function sidebar() {
+    var nav = [
+      ['home', 'Dashboard', `<rect x='3' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='14' width='7' height='7' rx='1.5'/><rect x='3' y='14' width='7' height='7' rx='1.5'/>`],
+      ['chat', 'Quantum Chat', `<path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'/>`],
+      ['vpn', 'VPN', `<path d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/>`],
+      ['market', 'Market', `<path d='M3 3v18h18'/><rect x='6.5' y='11' width='3' height='6' rx='1'/><rect x='11.5' y='7' width='3' height='10' rx='1'/><rect x='16.5' y='13' width='3' height='4' rx='1'/>`],
+      ['companies', 'Companies', `<path d='M3 21h18M5 21V8l7-5 7 5v13'/><path d='M9 12h.01M9 16h.01M15 12h.01M15 16h.01'/>`],
+      ['wallet', 'Wallet', `<rect x='2' y='6' width='20' height='13' rx='3'/><path d='M2 10h20'/><circle cx='17' cy='13' r='1.3'/>`]
+    ];
+    var items = nav.map(function (n) {
+      var on = n[0] === 'market';
+      return `<button class='mkx-navi${on ? ' on' : ''}' data-nav='${n[0]}' type='button'>${ic(n[2], 20)}<span>${n[1]}</span></button>`;
+    }).join('');
+
+    var brand =
+      `<div class='mkx-brand' data-nav='home'>` +
+        `<svg width='38' height='38' viewBox='0 0 24 24' fill='none'>` +
+          `<defs><linearGradient id='mkxbg' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#5b6bff'/><stop offset='1' stop-color='#a855f7'/></linearGradient></defs>` +
+          `<path d='M12 2.6l8 4.6v9.2l-8 4.6-8-4.6V7.2z' fill='none' stroke='url(#mkxbg)' stroke-width='1.4'/>` +
+          `<path d='M12 6l4.5 2.6v5.8L12 17l-4.5-2.6V8.6z' fill='url(#mkxbg)' opacity='.32'/>` +
+          `<circle cx='12' cy='12' r='2.5' fill='url(#mkxbg)'/>` +
+        `</svg>` +
+        `<div style='line-height:1.04'><div style='font-size:16px;font-weight:800;letter-spacing:.5px;color:${D.t1}'>QUANTUM</div><div style='font-size:16px;font-weight:800;letter-spacing:.5px;background:${D.grad};-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent'>MARKET</div><div style='font-size:10px;color:${D.pur};font-weight:600;margin-top:1px'>by DrFX</div></div>` +
+      `</div>`;
+
+    var elite =
+      `<div style='border:1px solid ${D.bd};border-radius:16px;background:linear-gradient(160deg,rgba(99,102,241,.12),rgba(168,85,247,.05));padding:15px'>` +
+        `<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px'><svg width='18' height='18' viewBox='0 0 24 24' fill='${D.pur}'><path d='M6 3h12l4 6-10 12L2 9z'/></svg><span style='font-weight:800;font-size:14px;color:${D.t1}'>Quantum Elite</span></div>` +
+        `<div style='color:${D.t2};font-size:11.5px;line-height:1.5;margin-bottom:12px'>Unlock premium tools, advanced analytics and exclusive insights.</div>` +
+        `<button data-nav='upgrade' type='button' style='width:100%;padding:11px;border-radius:11px;border:none;background:${D.grad};color:#fff;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;box-shadow:0 8px 20px ${D.glow}'>Upgrade Now</button>` +
+      `</div>`;
+
+    var u = (typeof S !== 'undefined' && S.user) || {};
+    var lvl = 7, xp = 6430, xpMax = 10000;
+    var prof =
+      `<div style='margin-top:16px;padding-top:14px;border-top:1px solid ${D.bd}'>` +
+        `<div style='display:flex;align-items:center;gap:11px'>` +
+          ringAv(u.avatar || '\uD83E\uDDD1\u200D\uD83D\uDCBB', 42, D.cyan, 'rgba(34,211,238,.5)') +
+          `<div style='flex:1;min-width:0'><div style='display:flex;align-items:center;gap:4px;color:${D.t1};font-weight:700;font-size:14px'>${esc(u.name || 'DrFX')}${goldSeal(14)}</div><div style='color:${D.pur};font-size:11.5px'>Quantum Founder</div></div>` +
+          `<span style='color:${D.t3};font-size:18px;cursor:pointer'>\u22EE</span>` +
+        `</div>` +
+        `<div style='display:flex;align-items:center;gap:9px;margin-top:11px'>` +
+          `<span style='font-size:9px;font-weight:800;color:#fff;background:${D.grad};padding:3px 8px;border-radius:7px;flex-shrink:0'>LVL ${lvl}</span>` +
+          `<div style='flex:1'><div style='height:6px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden'><div style='height:100%;width:${Math.round(xp / xpMax * 100)}%;background:${D.grad}'></div></div></div>` +
+        `</div>` +
+        `<div style='text-align:right;color:${D.t3};font-size:9.5px;margin-top:4px'>${xp.toLocaleString('en-US')} / ${xpMax.toLocaleString('en-US')} XP</div>` +
+      `</div>`;
+
+    return `<aside class='mkx-side'>${brand}<div>${items}</div><div style='flex:1'></div>${elite}${prof}</aside>`;
+  }
+
+  /* ---- center: tabs + sort ---- */
+  function tabs() {
+    var list = [['', 'Explore']].concat(typeof MK_TYPES !== 'undefined' ? MK_TYPES : []);
+    var ts = list.map(function (p) {
+      var on = MK.type === p[0];
+      return `<button class='mk-chip mkx-tab${on ? ' on' : ''}' data-type='${p[0]}' type='button'>${p[1]}</button>`;
+    }).join('');
+    var label = MK.sort === 'new' ? 'Newest posts' : 'Top liked posts';
+    var sort =
+      `<button class='mk-sortbtn' data-sort='${MK.sort === 'new' ? 'likes' : 'new'}' type='button' style='flex-shrink:0;display:flex;align-items:center;gap:9px;padding:10px 16px;border-radius:12px;border:1px solid ${D.bd};background:${D.panel};color:${D.t1};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit'><span style='color:#ff8a3d'>\uD83D\uDD25</span>${label}${ic(`<polyline points='6 9 12 15 18 9'/>`, 16)}</button>`;
+    return `<div style='display:flex;align-items:center;gap:10px;overflow-x:auto'>${ts}<div style='flex:1;min-width:8px'></div>${sort}</div>`;
+  }
+
+  /* ---- center: a post card ---- */
+  function card(p) {
+    var a = p.author || {}, pr = p.product, liked = !!p.liked_by_me;
+    var media;
+    if (p.media_type === 'image' && p.media_url) {
+      media = `<img src='${esc(p.media_url)}' loading='lazy' style='width:100%;height:200px;object-fit:cover;display:block'/>`;
+    } else if (p.media_type === 'video' && p.media_url) {
+      media = `<video src='${esc(p.media_url)}' ${p.thumb_url ? `poster='${esc(p.thumb_url)}' ` : ''}preload='metadata' style='width:100%;height:200px;object-fit:cover;display:block;background:#000'></video><div style='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none'><div style='width:50px;height:50px;border-radius:50%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center'><svg width='20' height='20' viewBox='0 0 24 24' fill='#fff'><polygon points='6 4 20 12 6 20'/></svg></div></div>`;
+    } else {
+      media = `<div style='height:200px;background:linear-gradient(135deg,${D.ind}22,${D.pur}11);display:flex;align-items:center;justify-content:center;color:${D.t3}'>${ic(`<path d='M3 3v18h18'/><path d='M7 14l3-3 3 3 4-5'/>`, 38)}</div>`;
+    }
+    var pill = pr ? `<div style='position:absolute;top:10px;left:10px'><span class='mkx-pill' style='color:#fff;background:${D.grad}'>${mkTypeLabel(pr.type)}</span></div>` : '';
+    var mediaWrap = pr
+      ? `<div class='mk-openp' data-pid='${pr.id}' style='position:relative;cursor:pointer'>${media}${pill}</div>`
+      : `<div style='position:relative'>${media}</div>`;
+    var foll = (typeof S !== 'undefined' && S.user && a.id === S.user.id)
+      ? `<button class='mk-editpost mkx-foll on' data-pid='${p.id}' type='button'>Edit</button>`
+      : `<button class='mk-foll mkx-foll${a.is_following ? ' on' : ''}' data-uid='${a.id}' data-on='${a.is_following ? 1 : 0}' type='button'>${a.is_following ? 'Following' : 'Follow'}</button>`;
+    var price = pr ? `<div style='flex-shrink:0;text-align:right'><span style='color:${D.cyan};font-weight:800;font-size:15px'>${mkxPrice(pr.price_qntm)}</span></div>` : '';
+    return `<article class='mkx-card'>` +
+      `<header style='display:flex;align-items:center;gap:11px;padding:14px 15px 12px'>` +
+        `<div class='mk-openc' data-h='${esc(a.username)}' style='cursor:pointer'>${ringAv(a.avatar || '\uD83E\uDDD1\u200D\uD83D\uDCBB', 38, D.ind, D.glow)}</div>` +
+        `<div class='mk-openc' data-h='${esc(a.username)}' style='flex:1;min-width:0;cursor:pointer'><div style='display:flex;align-items:center;gap:4px;color:${D.t1};font-weight:700;font-size:14px'>${esc(a.name || a.username || 'User')}${a.verified ? goldSeal(14) : ''}</div><div style='color:${D.t3};font-size:12px'>@${esc(a.username || '')}</div></div>` +
+        foll +
+      `</header>` +
+      (p.title ? `<div style='padding:0 15px 11px;color:${D.t1};font-weight:700;font-size:15.5px;line-height:1.3'>${esc(p.title)}</div>` : '') +
+      mediaWrap +
+      `<div style='display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:13px 15px 6px'>` +
+        `<div style='color:${D.t2};font-size:13px;line-height:1.5;flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden'>${esc(p.caption || p.title || '')}</div>` +
+        price +
+      `</div>` +
+      `<div style='display:flex;align-items:center;gap:22px;padding:8px 15px 15px'>` +
+        `<button class='mk-like mkx-act' data-pid='${p.id}' data-on='${liked ? 1 : 0}' type='button' style='color:${liked ? '#ff4d6d' : D.t2}'>${mkHeart(liked)}<span class='mk-like-n'>${mkNum(p.like_count || 0)}</span></button>` +
+        `<button class='mk-cmt mkx-act' data-pid='${p.id}' type='button' style='color:${D.t2}'>${ic(`<path d='M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z'/>`, 19)}<span>${mkNum(p.comment_count || 0)}</span></button>` +
+        `<div style='flex:1'></div>` +
+        `<span style='color:${D.t3};cursor:pointer'>${ic(`<path d='M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z'/>`, 19)}</span>` +
+      `</div>` +
+    `</article>`;
+  }
+
+  /* ---- center: search + heading + grid + footer ---- */
+  function mainShell(gridHTML) {
+    var search =
+      `<div style='display:flex;align-items:center;gap:14px;margin-bottom:22px'>` +
+        `<div class='mkx-search'>${ic(`<circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/>`, 18)}<span>Search for products, creators and posts...</span></div>` +
+        `<div class='mkx-bell'>${ic(`<path d='M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9'/><path d='M13.73 21a2 2 0 0 1-3.46 0'/>`, 20)}<span style='position:absolute;top:11px;right:13px;width:7px;height:7px;border-radius:50%;background:${D.pur};box-shadow:0 0 8px ${D.pglow}'></span></div>` +
+      `</div>`;
+    var head =
+      `<div style='font-size:30px;font-weight:800;color:${D.t1};letter-spacing:-.5px'>Market Explore</div>` +
+      `<div style='color:${D.t2};font-size:14px;margin-top:4px;margin-bottom:18px'>Discover top trading indicators, strategies and tools from the community.</div>`;
+    var foot = `<div style='text-align:center;color:${D.t3};font-size:11.5px;margin-top:30px;line-height:1.6'>Trading involves risk. Past performance is not indicative of future results. Quantum Market is a community-driven platform for educational and informational purposes only.</div>`;
+    return `<main class='mkx-main'>${search}${head}${tabs()}<div class='mkx-feedgrid'>${gridHTML}</div>${foot}</main>`;
+  }
+
+  /* ---- right rail: trending creators (live) ---- */
+  function trending(creators) {
+    var rows = (creators || []).slice(0, 5).map(function (c, i) {
+      var foll = c.is_me ? '' : `<button class='mk-foll mkx-rfoll${c.is_following ? ' on' : ''}' data-uid='${c.id}' data-on='${c.is_following ? 1 : 0}' type='button'>${c.is_following ? 'Following' : 'Follow'}</button>`;
+      return `<div style='display:flex;align-items:center;gap:11px;padding:9px 0'>` +
+        `<span style='color:${D.t3};font-size:13px;font-weight:700;width:12px;flex-shrink:0'>${i + 1}</span>` +
+        `<div class='mk-openc' data-h='${esc(c.username)}' style='cursor:pointer'>${ringAv(c.avatar || '\uD83E\uDDD1\u200D\uD83D\uDCBB', 38, D.cyan, 'rgba(34,211,238,.45)')}</div>` +
+        `<div class='mk-openc' data-h='${esc(c.username)}' style='flex:1;min-width:0;cursor:pointer'><div style='display:flex;align-items:center;gap:3px;color:${D.t1};font-weight:700;font-size:13.5px'>${esc(c.name || c.username)}${c.verified ? goldSeal(13) : ''}</div><div style='color:${D.t3};font-size:11px'>@${esc(c.username)}</div><div style='color:${D.t2};font-size:11px;margin-top:1px'>${mkNum(c.follower_count || 0)} Followers</div></div>` +
+        foll +
+      `</div>`;
+    }).join('');
+    if (!rows) rows = `<div style='color:${D.t3};font-size:12.5px;padding:8px 0'>No creators yet.</div>`;
+    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'><span style='font-weight:800;font-size:15px;color:${D.t1}'>Trending Creators</span><button class='mkx-vall' data-nav='creators' type='button'>View all</button></div>${rows}</div>`;
+  }
+
+  /* ---- right rail: QNTM token (placeholder chart, pending backend) ---- */
+  function token() {
+    var pts = '0,40 18,36 34,38 52,30 70,33 88,24 106,27 124,18 142,22 160,12 178,16 196,8 214,11 232,4';
+    var chart = `<svg viewBox='0 0 232 48' width='100%' height='70' preserveAspectRatio='none' style='margin-top:12px'><defs><linearGradient id='mkxtok' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='#5b6bff'/><stop offset='1' stop-color='#a855f7'/></linearGradient><linearGradient id='mkxtokf' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='rgba(124,108,255,.32)'/><stop offset='1' stop-color='rgba(124,108,255,0)'/></linearGradient></defs><polygon points='0,48 ${pts} 232,48' fill='url(#mkxtokf)'/><polyline points='${pts}' fill='none' stroke='url(#mkxtok)' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
+    return `<div class='mkx-rcard'><div style='font-weight:800;font-size:15px;color:${D.t1};margin-bottom:10px'>QNTM Token</div>` +
+      `<div style='display:flex;align-items:baseline;gap:8px'><span style='font-size:26px;font-weight:800;color:${D.t1}'>1.245</span><span style='color:${D.cyan};font-weight:700;font-size:14px'>QNTM</span></div>` +
+      `<div style='color:${D.green};font-size:13px;font-weight:700;margin-top:2px'>+6.78% <span style='color:${D.t3};font-weight:500'>(24h)</span></div>${chart}</div>`;
+  }
+
+  /* ---- right rail: featured products (placeholder, pending backend) ---- */
+  function featured() {
+    var rows = [
+      ['Quantum Reversal Indicator', '@everalKing', '4.9', '200'],
+      ['Supply & Demand Zones', '@ZoneTrader', '4.8', '180'],
+      ['AI News Sentiment Bot', '@NewsAlgo', '4.9', '500']
+    ].map(function (p) {
+      return `<div style='display:flex;align-items:center;gap:11px;padding:9px 0'>` +
+        `<div style='width:46px;height:46px;border-radius:11px;flex-shrink:0;background:linear-gradient(135deg,${D.ind}33,${D.pur}22);display:flex;align-items:center;justify-content:center;color:${D.t2}'>${ic(`<path d='M3 3v18h18'/><path d='M7 13l3-3 3 3 4-5'/>`, 22)}</div>` +
+        `<div style='flex:1;min-width:0'><div style='color:${D.t1};font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>${p[0]}</div><div style='color:${D.t3};font-size:11px'>${p[1]}</div></div>` +
+        `<div style='text-align:right;flex-shrink:0'><div style='color:#fbbf24;font-size:12px;font-weight:700'>\u2605 ${p[2]}</div><div style='color:${D.cyan};font-size:12px;font-weight:700;margin-top:2px'>${p[3]} QNTM</div></div>` +
+      `</div>`;
+    }).join('');
+    return `<div class='mkx-rcard'><div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'><span style='font-weight:800;font-size:15px;color:${D.t1}'>Featured Products</span><button class='mkx-vall' data-nav='featured' type='button'>View all</button></div>${rows}</div>`;
+  }
+
+  /* ---- right rail: create & earn ---- */
+  function createEarn() {
+    return `<div style='position:relative;overflow:hidden;border-radius:18px;background:${D.grad};padding:18px;color:#fff'>` +
+      `<div style='font-weight:800;font-size:17px'>Create &amp; Earn</div>` +
+      `<div style='font-size:12.5px;opacity:.92;line-height:1.5;margin:6px 0 14px;max-width:190px'>Monetize your strategies and tools with the Quantum Market.</div>` +
+      `<button data-nav='publish' type='button' style='padding:10px 18px;border-radius:11px;border:none;background:#fff;color:#3b2c7a;font-weight:800;font-size:13px;cursor:pointer;font-family:inherit'>Start Publishing</button>` +
+      `<svg width='90' height='90' viewBox='0 0 24 24' fill='none' style='position:absolute;right:-4px;bottom:-8px;opacity:.92'><ellipse cx='12' cy='17' rx='8' ry='2.8' fill='rgba(255,255,255,.22)'/><ellipse cx='12' cy='13' rx='8' ry='2.8' fill='rgba(255,255,255,.34)'/><ellipse cx='12' cy='9' rx='8' ry='2.8' fill='#fff'/><text x='12' y='10.8' font-size='5' font-weight='800' fill='#6d28d9' text-anchor='middle' font-family='Outfit'>Q</text></svg>` +
+    `</div>`;
+  }
+
+  function rail(creators) {
+    return `<aside class='mkx-rail'>${trending(creators)}${token()}${featured()}${createEarn()}</aside>`;
+  }
+
+  function feedLoading() {
+    var one = `<div class='mkx-card' style='height:360px;animation:pu 1.5s infinite'></div>`;
+    return one + one + one + one;
+  }
+  function emptyGrid(msg) {
+    return `<div style='grid-column:1/-1;text-align:center;padding:50px 20px;color:${D.t3}'><div style='font-size:15px;font-weight:700;color:${D.t2}'>${msg ? esc(msg) : 'Nothing here yet'}</div><div style='font-size:13px;margin-top:6px'>Be the first to share a chart, idea, or product.</div></div>`;
+  }
+
+  /* ---- navigation / close (skin: real where it exists, otherwise leaves Market) ---- */
+  function closeMarket() {
+    try {
+      var ov = document.getElementById('mk-overlay');
+      var bk = ov && ov.querySelector('[id$="-back"]');
+      if (bk) { bk.click(); return; }
+      if (ov) ov.remove();
+    } catch (e) {}
+  }
+  function wireNav(body) {
+    var els = body.querySelectorAll('[data-nav]');
+    els.forEach(function (b) {
+      b.addEventListener('click', function () {
+        var n = b.getAttribute('data-nav');
+        if (n === 'wallet') { if (window.openWallet) openWallet(); return; }
+        if (n === 'upgrade' || n === 'publish') { if (window.openSub) openSub(); return; }
+        if (n === 'market' || n === 'creators' || n === 'featured') { return; }
+        // dashboard / home / chat / vpn / companies -> leave Market (backends pending)
+        closeMarket();
+      });
+    });
+  }
+
+  /* ---- the desktop explore renderer ---- */
+  async function exploreDesktop(body) {
+    injectCSS();
+    body.innerHTML = `<div class='mkx-desk'>${sidebar()}${mainShell(feedLoading())}${rail(null)}</div>`;
+    wireNav(body);
+    try {
+      var qs = 'sort=' + MK.sort + '&type=' + encodeURIComponent(MK.type) + '&q=' + encodeURIComponent(MK.q || '') + '&limit=30';
+      var res = await Promise.all([api('/market/explore?' + qs), api('/market/creators?sort=followers&limit=20')]);
+      var posts = (res[0] && res[0].posts) || [];
+      var creators = ((res[1] && res[1].creators) || []).filter(function (c) { return !c.is_me; });
+      var grid = body.querySelector('.mkx-feedgrid');
+      if (grid) grid.innerHTML = posts.length ? posts.map(card).join('') : emptyGrid();
+      var railEl = body.querySelector('.mkx-rail');
+      if (railEl) railEl.innerHTML = trending(creators) + token() + featured() + createEarn();
+    } catch (e) {
+      var g2 = body.querySelector('.mkx-feedgrid');
+      if (g2) g2.innerHTML = emptyGrid(typeof mkErrMsg === 'function' ? mkErrMsg(e) : 'Could not load feed');
+    }
+  }
+
+  /* ---- wrap the mobile renderer ---- */
+  window.mkExplore = async function () {
+    var body = document.getElementById('mk-body');
+    if (body && isDesk()) { return exploreDesktop(body); }
+    if (typeof _mobileExplore === 'function') { return _mobileExplore.apply(this, arguments); }
+  };
+
+  // If the viewport crosses the desktop/mobile boundary while Market is open,
+  // re-render so the right layout takes over (mobile<->desktop).
+  var _wasDesk = isDesk();
+  window.addEventListener('resize', function () {
+    var now = isDesk();
+    if (now === _wasDesk) return;
+    _wasDesk = now;
+    try {
+      if (document.getElementById('mk-overlay') && typeof MK !== 'undefined' && (!MK.handle) && typeof mkRender === 'function') mkRender();
+    } catch (e) {}
+  });
+})();
