@@ -145,14 +145,22 @@
     if (p.media_type === 'image' && p.media_url) {
       media = `<img src='${esc(p.media_url)}' loading='lazy' style='width:100%;height:200px;object-fit:cover;display:block'/>`;
     } else if (p.media_type === 'video' && p.media_url) {
-      media = `<video src='${esc(p.media_url)}' ${p.thumb_url ? `poster='${esc(p.thumb_url)}' ` : ''}preload='metadata' style='width:100%;height:200px;object-fit:cover;display:block;background:#000'></video><div style='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none'><div style='width:50px;height:50px;border-radius:50%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center'><svg width='20' height='20' viewBox='0 0 24 24' fill='#fff'><polygon points='6 4 20 12 6 20'/></svg></div></div>`;
+      media = `<video src='${esc(p.media_url)}' ${p.thumb_url ? `poster='${esc(p.thumb_url)}' ` : ''}controls playsinline preload='metadata' style='width:100%;height:200px;object-fit:cover;display:block;background:#000'></video>`;
     } else {
       media = `<div style='height:200px;background:linear-gradient(135deg,${D.ind}22,${D.pur}11);display:flex;align-items:center;justify-content:center;color:${D.t3}'>${ic(`<path d='M3 3v18h18'/><path d='M7 14l3-3 3 3 4-5'/>`, 38)}</div>`;
     }
+    var isVid = p.media_type === 'video' && p.media_url;
     var pill = pr ? `<div style='position:absolute;top:10px;left:10px'><span class='mkx-pill' style='color:#fff;background:${D.grad}'>${mkTypeLabel(pr.type)}</span></div>` : '';
-    var mediaWrap = pr
-      ? `<div class='mk-openp' data-pid='${pr.id}' style='position:relative;cursor:pointer'>${media}${pill}</div>`
-      : `<div style='position:relative'>${media}</div>`;
+    var pillClick = pr ? `<div class='mk-openp' data-pid='${pr.id}' style='position:absolute;top:10px;left:10px;cursor:pointer'><span class='mkx-pill' style='color:#fff;background:${D.grad}'>${mkTypeLabel(pr.type)}</span></div>` : '';
+    var mediaWrap;
+    if (pr && isVid) {
+      // video keeps native controls; only the product pill opens the product
+      mediaWrap = `<div style='position:relative'>${media}${pillClick}</div>`;
+    } else if (pr) {
+      mediaWrap = `<div class='mk-openp' data-pid='${pr.id}' style='position:relative;cursor:pointer'>${media}${pill}</div>`;
+    } else {
+      mediaWrap = `<div style='position:relative'>${media}</div>`;
+    }
     var foll = (typeof S !== 'undefined' && S.user && a.id === S.user.id)
       ? `<button class='mk-editpost mkx-foll on' data-pid='${p.id}' type='button'>Edit</button>`
       : `<button class='mk-foll mkx-foll${a.is_following ? ' on' : ''}' data-uid='${a.id}' data-on='${a.is_following ? 1 : 0}' type='button'>${a.is_following ? 'Following' : 'Follow'}</button>`;
