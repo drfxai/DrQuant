@@ -178,18 +178,26 @@
     `</article>`;
   }
 
-  /* ---- center: search + heading + grid + footer ---- */
-  function mainShell(gridHTML) {
-    var search =
-      `<div style='display:flex;align-items:center;gap:14px;margin-bottom:22px'>` +
+  /* ---- center: search + heading + grid + footer (reusable pieces) ---- */
+  function searchBar() {
+    return `<div style='display:flex;align-items:center;gap:14px;margin-bottom:22px'>` +
         `<div class='mkx-search'>${ic(`<circle cx='11' cy='11' r='7'/><line x1='21' y1='21' x2='16.65' y2='16.65'/>`, 18)}<span>Search for products, creators and posts...</span></div>` +
         `<div class='mkx-bell'>${ic(`<path d='M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9'/><path d='M13.73 21a2 2 0 0 1-3.46 0'/>`, 20)}<span style='position:absolute;top:11px;right:13px;width:7px;height:7px;border-radius:50%;background:${D.pur};box-shadow:0 0 8px ${D.pglow}'></span></div>` +
       `</div>`;
-    var head =
-      `<div style='font-size:30px;font-weight:800;color:${D.t1};letter-spacing:-.5px'>Market Explore</div>` +
+  }
+  function exploreHead() {
+    return `<div style='font-size:30px;font-weight:800;color:${D.t1};letter-spacing:-.5px'>Market Explore</div>` +
       `<div style='color:${D.t2};font-size:14px;margin-top:4px;margin-bottom:18px'>Discover top trading indicators, strategies and tools from the community.</div>`;
-    var foot = `<div style='text-align:center;color:${D.t3};font-size:11.5px;margin-top:30px;line-height:1.6'>Trading involves risk. Past performance is not indicative of future results. Quantum Market is a community-driven platform for educational and informational purposes only.</div>`;
-    return `<main class='mkx-main'><div class='mkx-mainwrap'>${search}${head}${tabs()}<div class='mkx-feedgrid'>${gridHTML}</div>${foot}</div></main>`;
+  }
+  function exploreFoot() {
+    return `<div style='text-align:center;color:${D.t3};font-size:11.5px;margin-top:30px;line-height:1.6'>Trading involves risk. Past performance is not indicative of future results. Quantum Market is a community-driven platform for educational and informational purposes only.</div>`;
+  }
+  // The inner content of the Explore center column (everything inside .mkx-mainwrap).
+  function exploreCenterHTML(gridHTML) {
+    return `${searchBar()}${exploreHead()}${tabs()}<div class='mkx-feedgrid'>${gridHTML}</div>${exploreFoot()}`;
+  }
+  function mainShell(gridHTML) {
+    return `<main class='mkx-main'><div class='mkx-mainwrap'>${exploreCenterHTML(gridHTML)}</div></main>`;
   }
 
   /* ---- right rail: trending creators (live) ---- */
@@ -327,32 +335,116 @@
     } catch (e) {}
   }
 
-  /* ---- the desktop explore renderer ---- */
-  async function exploreDesktop(body) {
+  /* ---- persistent desktop frame: left sidebar + center + right rail ----
+     Built ONCE into #mk-body. The sidebar and rail stay fixed across tabs; only
+     the center (#mkx-center) re-renders. Companies / Create / My Store / creator
+     profiles are produced by the ORIGINAL mobile renderers, redirected into the
+     center via a transient id swap (safe: each captures #mk-body once,
+     synchronously, then writes to that node or to a child by id). */
+
+  var _railCreators = null;
+
+  function frameShell() {
+    return `<div class='mkx-desk'>${sidebar()}<main class='mkx-main'><div class='mkx-mainwrap' id='mkx-center'></div></main><aside class='mkx-rail'></aside></div>`;
+  }
+
+  function highlightNav(scope) {
+    if (!scope) return;
+    var tab = (typeof MK !== 'undefined' && !MK.handle) ? MK.tab : null;
+    scope.querySelectorAll('.mkx-navi').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-nav') === tab);
+    });
+  }
+
+  // Trending Creators for the rail — fetched once when the frame is built, then
+  // reused so the rail stays put while the center changes.
+  async function refreshRail() {
+    var creators;
+    try {
+      var d = await api('/market/creators?sort=followers&limit=20');
+      creators = ((d && d.creators) || []).filter(function (c) { return !c.is_me; });
+    } catch (e) { return; }
+    _railCreators = creators;
+    try {
+      var body = document.getElementById('mk-body');
+      var railEl = body && body.querySelector('.mkx-rail');
+      if (railEl) setRail(railEl, creators);
+    } catch (e) {}
+  }
+
+  // Build the frame if absent; always (re)apply the nav highlight. Returns the
+  // center element (#mkx-center) that tab content renders into.
+  function ensureFrame() {
+    var body = document.getElementById('mk-body');
+    if (!body) return null;
     injectCSS();
-    body.innerHTML = `<div class='mkx-desk'>${sidebar()}${mainShell(feedLoading())}<aside class='mkx-rail'></aside></div>`;
-    setRail(body.querySelector('.mkx-rail'), null);
-    wireNav(body);
-    loadXP();
+    if (!body.querySelector('.mkx-desk')) {
+      body.innerHTML = frameShell();
+      wireNav(body);
+      setRail(body.querySelector('.mkx-rail'), _railCreators);
+      loadXP();
+      refreshRail();
+    }
+    highlightNav(body);
+    return body.querySelector('#mkx-center');
+  }
+
+  // Render the Explore feed into the center (search + heading + tabs + grid).
+  async function renderExploreCenter(center) {
+    if (!center) return;
+    center.innerHTML = exploreCenterHTML(feedLoading());
     try {
       var qs = 'sort=' + MK.sort + '&type=' + encodeURIComponent(MK.type) + '&q=' + encodeURIComponent(MK.q || '') + '&limit=30';
-      var res = await Promise.all([api('/market/explore?' + qs), api('/market/creators?sort=followers&limit=20')]);
-      var posts = (res[0] && res[0].posts) || [];
-      var creators = ((res[1] && res[1].creators) || []).filter(function (c) { return !c.is_me; });
-      var grid = body.querySelector('.mkx-feedgrid');
+      var d = await api('/market/explore?' + qs);
+      var posts = (d && d.posts) || [];
+      var grid = center.querySelector('.mkx-feedgrid');
       if (grid) grid.innerHTML = posts.length ? posts.map(card).join('') : emptyGrid();
-      setRail(body.querySelector('.mkx-rail'), creators);
     } catch (e) {
-      var g2 = body.querySelector('.mkx-feedgrid');
+      var g2 = center.querySelector('.mkx-feedgrid');
       if (g2) g2.innerHTML = emptyGrid(typeof mkErrMsg === 'function' ? mkErrMsg(e) : 'Could not load feed');
     }
   }
 
-  /* ---- wrap the mobile renderer ---- */
-  window.mkExplore = async function () {
+  /* ---- wrap the mobile renderers ---- */
+  window.mkExplore = function () {
     var body = document.getElementById('mk-body');
-    if (body && isDesk()) { return exploreDesktop(body); }
+    if (body && isDesk()) {
+      var center = ensureFrame();
+      if (center) renderExploreCenter(center);
+      return;
+    }
     if (typeof _mobileExplore === 'function') { return _mobileExplore.apply(this, arguments); }
+  };
+
+  var _mkRenderOrig = window.mkRender;
+  window.mkRender = function () {
+    if (!isDesk()) {
+      if (typeof _mkRenderOrig === 'function') return _mkRenderOrig.apply(this, arguments);
+      return;
+    }
+    var center = ensureFrame();
+    if (!center) {
+      if (typeof _mkRenderOrig === 'function') return _mkRenderOrig.apply(this, arguments);
+      return;
+    }
+    // Explore: render the feed center directly (don't rebuild the frame).
+    if (typeof MK !== 'undefined' && !MK.handle && MK.tab === 'explore') {
+      renderExploreCenter(center);
+      return;
+    }
+    // Companies / Create / My Store / creator profile: let the ORIGINAL renderer
+    // fill the CENTER by transiently swapping ids so getElementById('mk-body')
+    // resolves to #mkx-center for the (synchronous) duration of the call.
+    var body = document.getElementById('mk-body');
+    var prevId = body.id;
+    body.id = '__mkx_outer__';
+    center.id = 'mk-body';
+    try {
+      if (typeof _mkRenderOrig === 'function') _mkRenderOrig.apply(this, arguments);
+    } finally {
+      center.id = 'mkx-center';
+      body.id = prevId || 'mk-body';
+    }
   };
 
   // If the viewport crosses the desktop/mobile boundary while Market is open,
@@ -363,7 +455,7 @@
     if (now === _wasDesk) return;
     _wasDesk = now;
     try {
-      if (document.getElementById('mk-overlay') && typeof MK !== 'undefined' && (!MK.handle) && typeof mkRender === 'function') mkRender();
+      if (document.getElementById('mk-overlay') && typeof MK !== 'undefined' && typeof mkRender === 'function') mkRender();
     } catch (e) {}
   });
 })();
