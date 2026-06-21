@@ -76,10 +76,13 @@
   /* ---- left sidebar ---- */
   function sidebar() {
     var nav = [
+      ['dashboard', 'Dashboard', `<rect x='3' y='3' width='18' height='18' rx='2'/><line x1='3' y1='9' x2='21' y2='9'/><line x1='9' y1='21' x2='9' y2='9'/>`],
       ['explore', 'Explore', `<rect x='3' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='3' width='7' height='7' rx='1.5'/><rect x='14' y='14' width='7' height='7' rx='1.5'/><rect x='3' y='14' width='7' height='7' rx='1.5'/>`],
       ['companies', 'Companies', `<path d='M3 21h18'/><path d='M5 21V7l8-4v18'/><path d='M19 21V11l-6-4'/><line x1='9' y1='9' x2='9' y2='9.01'/><line x1='9' y1='13' x2='9' y2='13.01'/>`],
       ['create', 'Create', `<circle cx='12' cy='12' r='9'/><line x1='12' y1='8' x2='12' y2='16'/><line x1='8' y1='12' x2='16' y2='12'/>`],
-      ['store', 'My Store', `<path d='M3 9l1-5h16l1 5'/><path d='M5 9v11h14V9'/><path d='M9 22V12h6v10'/>`]
+      ['store', 'My Store', `<path d='M3 9l1-5h16l1 5'/><path d='M5 9v11h14V9'/><path d='M9 22V12h6v10'/>`],
+      ['wallet', 'Wallet', `<rect x='2' y='6' width='20' height='13' rx='3'/><path d='M2 10h20'/><circle cx='17' cy='13' r='1.3'/>`],
+      ['profile', 'Profile', `<circle cx='12' cy='8' r='4'/><path d='M4 21c0-3.6 3.6-6.5 8-6.5s8 2.9 8 6.5'/>`]
     ];
     var items = nav.map(function (n) {
       var on = n[0] === 'explore';
@@ -281,9 +284,10 @@
           return;
         }
         if (n === 'wallet') { if (window.openWallet) openWallet(); return; }
+        if (n === 'profile') { if (window.openProfile) openProfile(); return; }
         if (n === 'upgrade' || n === 'publish') { if (window.openSub) openSub(); return; }
         if (n === 'creators' || n === 'featured') { return; }
-        // home (brand logo) -> leave Market
+        // dashboard (-> first page / chats) and home (brand logo) both leave Market
         closeMarket();
       });
     });
