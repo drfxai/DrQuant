@@ -48,7 +48,7 @@
       `.mkx-navi:hover{background:rgba(255,255,255,.04);color:${D.t1}}`,
       `.mkx-navi.on{background:${D.grad};color:#fff;box-shadow:0 8px 22px ${D.glow}}`,
       `.mkx-main{flex:1;min-width:0;overflow-y:auto;padding:20px 30px 34px}`,
-      `.mkx-mainwrap{max-width:980px;margin:0 auto;width:100%}`,
+      `.mkx-mainwrap{max-width:1180px;margin:0 auto;width:100%}`,
       `.mkx-search{flex:1;display:flex;align-items:center;gap:11px;padding:13px 18px;border-radius:14px;background:${D.panel};border:1px solid ${D.bd};color:${D.t2};font-size:14px;min-width:0}`,
       `.mkx-bell{width:46px;height:46px;flex-shrink:0;border-radius:13px;background:${D.panel};border:1px solid ${D.bd};display:flex;align-items:center;justify-content:center;color:${D.t2};cursor:pointer;position:relative}`,
       `.mkx-tab{flex-shrink:0;padding:10px 20px;border-radius:12px;border:1px solid ${D.bd};background:${D.panel};color:${D.t2};font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}`,

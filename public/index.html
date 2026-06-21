@@ -1535,7 +1535,7 @@ async function mkCompanies(){
   const body=document.getElementById('mk-body');if(!body)return;
   if(!MK.ckind)MK.ckind='company';
   const tabs=[['company','Companies'],['individual','Creators'],['all','All']].map(p=>{const v=p[0],l=p[1],on=MK.ckind===v;return `<button class="mk-ckind" data-kind="${v}" style="flex:1;padding:9px 0;border-radius:11px;border:1px solid ${on?t.ba:t.bd};background:${on?t.act:'transparent'};color:${on?t.ac:t.t3};font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">${l}</button>`;}).join('');
-  body.innerHTML=`<div style="padding:12px 14px 8px;max-width:780px;margin:0 auto;width:100%;box-sizing:border-box"><div style="display:flex;gap:8px;margin-bottom:12px">${tabs}</div><div id="mk-cdir">${mkLoader()}</div></div>`;
+  body.innerHTML=`<div style="padding:12px 14px 8px;max-width:1180px;margin:0 auto;width:100%;box-sizing:border-box"><div style="display:flex;gap:8px;margin-bottom:12px">${tabs}</div><div id="mk-cdir">${mkLoader()}</div></div>`;
   try{
     const d=await api(`/market/creators?kind=${MK.ckind}&sort=followers&q=${encodeURIComponent(MK.q||'')}&limit=40`);
     const wrap=document.getElementById('mk-cdir');if(!wrap)return;

@@ -242,7 +242,7 @@
       var v = p[0], l = p[1], n = p[2], on = MK.ctab === v;
       return '<button class="mk-ctab" data-ctab="' + v + '" style="flex:1;padding:13px 0;background:none;border:none;border-bottom:2px solid ' + (on ? t.pr : "transparent") + ";color:" + (on ? t.t1 : t.t3) + ';font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit">' + l + " &#183; " + n + "</button>";
     }).join("");
-    return '<div style="max-width:780px;margin:0 auto;width:100%;box-sizing:border-box">' +
+    return '<div style="max-width:1180px;margin:0 auto;width:100%;box-sizing:border-box">' +
       '<div style="position:relative;height:150px;overflow:hidden;' + cover + '"><div style="position:absolute;inset:0;background:linear-gradient(to top,' + t.bg + ',transparent 58%)"></div>' + back + "</div>" +
       '<div style="padding:0 18px 14px;margin-top:-44px;position:relative">' +
         '<div style="border-radius:50%;padding:3px;background:linear-gradient(135deg,#1f8bff,#7c5cff,#ff4d6d);width:86px">' + avatar(c.avatar || (isCo ? "\uD83C\uDFE2" : "\uD83E\uDDD1\u200D\uD83D\uDCBB"), 80) + "</div>" +
@@ -263,7 +263,7 @@
   window.mkCreatorContent = function (d) {
     if (MK.ctab === "posts") {
       if (!d.posts || !d.posts.length) return mkEmpty("No posts yet", "");
-      return '<div style="max-width:640px;margin:0 auto">' + d.posts.map(mkPostCard).join("") + "</div>";
+      return '<div class="mkx-feedgrid">' + d.posts.map(mkPostCard).join("") + "</div>";
     }
     if (!d.products || !d.products.length) return mkEmpty("No products yet", d.creator.is_me ? 'Tap "Add product" to list your first indicator or strategy.' : "");
     return '<div class="mkx-grid">' + d.products.map(function (pr) { return mkProductCard(pr, d.creator.is_me); }).join("") + "</div>";
