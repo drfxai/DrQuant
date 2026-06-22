@@ -261,7 +261,7 @@ function buildSidebar(){
   ov.onclick=()=>ov.style.display="none";
   const nav=$("#sb-nav");
   [{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${profImg(24)}</span><span>Profile</span>`,fn:openProfile},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;color:${t.pr}">${ic('<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>',18)}</span><span>Wallet</span>`,fn:()=>{if(window.openWallet)openWallet();}},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;color:${t.pr}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="6"/><rect x="4" y="6" width="4" height="7" rx="1"/><line x1="6" y1="13" x2="6" y2="17"/><line x1="18" y1="4" x2="18" y2="7"/><rect x="16" y="7" width="4" height="6" rx="1"/><line x1="18" y1="13" x2="18" y2="16"/></svg></span><span>Market</span>`,fn:openMarket},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,#1b2335,#0c1320);border-radius:6px">${tvImg(16)}</span><span>Manual Trading</span>`,fn:openManualTrading},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;background:linear-gradient(135deg,#1b2335,#0c1320);border-radius:6px">${ytImg(20)}</span><span>Live Trading</span>`,fn:openLiveTrading},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0;font-size:17px">\uD83D\uDEE1\uFE0F</span><span>Quantum Chat</span>`,fn:openQuantumChat},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${goldSeal(22)}</span><span>Subscription</span>`,fn:openSub},{l:`<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">${I.settings}</span><span>Settings</span>`,fn:openSettings}].forEach(n=>{const b=ce("button");b.className="sbtn";b.innerHTML=n.l;b.onclick=()=>{ov.style.display="none";n.fn();};nav.appendChild(b);});
-  if(S.user.role==="admin"){const b=ce("button");b.className="sbtn";b.innerHTML="⚙️ Admin Panel";b.onclick=()=>{ov.style.display="none";openAdmin();};nav.appendChild(b);}
+  if(S.user.role==="admin"){const b=ce("button");b.className="sbtn";b.innerHTML="⚙️ Admin Panel";b.onclick=()=>{ov.style.display="none";openAdmin();};nav.appendChild(b);}if(["admin","manager","superadmin"].includes(S.user.role)){const cbn=ce("button");cbn.className="sbtn";cbn.innerHTML='<span style="display:inline-flex;width:24px;height:24px;align-items:center;justify-content:center;flex-shrink:0">'+ic('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/>',18)+'</span><span>Console</span>';cbn.onclick=()=>{ov.style.display="none";if(window.dqConsole)dqConsole();};nav.appendChild(cbn);}
   const lo=ce("button");lo.className="sbtn";lo.style.color="#ff6b6b";lo.innerHTML=I.logout+" Sign Out";lo.onclick=()=>{S.token=null;S.user=null;S.chats=[];S.activeChat=null;localStorage.removeItem("dq_t");localStorage.removeItem("dq_u");if(S.socket)S.socket.disconnect();render();};nav.appendChild(lo);
 }
 
@@ -2078,6 +2078,7 @@ function connectSocket(){
     const i=S.chatMsgs.findIndex(m=>m.id===id);if(i>=0)S.chatMsgs[i].pinned=false;
     S.pinnedMsgs=(S.pinnedMsgs||[]).filter(p=>p.id!==id);if(S.pinIndex>=S.pinnedMsgs.length)S.pinIndex=0;updatePinBar();
   });
+  S.socket.on("broadcast",b=>{try{const lv=(b&&b.level)||"info";const ic0=lv==="critical"?"\uD83D\uDED1":lv==="warning"?"\u26A0\uFE0F":"\uD83D\uDCE2";showToast(ic0+" "+((b&&b.title)||"Announcement"),(b&&b.body)||"");if(lv==="critical")playNotif();}catch(e){}});
   S.socket.on("typing",data=>{if(data.chatId===S.activeChat){const el=$("#cv-sub");if(el){el.textContent="typing...";clearTimeout(el._t);el._t=setTimeout(()=>{el.textContent=S.chatInfo?.type==="dm"?dmStatusText():`${S.chatInfo?.member_count||S.chatInfo?.members?.length||""} members`;},2000);}}});
 }
 
@@ -2100,6 +2101,7 @@ window.addEventListener("resize",()=>{
 <script src="/wallet.js"></script>
 <script src="/control-deck.js"></script>
 <script src="/admin-ui.js"></script>
+<script src="/console.js"></script>
 <script src="/market-ui.js"></script>
 <script src="/market-desktop.js"></script>
 </body></html>
