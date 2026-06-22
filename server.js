@@ -103,6 +103,7 @@ app.use("/api/upload", require("./routes/upload"));
 app.use("/api/manage", require("./routes/manage")); // admin/manager console (RBAC matrix)
 app.use("/api/live", require("./routes/live"));   // live-trading sessions + ICE/TURN credentials
 app.use("/api/market", require("./routes/market")); // Market: Explore feed, creators/companies, products, follows/likes
+app.use("/api/signals", require("./routes/signals")); // read-only signals feed (published table + derived auto-detected)
 
 // QNTM economy — internal ledger/wallet admin routes (mounts at /api/qntm/admin),
 // guarded by the host's auth + admin middleware so it shares one RBAC path.

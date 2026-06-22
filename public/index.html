@@ -286,7 +286,7 @@ function buildChatList(){
   </div>`;
   $("#menu-btn").onclick=()=>$("#sb-ov").style.display="block";
   $("#fab").onclick=openCreateChat;
-  $$(".nav-tab").forEach(b=>{b.onclick=()=>{const tab=b.dataset.tab;if(tab==="chat")return;if(tab==="market")openMarket();else if(tab==="signals")openLiveTrading();else if(tab==="vpn")openQuantumChat();else if(tab==="profile")openProfile();};});
+  $$(".nav-tab").forEach(b=>{b.onclick=()=>{const tab=b.dataset.tab;if(tab==="chat")return;if(tab==="market")openMarket();else if(tab==="signals"){if(window.openSignalsFeed)openSignalsFeed();else openLiveTrading();}else if(tab==="vpn")openQuantumChat();else if(tab==="profile")openProfile();};});
   const cq=$("#cq");let st;cq.oninput=()=>{clearTimeout(st);const q=cq.value.trim().toLowerCase();if(q.length>=2){st=setTimeout(()=>globalSearch(q),300);}else renderChatListItems();};
 }
 
@@ -476,7 +476,7 @@ function msgBubble(m){
   const attHtml=m.attachment?renderAttachment(m.attachment,mine,lc):"";
   const textHtml=m.content?`<div style="color:${lc?"#fff":t.t1};font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word">${fmtMsg(m.content)}</div>`:"";
   const edited=m.edited_at?`<span style="font-size:10px;color:${lc?"rgba(255,255,255,.5)":t.t4};margin-right:3px">edited</span>`:"";
-  return`<div data-mid="${m.id}" style="display:flex;justify-content:${mine?"flex-end":"flex-start"};margin-bottom:3px;padding:0 12px;animation:fm .15s ease;-webkit-user-select:none;user-select:none"><div style="max-width:78%;min-width:70px">${senderLine}<div style="padding:7px 12px;border-radius:${mine?"16px 16px 5px 16px":"16px 16px 16px 5px"};background:${mine?t.bm:t.bo};border:1px solid ${mine?t.bmb:t.bob};backdrop-filter:blur(10px);box-shadow:${mine?`0 2px 14px ${t.pgw}`:"0 2px 10px rgba(0,0,0,.18)"}">${replyHtml}${imgHtml}${attHtml}${textHtml}<div style="display:flex;justify-content:flex-end;align-items:center;gap:3px;margin-top:2px">${edited}<span style="font-size:10px;color:${lc?"rgba(255,255,255,.6)":t.t4}">${fmtTime(m.created_at)}</span>${mine?`<span style="color:${lc?"rgba(255,255,255,.6)":t.pr+"99"}">${I.dbl}</span>`:""}</div></div></div></div>`;
+  return`<div data-mid="${m.id}" style="display:flex;justify-content:${mine?"flex-end":"flex-start"};margin-bottom:3px;padding:0 12px;animation:fm .15s ease;-webkit-user-select:none;user-select:none"><div style="max-width:78%;min-width:70px">${senderLine}<div style="padding:7px 12px;border-radius:${mine?"16px 16px 5px 16px":"16px 16px 16px 5px"};background:${mine?t.bm:t.bo};border:1px solid ${mine?t.bmb:t.bob};backdrop-filter:blur(10px);box-shadow:${mine?`0 2px 14px ${t.pgw}`:"0 2px 10px rgba(0,0,0,.18)"}">${replyHtml}${imgHtml}${attHtml}${textHtml}<div style="display:flex;justify-content:flex-end;align-items:center;gap:3px;margin-top:2px">${edited}<span style="font-size:10px;color:${lc?"rgba(255,255,255,.6)":t.t4}">${fmtTime(m.created_at)}</span>${mine?`<span style="color:${lc?"rgba(255,255,255,.6)":t.pr+"99"}">${I.dbl}</span>`:""}</div></div>${window.dqSignalChip?window.dqSignalChip(m):""}</div></div>`;
 }
 
 function dateLabel(ts){
@@ -2102,6 +2102,9 @@ window.addEventListener("resize",()=>{
 <script src="/control-deck.js"></script>
 <script src="/admin-ui.js"></script>
 <script src="/console.js"></script>
+<script src="/signal-extract.js"></script>
+<script src="/signal-card.js"></script>
+<script src="/signals-feed.js"></script>
 <script src="/market-ui.js"></script>
 <script src="/market-desktop.js"></script>
 </body></html>
