@@ -231,13 +231,17 @@ async function sendChunks(names, resolvers) {
   let lastErr = null, lastResp = null;
   for (const resolver of attempts) {
     try {
-      let resp = null;
-      for (const n of names) resp = await dohTXT(n, [resolver]);   // pin one resolver
+      let resp = null, errored = false;
+      for (const n of names) {                       // pin one resolver for the whole message
+        resp = await dohTXT(n, [resolver]);
+        if (/^ERR /.test((resp && resp[0]) || "")) { errored = true; break; } // node rejected a chunk
+      }
       lastResp = resp;
+      if (errored) return resp;                      // surface the real ERR, don't mask it as a split
       const head = (resp && resp[0]) || "";
       // "OK <seq>" (a small integer) is a NON-final chunk ack: the node we
       // reached is still missing earlier chunks. Retry the whole message on a
-      // different resolver. Anything else (DONE/DUP/ERR/"OK <id>") is terminal.
+      // different resolver. Anything else (DONE/DUP/"OK <id>") is terminal.
       if (!/^OK \d{1,4}$/.test(head)) return resp;
     } catch (e) { lastErr = e; }
   }
