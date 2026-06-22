@@ -1,25 +1,19 @@
 /* ============================================================================
    DrFX Quant — Chat translation UI  (window.dqTranslate)
    ----------------------------------------------------------------------------
-   Loaded in the browser as /translate-ui.js. Adds, with a tiny index.html
-   footprint, an advisory translation layer to chat:
+   Advisory translation layer for chat. SELF-INSTALLING: it injects its own
+   globe control into the chat header and drives itself via a MutationObserver,
+   so it does NOT depend on header markup or hook calls living in index.html —
+   the only thing it needs is its own <script> tag. The globe stays visible even
+   when the engine is unreachable (tapping it then explains the status), so the
+   control never silently disappears.
 
-     • a globe control in the chat header (shown only when the engine is up)
-     • a per-message "Translate" action (in the long-press menu)
-     • an optional AUTO mode that translates incoming foreign-language messages
+   Rules: ADVISORY / display-only — the ORIGINAL message is always shown and the
+   translation is appended UNDER it; nothing is overwritten. Per-user language +
+   auto toggle persist server-side (POST /translate/prefs) with a localStorage
+   mirror for instant load.
 
-   Hard rules (project brief):
-     • ADVISORY / display-only. The ORIGINAL message is always shown; the
-       translation is appended UNDER it. Nothing overwrites the message.
-     • DEGRADES QUIETLY. If /translate/status says the engine is down, the
-       globe + menu action stay hidden and chat is completely unaffected.
-
-   Persistence: language + auto toggle are saved server-side (POST /translate/
-   prefs) with a localStorage MIRROR for instant load. The server is the source
-   of truth; localStorage just avoids a first-paint flash.
-
-   Page globals reused (classic scripts share one scope): t, esc, ic, api, S,
-   modal, showToast, fmtMsg.
+   Page globals reused: t, esc, ic, api, S, modal, showToast, fmtMsg.
    ========================================================================== */
 (function () {
   "use strict";
@@ -28,11 +22,11 @@
   var LS_KEY = "dq_tr_prefs";
   var prefs = { lang: "", auto: false };
   var _status = { available: false, languages: [], loaded: false };
-  var _cache = {};   // "id|lang" -> { translated, source_lang, same } | { translated:null, reason }
-  var _shown = {};   // id -> true (translation currently displayed)
+  var _cache = {};
+  var _shown = {};
   var _queue = [], _active = 0, MAX_CONC = 4;
 
-  var LANG_NAMES = { en: "English", ru: "Русский", fa: "فارسی", ar: "العربية", hi: "हिन्दी", es: "Español", fr: "Français", de: "Deutsch", tr: "Türkçe", zh: "中文", pt: "Português", it: "Italiano", nl: "Nederlands", pl: "Polski", uk: "Українська", id: "Bahasa Indonesia", ur: "اردو" };
+  var LANG_NAMES = { en: "English", ru: "\u0420\u0443\u0441\u0441\u043a\u0438\u0439", fa: "\u0641\u0627\u0631\u0633\u06cc", ar: "\u0627\u0644\u0639\u0631\u0628\u064a\u0629", hi: "\u0939\u093f\u0928\u094d\u0926\u0940", es: "Espa\u00f1ol", fr: "Fran\u00e7ais", de: "Deutsch", tr: "T\u00fcrk\u00e7e", zh: "\u4e2d\u6587", pt: "Portugu\u00eas", it: "Italiano", nl: "Nederlands", pl: "Polski", uk: "\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430", id: "Bahasa Indonesia", ur: "\u0627\u0631\u062f\u0648" };
   var CORE = ["en", "ru", "fa", "ar", "hi"];
   var RTL = ["fa", "ar", "ur", "ps", "he"];
 
@@ -69,24 +63,20 @@
     }).catch(function () {});
   }
 
-  // ── same-script heuristic: in AUTO mode, skip messages whose dominant script
-  //    already matches the target language (the common "same language" case).
-  //    Cuts engine load sharply for cross-script pairs (fa/ar/ru/hi <-> en).
-  //    Manual translate (menu) bypasses this and always calls. ──
   function scriptOfLang(l) { if (RTL.indexOf(l) >= 0) return "arabic"; if (l === "hi") return "deva"; if (["ru", "uk", "bg", "sr", "mk"].indexOf(l) >= 0) return "cyrillic"; if (l === "zh" || l === "ja") return "han"; return "latin"; }
   function scriptOfText(s) { if (/[\u0600-\u06ff]/.test(s)) return "arabic"; if (/[\u0900-\u097f]/.test(s)) return "deva"; if (/[\u0400-\u04ff]/.test(s)) return "cyrillic"; if (/[\u3400-\u9fff]/.test(s)) return "han"; if (/[a-z]/i.test(s)) return "latin"; return ""; }
   function likelySame(text, lang) { var ts = scriptOfText(text); return !!ts && ts === scriptOfLang(lang); }
 
-  // ── DOM injection (the translation block lives UNDER the original text) ──
   function removeBlock(el) { if (!el) return; var b = el.querySelector(".dqtr-block"); if (b) b.remove(); }
   function injectLoading(el) {
     if (!el) return; var src = el.querySelector(".dqtr-src"); if (!src) return;
     removeBlock(el);
     var d = document.createElement("div"); d.className = "dqtr-block";
     d.style.cssText = "margin-top:5px;padding-top:5px;border-top:1px dashed " + t.bd + ";color:" + t.t4 + ";font-size:11px;display:flex;align-items:center;gap:6px";
-    d.innerHTML = '<span style="width:11px;height:11px;border:2px solid ' + t.bd + ';border-top-color:' + t.pr + ';border-radius:50%;display:inline-block;animation:dqspin .8s linear infinite"></span> translating…';
+    d.innerHTML = '<span style="width:11px;height:11px;border:2px solid ' + t.bd + ';border-top-color:' + t.pr + ';border-radius:50%;display:inline-block;animation:dqspin .8s linear infinite"></span> translating\u2026';
     src.parentNode.insertBefore(d, src.nextSibling);
   }
+  function globeSvg(sz) { return ic('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>', sz || 20); }
   function injectBlock(el, tr) {
     if (!el || !tr || tr.translated == null) return;
     var src = el.querySelector(".dqtr-src"); if (!src) return;
@@ -94,13 +84,12 @@
     var rtl = RTL.indexOf(prefs.lang) >= 0;
     var bodyHtml = (typeof fmtMsg === "function") ? fmtMsg(tr.translated) : esc(tr.translated);
     var srcLbl = tr.source_lang ? langName(tr.source_lang) : "auto";
-    var globe = ic('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>', 11);
     var d = document.createElement("div"); d.className = "dqtr-block";
     d.style.cssText = "margin-top:5px;padding-top:5px;border-top:1px dashed " + t.bd;
     d.innerHTML =
       '<div class="dqtr-txt" ' + (rtl ? 'dir="rtl" ' : '') + 'style="font-size:13.5px;line-height:1.5;color:' + t.t1 + ';white-space:pre-wrap;word-break:break-word">' + bodyHtml + '</div>' +
       '<div style="display:flex;align-items:center;gap:6px;margin-top:3px;font-size:10px;color:' + t.t4 + '">' +
-        '<span style="display:inline-flex;color:' + t.t4 + '">' + globe + '</span>' +
+        '<span style="display:inline-flex;color:' + t.t4 + '">' + globeSvg(11) + '</span>' +
         '<span>translated from ' + esc(srcLbl) + '</span>' +
         '<span style="flex:1"></span>' +
         '<button type="button" class="dqtr-hide" style="background:none;border:none;color:' + t.ac + ';font-size:10px;cursor:pointer;font-family:inherit;padding:0">Hide</button>' +
@@ -110,7 +99,6 @@
     if (hb) hb.onclick = function (e) { e.stopPropagation(); hideTranslation(parseInt(el.dataset.mid, 10)); };
   }
 
-  // ── translate one message (toggle) ──
   function hideTranslation(id) { delete _shown[id]; removeBlock(mcEl(id)); }
   function showTranslation(id, fromAuto) {
     var msg = findMsg(id); var text = msg && msg.content;
@@ -135,7 +123,6 @@
   }
   function translateMessage(id) { if (_shown[id]) { hideTranslation(id); return; } showTranslation(id, false); }
 
-  // ── concurrency-limited queue for auto-translate ──
   function enqueue(id) { if (_shown[id]) return; _queue.push(id); pump(); }
   function pump() {
     while (_active < MAX_CONC && _queue.length) {
@@ -146,11 +133,9 @@
     }
   }
 
-  // ── hooks called from index.html ──
   function onChatRender(mc) {
     refreshGlobe();
     if (!mc || !available()) return;
-    // re-apply already-shown translations so they survive re-renders this session
     Object.keys(_shown).forEach(function (idStr) {
       var id = parseInt(idStr, 10); var el = mc.querySelector('[data-mid="' + id + '"]'); if (!el) return;
       var tr = _cache[id + "|" + prefs.lang]; if (tr && tr.translated != null && !tr.same) injectBlock(el, tr);
@@ -159,7 +144,7 @@
     Array.prototype.slice.call(mc.querySelectorAll("[data-mid]")).slice(-25).forEach(function (el) {
       var id = parseInt(el.dataset.mid, 10); var msg = findMsg(id);
       if (!msg || !msg.content) return;
-      if (S.user && msg.user_id === S.user.id) return; // never my own messages
+      if (S.user && msg.user_id === S.user.id) return;
       if (_shown[id] || likelySame(msg.content, prefs.lang)) return;
       enqueue(id);
     });
@@ -170,7 +155,6 @@
     if (likelySame(msg.content, prefs.lang)) return;
     enqueue(msg.id);
   }
-  // one-shot: translate the visible foreign messages without enabling auto
   function translateConversationNow() {
     var mc = document.getElementById("cv-msgs"); if (!mc) return;
     if (!available()) { try { showToast("Translation unavailable", "The translation service isn't reachable right now."); } catch (e) {} return; }
@@ -183,15 +167,31 @@
     if (!n) { try { showToast("Nothing to translate", "No messages in another language were found here."); } catch (e) {} }
   }
 
-  // ── globe button in the chat header (revealed only when available) ──
+  // ── SELF-INSTALLING globe: create it next to the info button if absent, and
+  //    keep it visible even when the engine is down. ──
+  function ensureGlobe() {
+    var g = document.getElementById("cv-translate");
+    if (g) return g;
+    var info = document.getElementById("cv-info");
+    if (!info || !info.parentNode) return null;
+    g = document.createElement("button");
+    g.id = "cv-translate";
+    g.type = "button";
+    g.className = info.className || "ib";
+    g.title = "Translate";
+    g.setAttribute("aria-label", "Translate");
+    g.innerHTML = globeSvg(20);
+    info.parentNode.insertBefore(g, info);
+    return g;
+  }
   function refreshGlobe() {
-    var g = document.getElementById("cv-translate"); if (!g) return;
-    g.style.display = available() ? "flex" : "none";
+    var g = ensureGlobe();
+    if (!g) return;
+    g.style.display = "flex";
     g.style.color = (available() && prefs.auto) ? t.pr : t.t2;
     if (!g._dqWired) { g._dqWired = true; g.onclick = openSheet; }
   }
 
-  // ── settings sheet ──
   function openSheet() {
     if (typeof modal !== "function") return;
     modal("Translation", function (body, close) {
@@ -211,7 +211,7 @@
       }).join("");
 
       body.innerHTML =
-        (!available() ? '<div style="margin:-4px 0 12px;padding:10px 12px;border-radius:12px;background:' + t.ta + ';border:1px solid ' + t.bd + ';color:' + t.t3 + ';font-size:12px;line-height:1.5">Translation service isn\'t reachable right now. You can still set preferences — they\'ll take effect once it\'s available.</div>' : '') +
+        (!available() ? '<div style="margin:-4px 0 12px;padding:10px 12px;border-radius:12px;background:' + t.ta + ';border:1px solid ' + t.bd + ';color:' + t.t3 + ';font-size:12px;line-height:1.5">Translation service isn\'t reachable right now. You can still set preferences \u2014 they\'ll take effect once it\'s available.</div>' : '') +
         '<div style="color:' + t.t2 + ';font-size:12px;font-weight:700;margin-bottom:8px">Translate messages to</div>' +
         '<div id="dqtr-langs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px">' + langBtns + '</div>' +
         '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:13px 14px;border-radius:14px;background:' + t.cd + ';border:1px solid ' + t.bd + ';margin-bottom:12px">' +
@@ -226,7 +226,7 @@
         b.onclick = function () {
           if (prefs.lang === b.dataset.l) return;
           prefs.lang = b.dataset.l;
-          _cache = {}; _shown = {};                 // cached translations were for the old language
+          _cache = {}; _shown = {};
           savePrefs(); paintLangs(); refreshGlobe();
           var mc = document.getElementById("cv-msgs");
           if (mc) { mc.querySelectorAll(".dqtr-block").forEach(function (x) { x.remove(); }); onChatRender(mc); }
@@ -245,10 +245,27 @@
     });
   }
 
-  // ── boot ──
+  // ── boot + self-drive ──
   loadLocal();
   fetchStatus();
   fetchPrefs();
+
+  var _tick = null;
+  function scheduleScan() {
+    if (_tick) return;
+    _tick = setTimeout(function () {
+      _tick = null;
+      var mc = document.getElementById("cv-msgs");
+      if (mc) onChatRender(mc); else refreshGlobe();
+    }, 250);
+  }
+  try {
+    if (typeof MutationObserver === "function" && document.body) {
+      new MutationObserver(scheduleScan).observe(document.body, { childList: true, subtree: true });
+    }
+  } catch (e) {}
+  scheduleScan();
+  setTimeout(scheduleScan, 1200);
 
   window.dqTranslate = {
     onChatRender: onChatRender,
