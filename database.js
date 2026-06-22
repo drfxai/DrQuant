@@ -321,6 +321,9 @@ async function initDB() {
       ALTER TABLE posts ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
       ALTER TABLE products ADD COLUMN IF NOT EXISTS tv_public_url TEXT DEFAULT '';
       ALTER TABLE products ADD COLUMN IF NOT EXISTS tv_invite_url TEXT DEFAULT '';
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS src_file TEXT DEFAULT '';
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS src_name TEXT DEFAULT '';
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS src_size BIGINT DEFAULT 0;
       CREATE INDEX IF NOT EXISTS idx_users_creators ON users(store_kind, follower_count DESC) WHERE is_creator = TRUE;
       CREATE INDEX IF NOT EXISTS idx_follows_followee ON follows(followee_id);
       CREATE INDEX IF NOT EXISTS idx_follows_follower ON follows(follower_id);

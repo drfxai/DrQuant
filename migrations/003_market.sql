@@ -95,6 +95,12 @@ CREATE INDEX IF NOT EXISTS idx_products_listed ON products(status, type, sales_c
 ALTER TABLE products ADD COLUMN IF NOT EXISTS tv_public_url TEXT DEFAULT '';
 ALTER TABLE products ADD COLUMN IF NOT EXISTS tv_invite_url TEXT DEFAULT '';
 
+-- Downloadable product source-code file. Stored in a NON-public directory and
+-- streamed only to the owner or a completed buyer via GET /products/:id/source.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS src_file TEXT DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS src_name TEXT DEFAULT '';
+ALTER TABLE products ADD COLUMN IF NOT EXISTS src_size BIGINT DEFAULT 0;
+
 -- ---------------------------------------------------------------------------
 -- 4. PRODUCT PURCHASES  (license ledger). One active license per buyer/product.
 --    NOTE: actual QNTM settlement / escrow is intentionally NOT performed here;

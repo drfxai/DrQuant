@@ -22,6 +22,10 @@
 // ----------------------------------------------------------------------------
 
 const express = require("express");
+const path = require("path");
+const fs = require("fs");
+const crypto = require("crypto");
+const multer = require("multer");
 const router = express.Router();
 const { requirePermission, can } = require("../middleware/permissions");
 const { marketplacePay } = require("../qntm-ledger/src/economy/phase1");
@@ -74,6 +78,28 @@ function hasAccessLink(p) {
   return !!((p && p.tv_public_url && String(p.tv_public_url).trim()) ||
             (p && p.tv_invite_url && String(p.tv_invite_url).trim()));
 }
+
+// ── Product source-code file ────────────────────────────────────────────────
+// Stored OUTSIDE the public /uploads tree (in <root>/private/product-src) so the
+// bytes are never reachable by URL. Delivered only to the owner or a completed
+// buyer, by streaming through GET /products/:id/source (re-checked every call).
+const SRC_DIR = path.join(__dirname, "..", "private", "product-src");
+try { fs.mkdirSync(SRC_DIR, { recursive: true }); } catch (e) { /* created lazily */ }
+const SRC_EXTS = new Set(["zip","rar","7z","tar","gz","tgz","txt","csv","md","json","pdf","pine","mq4","mq5","ex4","ex5","js","ts","py","c","cpp","h","hpp","cs","java","rb","go","php","sql","sh","yaml","yml","xml","ipynb"]);
+const SRC_MAX = 50 * 1024 * 1024;
+function srcExt(filename) { const m = String(filename || "").toLowerCase().match(/\.([a-z0-9]{1,8})$/); return m && SRC_EXTS.has(m[1]) ? m[1] : null; }
+function srcDisplayName(name) { return (String(name == null ? "source" : name).replace(/[\r\n]/g, "").trim().slice(0, 140)) || "source"; }
+function safeSrcRef(ref) { const s = String(ref || "").trim(); if (!/^[a-f0-9]{32}\.[a-z0-9]{1,8}$/.test(s)) return null; return SRC_EXTS.has(s.split(".").pop()) ? s : null; }
+function sourceInfo(p) { const f = (p && p.src_file ? String(p.src_file) : "").trim(); if (!f) return null; return { name: srcDisplayName(p.src_name), size: Number(p.src_size) || 0 }; }
+function hasSource(p) { return !!(p && p.src_file && String(p.src_file).trim()); }
+const srcUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, SRC_DIR),
+    filename: (req, file, cb) => cb(null, crypto.randomBytes(16).toString("hex") + "." + (srcExt(file.originalname) || "bin")),
+  }),
+  limits: { fileSize: SRC_MAX, files: 1 },
+  fileFilter: (req, file, cb) => { const ok = !!srcExt(file.originalname); cb(ok ? null : new Error("Unsupported source file type (use zip, code, or archive)"), ok); },
+});
 
 // Public shape for a user as a creator (never leaks email/role internals).
 function shapeCreator(u, { me } = {}) {
@@ -723,7 +749,7 @@ router.get("/products/:id", async (req, res) => {
   if (!id) return res.status(400).json({ error: "Bad id" });
   try {
     const { rows: [p] } = await pool.query(
-      `SELECT ${PRODUCT_OWNER_JOIN}, p.tv_public_url, p.tv_invite_url,
+      `SELECT ${PRODUCT_OWNER_JOIN}, p.tv_public_url, p.tv_invite_url, p.src_file, p.src_name, p.src_size,
               EXISTS(SELECT 1 FROM product_purchases pp WHERE pp.product_id=p.id AND pp.buyer_id=$1 AND pp.status='completed') AS bought_by_me
          FROM products p JOIN users u ON u.id = p.owner_id
         WHERE p.id = $2`,
@@ -731,8 +757,8 @@ router.get("/products/:id", async (req, res) => {
     );
     if (!p || (p.status !== "active" && p.owner_id !== me)) return res.status(404).json({ error: "Product not found" });
     const owned = p.owner_id === me || !!p.bought_by_me;
-    const out = { product: shapeProduct(p), has_access_link: hasAccessLink(p) };
-    if (owned) out.access = accessLinks(p); // links ONLY for the owner or a completed buyer
+    const out = { product: shapeProduct(p), has_access_link: hasAccessLink(p), has_source: hasSource(p) };
+    if (owned) { out.access = accessLinks(p); out.source = sourceInfo(p); } // links + source ONLY for the owner or a completed buyer
     res.json(out);
   } catch (e) {
     console.error("[market] product:", e.message);
@@ -764,14 +790,22 @@ router.post("/products", async (req, res) => {
     return res.status(400).json({ error: "Please enter a valid TradingView link (e.g. https://www.tradingview.com/script/...)." });
   if (!tv_public_url && !tv_invite_url)
     return res.status(400).json({ error: "A TradingView access link is required — add the public or the invite-only link." });
+  // Optional downloadable source-code file (staged via /upload-source). The ref
+  // must point to a real staged file; the bytes stay private until purchase.
+  let src_file = "", src_name = "", src_size = 0;
+  if (b.src_file !== undefined && b.src_file !== "" && b.src_file !== null) {
+    const ref = safeSrcRef(b.src_file);
+    if (!ref || !fs.existsSync(path.join(SRC_DIR, ref))) return res.status(400).json({ error: "Source file upload was not found — please re-upload." });
+    src_file = ref; src_name = srcDisplayName(b.src_name); src_size = Math.max(0, parseInt(b.src_size, 10) || 0);
+  }
 
   try {
     const becameCreator = await pool.query("UPDATE users SET is_creator = TRUE WHERE id=$1 AND is_creator = FALSE", [me]);
     if (becameCreator.rowCount === 1) await rewards.grantCreatorReward(me); // first time as creator -> grant bonus (non-blocking)
     const { rows: [p] } = await pool.query(
-      `INSERT INTO products (owner_id, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status, tv_public_url, tv_invite_url)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-      [me, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status, tv_public_url, tv_invite_url]
+      `INSERT INTO products (owner_id, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status, tv_public_url, tv_invite_url, src_file, src_name, src_size)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+      [me, type, name, subtitle, description, price_qntm, cover, category, tags, badge, status, tv_public_url, tv_invite_url, src_file, src_name, src_size]
     );
     res.json({ product: shapeProduct(p) });
   } catch (e) {
@@ -788,7 +822,7 @@ router.put("/products/:id", async (req, res) => {
   if (!id) return res.status(400).json({ error: "Bad id" });
   const b = req.body || {};
   try {
-    const { rows: [p] } = await pool.query("SELECT owner_id FROM products WHERE id=$1", [id]);
+    const { rows: [p] } = await pool.query("SELECT owner_id, src_file FROM products WHERE id=$1", [id]);
     if (!p) return res.status(404).json({ error: "Product not found" });
     if (p.owner_id !== me) return res.status(403).json({ error: "Not allowed" });
 
@@ -807,6 +841,17 @@ router.put("/products/:id", async (req, res) => {
     if (b.tags !== undefined && Array.isArray(b.tags)) put("tags", b.tags.slice(0, 10).map((x) => trimStr(x, 30)).filter(Boolean));
     if (b.tv_public_url !== undefined) { const v = tvLink(b.tv_public_url); if (v === null) return res.status(400).json({ error: "Please enter a valid TradingView link." }); put("tv_public_url", v); }
     if (b.tv_invite_url !== undefined) { const v = tvLink(b.tv_invite_url); if (v === null) return res.status(400).json({ error: "Please enter a valid TradingView link." }); put("tv_invite_url", v); }
+    if (b.src_file !== undefined) {
+      if (b.src_file === "" || b.src_file === null) {
+        if (p.src_file) { try { fs.unlinkSync(path.join(SRC_DIR, p.src_file)); } catch (e) {} }
+        put("src_file", ""); put("src_name", ""); put("src_size", 0);
+      } else {
+        const ref = safeSrcRef(b.src_file);
+        if (!ref || !fs.existsSync(path.join(SRC_DIR, ref))) return res.status(400).json({ error: "Source file upload was not found — please re-upload." });
+        if (p.src_file && p.src_file !== ref) { try { fs.unlinkSync(path.join(SRC_DIR, p.src_file)); } catch (e) {} }
+        put("src_file", ref); put("src_name", srcDisplayName(b.src_name)); put("src_size", Math.max(0, parseInt(b.src_size, 10) || 0));
+      }
+    }
     if (!sets.length) return res.status(400).json({ error: "Nothing to update" });
     sets.push("updated_at = NOW()");
     params.push(id);
@@ -897,13 +942,58 @@ router.post("/products/:id/buy", async (req, res) => {
   }
 });
 
+// POST /api/market/upload-source  → staging upload for a product's source-code
+// file (any signed-in creator). Stored privately; returns an opaque ref that the
+// owner attaches when saving the product. The bytes are NOT publicly served.
+router.post("/upload-source", (req, res) => {
+  srcUpload.single("file")(req, res, (err) => {
+    if (err) return res.status(400).json({ error: err.message || "Upload failed" });
+    if (!req.file) return res.status(400).json({ error: "No file" });
+    res.json({ src_ref: req.file.filename, src_name: srcDisplayName(req.file.originalname), src_size: req.file.size });
+  });
+});
+
+// GET /api/market/products/:id/source  → download the source file. Streamed ONLY
+// to the product owner or a buyer with a completed purchase; 403 otherwise. The
+// file is sent as an attachment (octet-stream + nosniff) so it can never render.
+router.get("/products/:id/source", async (req, res) => {
+  const pool = req.app.get("pool");
+  const me = req.user.id;
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "Bad id" });
+  try {
+    const { rows: [p] } = await pool.query(
+      `SELECT p.owner_id, p.src_file, p.src_name,
+              EXISTS(SELECT 1 FROM product_purchases pp WHERE pp.product_id=p.id AND pp.buyer_id=$1 AND pp.status='completed') AS bought_by_me
+         FROM products p WHERE p.id=$2`,
+      [me, id]
+    );
+    if (!p) return res.status(404).json({ error: "Product not found" });
+    if (p.owner_id !== me && !p.bought_by_me) return res.status(403).json({ error: "Purchase required to download the source code." });
+    const ref = safeSrcRef(p.src_file);
+    if (!ref) return res.status(404).json({ error: "No source file for this product." });
+    const abs = path.resolve(path.join(SRC_DIR, ref));
+    if (!abs.startsWith(path.resolve(SRC_DIR) + path.sep) || !fs.existsSync(abs)) return res.status(404).json({ error: "Source file not found." });
+    const stat = fs.statSync(abs);
+    const name = srcDisplayName(p.src_name);
+    res.setHeader("Content-Type", "application/octet-stream");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodeURIComponent(name));
+    res.setHeader("Content-Length", stat.size);
+    fs.createReadStream(abs).pipe(res);
+  } catch (e) {
+    console.error("[market] source download:", e.message);
+    if (!res.headersSent) res.status(500).json({ error: "Could not download source" });
+  }
+});
+
 // GET /api/market/purchases  → my license vault
 router.get("/purchases", async (req, res) => {
   const pool = req.app.get("pool");
   const me = req.user.id;
   try {
     const { rows } = await pool.query(
-      `SELECT ${PRODUCT_OWNER_JOIN}, p.tv_public_url, p.tv_invite_url, pp.created_at AS purchased_at, pp.price_qntm AS paid_qntm
+      `SELECT ${PRODUCT_OWNER_JOIN}, p.tv_public_url, p.tv_invite_url, p.src_file, p.src_name, p.src_size, pp.created_at AS purchased_at, pp.price_qntm AS paid_qntm
          FROM product_purchases pp
          JOIN products p ON p.id = pp.product_id
          JOIN users u ON u.id = p.owner_id
@@ -912,7 +1002,7 @@ router.get("/purchases", async (req, res) => {
       [me]
     );
     res.json({
-      purchases: rows.map((r) => ({ ...shapeProduct(r), bought_by_me: true, purchased_at: r.purchased_at, paid_qntm: Number(r.paid_qntm), access: accessLinks(r) })),
+      purchases: rows.map((r) => ({ ...shapeProduct(r), bought_by_me: true, purchased_at: r.purchased_at, paid_qntm: Number(r.paid_qntm), access: accessLinks(r), source: sourceInfo(r) })),
     });
   } catch (e) {
     console.error("[market] purchases:", e.message);
