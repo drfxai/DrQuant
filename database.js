@@ -112,6 +112,8 @@ async function initDB() {
       ["messages", "pinned_at", "TIMESTAMPTZ"],
       ["messages", "pinned_by", "INTEGER REFERENCES users(id) ON DELETE SET NULL"],
       ["messages", "attachment", "JSONB"],
+      ["users", "pref_lang", "TEXT DEFAULT ''"],
+      ["users", "auto_translate", "BOOLEAN DEFAULT FALSE"],
     ];
     for (const [tbl, col, def] of cols) {
       await client.query(`ALTER TABLE ${tbl} ADD COLUMN IF NOT EXISTS ${col} ${def}`).catch(() => {});
@@ -346,6 +348,25 @@ async function initDB() {
     await client.query("ALTER TABLE posts ADD CONSTRAINT posts_media_type_check CHECK (media_type IN ('text','image','video')) NOT VALID").catch(() => {});
     await client.query("UPDATE posts SET media_type='text' WHERE media_type IS NULL OR media_type=''").catch(() => {});
     console.log("✅ Market schema ready (Explore feed, creators/companies, products)");
+
+    // ── Chat translation cache (mirrors migrations/004_translations.sql) ──
+    // Per-message translations live here, keyed (message_id, target_lang). The
+    // original message in `messages` is never mutated — display-only/advisory.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS message_translations (
+        id              BIGSERIAL PRIMARY KEY,
+        message_id      INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        target_lang     TEXT NOT NULL,
+        source_lang     TEXT,
+        provider        TEXT NOT NULL DEFAULT 'libretranslate',
+        translated_text TEXT NOT NULL,
+        created_at      TIMESTAMPTZ DEFAULT NOW(),
+        updated_at      TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (message_id, target_lang)
+      );
+      CREATE INDEX IF NOT EXISTS idx_msgtrans_message ON message_translations(message_id);
+    `).catch((e) => console.error("Translation schema:", e.message));
+    console.log("✅ Translation cache ready (message_translations)");
 
     console.log("✅ PostgreSQL ready");
   } finally { client.release(); }

@@ -437,7 +437,7 @@ function renderChatView(){
 
   // Use height:100% + flex for proper mobile keyboard handling
   rp.innerHTML=`<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
-  <div style="position:relative;display:flex;align-items:center;padding:8px 10px 4px;flex-shrink:0;background:${t.ch};-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)">${backBtn}<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;pointer-events:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${t.pr}" stroke-width="1.8" style="filter:drop-shadow(0 0 6px ${t.pgw})"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3" fill="${t.pr}" stroke="none"/><line x1="12" y1="1.5" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22.5"/><line x1="1.5" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22.5" y2="12"/></svg><span style="color:${t.t1};font-weight:700;font-size:16px">Quantum<span style="color:${t.pr}"> Chat</span></span></div><button class="ib" id="cv-info" type="button">${infoIcon}</button></div>
+  <div style="position:relative;display:flex;align-items:center;padding:8px 10px 4px;flex-shrink:0;background:${t.ch};-webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%)">${backBtn}<div style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;pointer-events:none"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${t.pr}" stroke-width="1.8" style="filter:drop-shadow(0 0 6px ${t.pgw})"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3" fill="${t.pr}" stroke="none"/><line x1="12" y1="1.5" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22.5"/><line x1="1.5" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22.5" y2="12"/></svg><span style="color:${t.t1};font-weight:700;font-size:16px">Quantum<span style="color:${t.pr}"> Chat</span></span></div><button class="ib" id="cv-translate" type="button" title="Translate" style="display:none">${ic('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',20)}</button><button class="ib" id="cv-info" type="button">${infoIcon}</button></div>
   <div style="margin:4px 12px 8px;padding:8px 12px;border-radius:16px;background:${t.ch};border:1px solid ${t.bd};-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);display:flex;align-items:center;gap:11px;box-shadow:0 4px 16px rgba(0,0,0,.22);flex-shrink:0">${avatar(av,40,dmOnline)}<div style="flex:1;cursor:pointer;min-width:0" id="cv-title"><div style="color:${t.t1};font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(name)}${info.type==="dm"?proTag(c?.partner,10):""}</div><div id="cv-sub" style="color:${dmOnline?t.on:t.t3};font-size:11.5px;display:flex;align-items:center;gap:5px">${subHtml}</div></div>${callBtns}</div>
   <div id="pin-bar" style="display:none;align-items:center;gap:8px;padding:6px 12px;background:${t.ch};border-bottom:1px solid ${t.bd};cursor:pointer;flex-shrink:0"></div>
   <div id="cv-msgs" class="cv-wall" style="flex:1;overflow-y:auto;padding:12px 0;-webkit-overflow-scrolling:touch;min-height:0"></div>
@@ -450,6 +450,7 @@ function renderChatView(){
   const mc=$("#cv-msgs");mc.innerHTML=msgsHTML(S.chatMsgs);scrollB(mc);
   bindMsgEvents(mc);
   wireVoice(mc);
+  if(window.dqTranslate)dqTranslate.onChatRender(mc);
   mc.addEventListener("click",e=>{const im=e.target.closest?e.target.closest("img.msg-img"):null;if(im){const s=im.getAttribute("src")||"";if(/^\/uploads\//.test(s)||/^https?:\/\//.test(s))window.open(s,"_blank","noopener");return;}const rq=e.target.closest?e.target.closest(".reply-quote"):null;if(rq){const el=mc.querySelector('[data-mid="'+rq.getAttribute("data-target")+'"]');if(el)el.scrollIntoView({behavior:"smooth",block:"center"});}});
   updatePinBar();
   if(canPost)buildInputBar();
@@ -474,7 +475,7 @@ function msgBubble(m){
   const replyHtml=m.reply_to&&m.reply_sender_name?`<div style="padding:4px 8px;margin-bottom:4px;border-left:3px solid ${t.ac};border-radius:0 6px 6px 0;background:${mine?"rgba(255,255,255,.08)":"rgba(0,0,0,.08)"};font-size:11px;cursor:pointer" class="reply-quote" data-target="${m.reply_to}"><div style="color:${t.ac};font-weight:600">${esc(m.reply_sender_name)}</div><div style="color:${lc?"rgba(255,255,255,.7)":t.t3};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px">${esc((m.reply_content||"").slice(0,80))}</div></div>`:"";
   const imgHtml=m.image?`<img src="${esc(m.image)}" class="msg-img" alt="image" style="max-width:100%;max-height:260px;border-radius:10px;margin-bottom:3px;cursor:pointer;display:block"/>`:"";
   const attHtml=m.attachment?renderAttachment(m.attachment,mine,lc):"";
-  const textHtml=m.content?`<div style="color:${lc?"#fff":t.t1};font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word">${fmtMsg(m.content)}</div>`:"";
+  const textHtml=m.content?`<div class="dqtr-src" style="color:${lc?"#fff":t.t1};font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word">${fmtMsg(m.content)}</div>`:"";
   const edited=m.edited_at?`<span style="font-size:10px;color:${lc?"rgba(255,255,255,.5)":t.t4};margin-right:3px">edited</span>`:"";
   return`<div data-mid="${m.id}" style="display:flex;justify-content:${mine?"flex-end":"flex-start"};margin-bottom:3px;padding:0 12px;animation:fm .15s ease;-webkit-user-select:none;user-select:none"><div style="max-width:78%;min-width:70px">${senderLine}<div style="padding:7px 12px;border-radius:${mine?"16px 16px 5px 16px":"16px 16px 16px 5px"};background:${mine?t.bm:t.bo};border:1px solid ${mine?t.bmb:t.bob};backdrop-filter:blur(10px);box-shadow:${mine?`0 2px 14px ${t.pgw}`:"0 2px 10px rgba(0,0,0,.18)"}">${replyHtml}${imgHtml}${attHtml}${textHtml}<div style="display:flex;justify-content:flex-end;align-items:center;gap:3px;margin-top:2px">${edited}<span style="font-size:10px;color:${lc?"rgba(255,255,255,.6)":t.t4}">${fmtTime(m.created_at)}</span>${mine?`<span style="color:${lc?"rgba(255,255,255,.6)":t.pr+"99"}">${I.dbl}</span>`:""}</div></div>${window.dqSignalChip?window.dqSignalChip(m):""}</div></div>`;
 }
@@ -542,7 +543,7 @@ function showMsgMenu(msgId){
   // Reply
   if(msg.content||msg.image){const rb=ce("button");rb.className="sbtn";rb.innerHTML="↩️ Reply";rb.onclick=()=>{ov.remove();S.replyTo={id:msg.id,content:msg.content||"📷 Image",sender_name:msg.sender_name||"User"};renderReplyPreview();const ta=$("#cv-ta");if(ta)ta.focus();};menu.appendChild(rb);}
   // Copy
-  if(msg.content){const cb=ce("button");cb.className="sbtn";cb.innerHTML="📋 Copy Text";cb.onclick=()=>{navigator.clipboard?.writeText(msg.content).catch(()=>{});ov.remove();};menu.appendChild(cb);}
+  if(msg.content){const cb=ce("button");cb.className="sbtn";cb.innerHTML="📋 Copy Text";cb.onclick=()=>{navigator.clipboard?.writeText(msg.content).catch(()=>{});ov.remove();};menu.appendChild(cb);}if(msg.content&&window.dqTranslate&&dqTranslate.available()){const tbb=ce("button");tbb.className="sbtn";tbb.innerHTML="🌐 "+(dqTranslate.isShown(msg.id)?"Hide translation":"Translate");tbb.onclick=()=>{ov.remove();dqTranslate.translateMessage(msg.id);};menu.appendChild(tbb);}
   // Edit
   if(msg.content){const eb=ce("button");eb.className="sbtn";eb.innerHTML=`${I.edit} Edit Message`;eb.onclick=()=>{ov.remove();editMsgPrompt(msg);};menu.appendChild(eb);}
   // Pin / Unpin
@@ -2057,7 +2058,7 @@ function connectSocket(){
   S.socket.on("chat_message",msg=>{
     const ch=S.chats.find(c=>c.id===msg.chat_id);
     if(ch){ch.lastMessage=msg;if(msg.chat_id!==S.activeChat||document.hidden)ch.unread=(ch.unread||0)+1;S.chats=S.chats.filter(c=>c.id!==msg.chat_id);S.chats.unshift(ch);renderChatListItems();}else loadChats();
-    if(msg.chat_id===S.activeChat){S.chatMsgs.push(msg);const mc=$("#cv-msgs");if(mc){mc.insertAdjacentHTML("beforeend",msgBubble(msg));scrollB(mc);wireVoice(mc);const newEl=mc.querySelector(`[data-mid="${msg.id}"]`);if(newEl){let timer;newEl.oncontextmenu=e=>{e.preventDefault();showMsgMenu(msg.id);};newEl.ontouchstart=()=>{timer=setTimeout(()=>showMsgMenu(msg.id),500);};newEl.ontouchmove=()=>clearTimeout(timer);newEl.ontouchend=()=>clearTimeout(timer);}}api(`/chats/${msg.chat_id}/read`,{method:"POST"}).catch(()=>{});if(ch)ch.unread=0;renderChatListItems();}
+    if(msg.chat_id===S.activeChat){S.chatMsgs.push(msg);const mc=$("#cv-msgs");if(mc){mc.insertAdjacentHTML("beforeend",msgBubble(msg));scrollB(mc);wireVoice(mc);if(window.dqTranslate)dqTranslate.onIncoming(mc,msg);const newEl=mc.querySelector(`[data-mid="${msg.id}"]`);if(newEl){let timer;newEl.oncontextmenu=e=>{e.preventDefault();showMsgMenu(msg.id);};newEl.ontouchstart=()=>{timer=setTimeout(()=>showMsgMenu(msg.id),500);};newEl.ontouchmove=()=>clearTimeout(timer);newEl.ontouchend=()=>clearTimeout(timer);}}api(`/chats/${msg.chat_id}/read`,{method:"POST"}).catch(()=>{});if(ch)ch.unread=0;renderChatListItems();}
     if(msg.user_id!==S.user.id){
       playNotif();
       const fromName=msg.sender_name||"New message";
@@ -2105,6 +2106,7 @@ window.addEventListener("resize",()=>{
 <script src="/signal-extract.js"></script>
 <script src="/signal-card.js"></script>
 <script src="/signals-feed.js"></script>
+<script src="/translate-ui.js"></script>
 <script src="/market-ui.js"></script>
 <script src="/market-desktop.js"></script>
 </body></html>
