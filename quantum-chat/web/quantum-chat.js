@@ -218,6 +218,42 @@ function chunkUpstream(txid, zone, data, action) {
   return names;
 }
 
+// Deliver every upstream chunk-query for ONE message, then return the response
+// to the FINAL chunk. All chunks of a message must be reassembled by the SAME
+// authoritative node, so we PIN the whole sequence to a single resolver and only
+// rotate resolvers BETWEEN attempts. Scattering a message's chunks across
+// resolvers can route them to different anycast/NS instances whose per-node
+// reassembly buffers never combine, leaving every send stuck at "OK <seq>".
+async function sendChunks(names, resolvers) {
+  const bank = (resolvers && resolvers.length ? resolvers : DEFAULT_DOH);
+  const order = [...bank].sort(() => Math.random() - 0.5);
+  const attempts = [...order, ...order];            // each resolver up to twice
+  let lastErr = null, lastResp = null;
+  for (const resolver of attempts) {
+    try {
+      let resp = null;
+      for (const n of names) resp = await dohTXT(n, [resolver]);   // pin one resolver
+      lastResp = resp;
+      const head = (resp && resp[0]) || "";
+      // "OK <seq>" (a small integer) is a NON-final chunk ack: the node we
+      // reached is still missing earlier chunks. Retry the whole message on a
+      // different resolver. Anything else (DONE/DUP/ERR/"OK <id>") is terminal.
+      if (!/^OK \d{1,4}$/.test(head)) return resp;
+    } catch (e) { lastErr = e; }
+  }
+  if (lastResp) return lastResp;                    // let the caller surface "OK <seq>"
+  throw lastErr || new Error("all resolvers failed");
+}
+
+// Raised when even a single pinned resolver can't get one node to see all of a
+// message's chunks — almost always means the zone is served by MORE THAN ONE
+// node with non-shared (RAM) reassembly state.
+function splitNodeHint(what) {
+  return what + " could not be reassembled by a single node — its DNS chunks are " +
+    "landing on different Quantum Chat instances. Run ONE authoritative node, or set " +
+    "STORAGE_MODE=postgres with a shared database so chunk reassembly is shared across nodes.";
+}
+
 // ---- high-level client -----------------------------------------------------
 
 export class QuantumChat {
@@ -242,11 +278,11 @@ export class QuantumChat {
     const payload = concat(this.self.signPub, this.self.dhPub, sig);   // 128 bytes
     const txid = rnd();
     const names = chunkUpstream(txid, this.zone, payload, "r");
-    let last;
-    for (const n of names) last = await dohTXT(n, this.resolvers);
+    const last = await sendChunks(names, this.resolvers);
     if (!last || !last.length) throw new Error("no answer from the node — is the zone delegated to a running Quantum Chat node?");
-    if (!/^OK /.test(last[0] || "")) throw new Error("node rejected registration: " + last[0]);
-    return id;
+    if (last[0] === "OK " + id) return id;                 // registration accepted
+    if (/^OK \d{1,4}$/.test(last[0])) throw new Error(splitNodeHint("Registration"));
+    throw new Error("node rejected registration: " + last[0]);
   }
 
   // Look up a contact's public keys by ID and verify self-certification.
@@ -273,11 +309,11 @@ export class QuantumChat {
     const env = await seal(this.self, recipientID, c.dhPub, text);
     const txid = rnd();
     const names = chunkUpstream(txid, this.zone, env, "s");
-    let last;
-    for (const n of names) last = await dohTXT(n, this.resolvers);
+    const last = await sendChunks(names, this.resolvers);
     if (!last || !last.length) throw new Error("no answer from the node");
-    if (!/^(DONE|DUP) /.test(last[0] || "")) throw new Error("node rejected the message: " + last[0]);
-    return txid;
+    if (/^(DONE|DUP) /.test(last[0])) return txid;         // delivered (DUP = node already had it)
+    if (/^OK \d{1,4}$/.test(last[0])) throw new Error(splitNodeHint("Message"));
+    throw new Error("node rejected the message: " + last[0]);
   }
 
   // Poll our inbox; decrypt and return any received messages, then ack them.
