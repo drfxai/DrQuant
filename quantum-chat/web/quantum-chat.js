@@ -159,8 +159,28 @@ async function open(self, senderSignPub, env) {
 
 function rnd(n = 6) { return b32encodeLower(randBytes(n)); }
 
+// Split a DoH JSON TXT `data` field into its constituent character-strings.
+// A multi-string TXT RR is returned by resolvers in presentation form: each
+// character-string double-quoted and space-separated, e.g.  "hdr a b" "frame1"
+// "frame2"  (the header's own spaces stay INSIDE its quotes). We must preserve
+// those boundaries — poll() relies on element[0]=header, element[1..]=frames.
+// Falls back to treating the whole value as one string when it isn't quoted
+// (some resolvers return a lone single-string TXT unquoted).
+function parseTxtData(data) {
+  const s = String(data);
+  if (s.indexOf('"') === -1) return [s];            // unquoted single string
+  const out = [];
+  const re = /"((?:[^"\\]|\\.)*)"/g;                 // each quoted character-string
+  let m;
+  while ((m = re.exec(s)) !== null) out.push(m[1].replace(/\\(.)/g, "$1")); // unescape
+  return out.length ? out : [s];
+}
+
 // Resolve a TXT query for `name` via DoH JSON, scattering across resolvers.
-// Returns an array of TXT strings (one per character-string / answer).
+// Returns a FLAT array of TXT character-strings, in order, across all answers.
+// Each character-string is its own element so callers that need the boundaries
+// (poll: header vs frames) work, while callers that want the whole blob can
+// still join("") the elements (addContact key frames).
 async function dohTXT(name, resolvers) {
   const bank = resolvers && resolvers.length ? resolvers : DEFAULT_DOH;
   const order = [...bank].sort(() => Math.random() - 0.5);   // scatter
@@ -172,8 +192,11 @@ async function dohTXT(name, resolvers) {
       const r = await fetch(url, { headers: { accept: "application/dns-json" } });
       if (!r.ok) { lastErr = new Error("DoH " + r.status); continue; }
       const j = await r.json();
-      const ans = (j.Answer || []).filter(a => a.type === 16).map(a =>
-        a.data.replace(/^"|"$/g, "").replace(/" "/g, ""));   // strip quotes/joins
+      const ans = [];
+      for (const a of (j.Answer || [])) {
+        if (a.type !== 16) continue;                // 16 = TXT
+        for (const cs of parseTxtData(a.data)) ans.push(cs);
+      }
       return ans;
     } catch (e) { lastErr = e; }
   }
