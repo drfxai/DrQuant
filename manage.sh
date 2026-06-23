@@ -194,6 +194,8 @@ smtp_menu() {
     echo -e "   ${DIM}When a host is set, new sign-ups must confirm a 6-digit code emailed to them.${NC}"
     echo -e "   ${DIM}Leave host blank to disable (instant sign-up). Works with Resend, SendGrid,${NC}"
     echo -e "   ${DIM}Gmail (app password), Supabase SMTP, Mailgun, etc.${NC}"
+    echo -e "   ${Y}If the port does not work (sign-up email times out), use port 2525 instead.${NC}"
+    echo -e "   ${DIM}Most VPS hosts block outbound 587/465; 2525 (STARTTLS, Secure=false) is the fix.${NC}"
     rule
     printf "    ${C}1${NC}) %-14s %b\n" "Host"    "${h:-${Y}(not set)${NC}}"
     printf "    ${C}2${NC}) %-14s %b\n" "Port"    "${p:-${DIM}587${NC}}"
@@ -207,7 +209,7 @@ smtp_menu() {
     read -rp "  Select: " ch
     case "$ch" in
       1) edit_value SMTP_HOST   "SMTP host"     "e.g. smtp.resend.com  /  smtp.gmail.com  /  smtp.sendgrid.net" 0 ;;
-      2) edit_value SMTP_PORT   "SMTP port"     "587 for STARTTLS (most common), 465 for SSL" 0 ;;
+      2) edit_value SMTP_PORT   "SMTP port"     "587 STARTTLS / 465 SSL. If email times out, use 2525 (most VPS hosts block 587/465)." 0 ;;
       3) edit_value SMTP_SECURE "SMTP secure"   "type 'true' for port 465, 'false' for port 587" 0 ;;
       4) edit_value SMTP_USER   "SMTP username" "usually your full email or API key id" 0 ;;
       5) edit_value SMTP_PASS   "SMTP password" "SMTP password / API key (hidden input)" 1 ;;
