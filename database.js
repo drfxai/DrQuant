@@ -19,7 +19,7 @@ async function initDB() {
         name TEXT DEFAULT '',
         bio TEXT DEFAULT '',
         avatar TEXT DEFAULT '',
-        role TEXT DEFAULT 'user' CHECK(role IN ('user','admin','bot')),
+        role TEXT DEFAULT 'user' CHECK(role IN ('user','admin','bot','wizard')),
         subscription_status TEXT DEFAULT 'free' CHECK(subscription_status IN ('free','active')),
         subscription_expiry TIMESTAMPTZ,
         blocked BOOLEAN DEFAULT FALSE,
@@ -347,6 +347,9 @@ async function initDB() {
     await client.query("ALTER TABLE posts DROP CONSTRAINT IF EXISTS posts_media_type_check").catch(() => {});
     await client.query("ALTER TABLE posts ADD CONSTRAINT posts_media_type_check CHECK (media_type IN ('text','image','video')) NOT VALID").catch(() => {});
     await client.query("UPDATE posts SET media_type='text' WHERE media_type IS NULL OR media_type=''").catch(() => {});
+    // Allow the 'wizard' role (guard). Widened separately + NOT VALID so a legacy row can't abort the batch.
+    await client.query("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check").catch(() => {});
+    await client.query("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('user','admin','bot','wizard')) NOT VALID").catch(() => {});
     console.log("✅ Market schema ready (Explore feed, creators/companies, products)");
 
     // ── Chat translation cache (mirrors migrations/004_translations.sql) ──
