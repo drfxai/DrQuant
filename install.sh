@@ -281,7 +281,30 @@ else
   fi
 fi
 
-echo ""; echo -e "${BOLD}── Step 9: Next steps ──${NC}"; echo ""
+echo ""; echo -e "${BOLD}── Step 9: Chat Translation (optional) ──${NC}"; echo ""
+echo -e "  Installs a self-hosted ${CYAN}LibreTranslate${NC} engine so chat messages can be translated"
+echo -e "  in-app (globe in the chat header, per-message translate, optional auto-translate)."
+echo -e "  ${YELLOW}Downloads language models (a few hundred MB) and keeps them in RAM (~250-300 MB for 5 langs).${NC}"
+echo -e "  Pick languages with LANGS (default: en,ru,fa,ar,hi)."
+# Opt-in. For an unattended install, preset:  INSTALL_TRANSLATION=yes | no
+TR_CHOICE="${INSTALL_TRANSLATION:-}"
+if [ -z "$TR_CHOICE" ]; then
+  echo -ne "${YELLOW}➜ Install & activate chat translation now? (y/N): ${NC}"; read -r TR_CHOICE
+  TR_CHOICE="${TR_CHOICE:-N}"
+fi
+if [[ "$TR_CHOICE" =~ ^([Yy]|yes|Yes|YES)$ ]]; then
+  if [ -f "$SRC_DIR/setup-translation.sh" ]; then
+    echo -e "${CYAN}▸ Installing LibreTranslate (this can take a few minutes to download models)...${NC}"
+    APP_DIR="$APP_DIR" LANGS="${LANGS:-en,ru,fa,ar,hi}" bash "$SRC_DIR/setup-translation.sh" \
+      || echo -e "${YELLOW}  ⚠ Translation setup did not finish; the app just hides the translate UI until you re-run it.${NC}"
+  else
+    echo -e "${YELLOW}  ⚠ setup-translation.sh not found in this checkout.${NC}"
+  fi
+else
+  echo -e "  ${CYAN}Skipped.${NC} Enable later (any time):  sudo bash $SRC_DIR/setup-translation.sh"
+fi
+
+echo ""; echo -e "${BOLD}── Step 10: Next steps ──${NC}"; echo ""
 echo -e "  ${CYAN}Reminder:${NC} TradingView webhook secret is in ${APP_DIR}/.env (TRADINGVIEW_WEBHOOK_SECRET);"
 echo -e "  create a channel named 'signals' in-app so incoming signals have somewhere to post."
 

@@ -37,6 +37,12 @@ A self-hosted, real-time messaging platform built for trading communities. Think
 - Members can edit/delete their own messages; admins and managers can moderate any message
 - Reply quotes the sender name and a preview, and tapping it scrolls to the original
 
+**Chat translation (optional)**
+- Self-hosted, advisory message translation via a provider-agnostic layer (LibreTranslate by default) — no GPU, no third-party API
+- Per-user target language and an optional auto-translate mode (off by default); a globe control lives in the chat header
+- Originals are never modified — the translation appears under the message and is cached per language; the feature hides itself if the engine isn't running
+- One-command install: `sudo bash setup-translation.sh` (see [Optional components](#optional-components--add-ons))
+
 **AI trading assistant**
 - Built-in AI bot auto-created for every new user
 - Powered by OpenRouter (Claude, GPT, and others) — bring your own API key
@@ -168,6 +174,59 @@ sudo bash uninstall.sh
 
 Removes the app, Nginx config, and PM2 process, and optionally the database.
 
+## Optional components & add-ons
+
+These extend a working install. Run each on the server, in any order, **after**
+the base install (`install.sh`) or an update (`git pull && sudo bash update.sh`).
+Each is self-contained and degrades gracefully if not installed.
+
+### 1. Live Trading — high-FPS WebRTC (SFU + TURN)
+
+Installed and enabled **by default** by `install.sh`. To (re)install or enable it
+later on an existing deployment:
+
+```bash
+cd ~/DrFXQuant && git pull
+sudo bash setup-live-sfu.sh
+```
+
+Installs mediasoup (SFU) + coturn (TURN/STUN), detects the public IP, generates
+the TURN secret, opens the firewall, writes the `LIVE_SFU` / `TURN_*` vars, and
+restarts. Needs ~2 vCPU / 4 GB. Without it, Live Trading falls back to a low-FPS
+socket relay. (On a 1 GB box, skip during install with `sudo INSTALL_SFU=no bash install.sh`.)
+
+### 2. Chat Translation — self-hosted LibreTranslate
+
+Turns on the in-chat translator (globe in the chat header, per-message translate,
+and auto-translate mode):
+
+```bash
+cd ~/DrFXQuant && git pull && sudo bash update.sh
+sudo bash setup-translation.sh
+sudo systemctl reload nginx
+```
+
+Installs LibreTranslate in a venv, runs it under PM2 on `127.0.0.1:5000`, writes
+`TRANSLATE_PROVIDER` / `TRANSLATE_URL` into the runtime `.env`, and restarts the
+app. Choose languages with `LANGS` (each model is held in RAM):
+
+```bash
+sudo LANGS="en,ru,fa,ar,hi,es,fr" bash setup-translation.sh
+```
+
+Then open the app in a **private/incognito** window and open any chat — the globe
+appears in the header. Without the engine, the app simply hides the translate UI.
+Full details and troubleshooting: [docs/TRANSLATION.md](docs/TRANSLATION.md).
+
+### 3. Quantum Chat — DNS-resilient encrypted messenger
+
+```bash
+sudo bash quantum-chat/scripts/install-quantum-chat.sh
+```
+
+Installs the optional node; it also needs a delegated DNS subdomain and port 53
+open. See [Quantum Chat](#quantum-chat) below for the DNS steps.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and configure:
@@ -199,6 +258,8 @@ SIGNAL_CHANNEL_USERNAME=signals
 
 The admin account is created (and re-synced) from `ADMIN_EMAIL` / `ADMIN_PASSWORD` on every boot. See `.env.example` for the full list of options.
 
+The **Live Trading** (`LIVE_SFU` / `TURN_*`) and **Chat Translation** (`TRANSLATE_*`) variables are written for you by their installers (`setup-live-sfu.sh` and `setup-translation.sh`) — you don't set them by hand. On a deployed server the live `.env` is the one in the app's runtime directory (`/var/www/drfx-quant/.env`), not the copy in your git checkout.
+
 ## Project Structure
 
 ```
@@ -214,17 +275,21 @@ DrFXQuant/
 │   ├── payment.js         # NowPayments crypto subscriptions
 │   ├── upload.js          # Image upload via Multer
 │   ├── webhooks.js        # TradingView webhook receiver
+│   ├── translate.js       # Chat translation API (status, prefs, cached translate)
 │   └── manage.js          # Role-based management console
 ├── middleware/            # Optional RBAC + permissions (opt-in, see INTEGRATION.md)
-├── services/              # Supporting services
+├── services/              # Supporting services (incl. translate.js — provider-agnostic engine client)
 ├── realtime/              # Socket.io messaging + live screen-share signaling
 ├── migrations/            # Idempotent SQL migrations (signals, webhooks, reactions, …)
 ├── public/
 │   ├── index.html         # Complete single-file SPA frontend
+│   ├── translate-ui.js    # Self-installing in-chat translator (globe, auto mode)
 │   └── quantum-chat.html  # Quantum Chat browser panel
 ├── quantum-chat/          # Optional Go DNS messenger node + browser client (web/)
-├── docs/                  # Architecture, database, security, webhooks, logo
+├── docs/                  # Architecture, database, security, webhooks, translation, logo
 ├── install.sh             # One-command VPS installer
+├── setup-live-sfu.sh      # Add-on: Live Trading WebRTC (mediasoup SFU + coturn TURN)
+├── setup-translation.sh   # Add-on: self-hosted LibreTranslate chat translation
 ├── update.sh              # In-place updater (preserves data, applies new migrations)
 ├── manage.sh              # Read-only management reference card
 ├── uninstall.sh           # Clean removal script
@@ -274,6 +339,10 @@ DrFXQuant/
 | `GET` | `/api/payment/status` | Subscription status |
 | `POST` | `/api/upload` | Upload image |
 | `POST` | `/api/webhooks/tradingview` | TradingView alert receiver (shared-secret auth) |
+| `GET` | `/api/translate/status` | Translation engine availability + supported languages |
+| `GET` | `/api/translate/prefs` | Current user's language + auto-translate toggle |
+| `POST` | `/api/translate/prefs` | Update language / auto-translate |
+| `POST` | `/api/translate/message/:id?to=<lang>` | Translate one message (cache-first, membership-checked) |
 
 ## Socket.io Events
 
