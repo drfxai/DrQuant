@@ -50,7 +50,8 @@
     users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/></svg>',
     chat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>',
-    bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>'
+    bolt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+    wizadd: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>'
   };
 
   /* ---- one-time CSS injection (structure + responsive + animation) ---- */
@@ -270,6 +271,8 @@
             '<div style="line-height:1.15"><div class="wl">QNTM</div><div class="wv" id="dqa-bal">' + bal0 + '</div></div>' +
           '</div>' +
           '<button class="dqa-ib" id="dqa-deck" title="Control Deck">' + SVG.deck + '</button>' +
+          '<button class="dqa-ib" id="dqa-wizadd" title="Add Wizard">' + SVG.wizadd + '</button>' +
+          '<button class="dqa-ib" id="dqa-wizpanel" title="Wizard Panel">' + SVG.shield + '</button>' +
           '<button class="dqa-ib" id="dqa-gear" title="Settings">' + SVG.gear + '</button>' +
         '</div>' +
         '<div class="dqa-win">' +
@@ -345,6 +348,8 @@
     /* ---- topbar actions ---- */
     $("#dqa-wallet").onclick = function () { if (window.openWallet) { close(); window.openWallet(); } };
     var deckBtn = $("#dqa-deck"); if (deckBtn) deckBtn.onclick = function () { if (window.openControlDeck) { close(); window.openControlDeck(); } };
+    var wizAddBtn = $("#dqa-wizadd"); if (wizAddBtn) wizAddBtn.onclick = function () { if (window.openAddWizard) { close(); window.openAddWizard(); } };
+    var wizPanelBtn = $("#dqa-wizpanel"); if (wizPanelBtn) wizPanelBtn.onclick = function () { if (window.openWizardPanel) { close(); window.openWizardPanel(); } };
     var gearBtn = $("#dqa-gear"); if (gearBtn) gearBtn.onclick = function () { if (window.openSettings) { close(); window.openSettings(); } };
     $("#dqa-refresh").onclick = function () {
       var ico = $("#dqa-refresh").firstElementChild; ico.classList.add("dqa-spin");
