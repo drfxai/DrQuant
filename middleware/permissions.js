@@ -60,10 +60,22 @@ const SUPERADMIN = [
   "system:settings",
 ];
 
+// Wizard ("guard"): the normal user capabilities plus the ability to create
+// (private) groups/channels. Its MODERATION powers over regular users (block /
+// make-Pro / delete) are enforced in routes/wizard.js with an object-level guard
+// (target must be role='user'), NOT via this matrix — so a wizard can never reach
+// the admin user-management endpoints.
+const WIZARD = [
+  ...USER,
+  "chat:create_group",
+  "chat:create_channel",
+];
+
 // bot has no interactive permissions.
 const MATRIX = Object.freeze({
   bot: Object.freeze([]),
   user: Object.freeze([...new Set(USER)]),
+  wizard: Object.freeze([...new Set(WIZARD)]),
   manager: Object.freeze([...new Set(MANAGER)]),
   admin: Object.freeze([...new Set(ADMIN)]),
   superadmin: Object.freeze([...new Set(SUPERADMIN)]),

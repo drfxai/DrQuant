@@ -79,9 +79,12 @@ router.post("/", async (req, res) => {
     const { type, name, bio, avatar, visibility, members, username } = req.body;
     if (!type || !["dm", "group", "channel"].includes(type)) return res.status(400).json({ error: "Invalid type" });
     if (avatar && badAvatar(avatar)) return res.status(400).json({ error: "Invalid avatar" });
-    // Only admin creates groups/channels
-    if ((type === "group" || type === "channel") && req.user.role !== "admin")
-      return res.status(403).json({ error: "Only admin can create groups and channels" });
+    // Admins create groups/channels (any visibility); wizards may create them
+    // too, but a wizard's group/channel is forced PRIVATE.
+    const _isAdmin = req.user.role === "admin" || req.user.role === "superadmin";
+    const _isWizard = req.user.role === "wizard";
+    if ((type === "group" || type === "channel") && !_isAdmin && !_isWizard)
+      return res.status(403).json({ error: "Only admin or wizard can create groups and channels" });
     if (type === "dm") {
       const partnerId = parseInt(members?.[0]);
       if (!partnerId) return res.status(400).json({ error: "Partner required" });
@@ -101,7 +104,7 @@ router.post("/", async (req, res) => {
     }
     const { rows: [chat] } = await pool.query(
       "INSERT INTO chats (type,username,name,bio,avatar,visibility,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-      [type, uname, name.trim().slice(0, 100), (bio || "").slice(0, 500), avatar || "", visibility || "public", req.user.id]
+      [type, uname, name.trim().slice(0, 100), (bio || "").slice(0, 500), avatar || "", (_isWizard && !_isAdmin ? "private" : (visibility || "public")), req.user.id]
     );
     await pool.query("INSERT INTO chat_members (chat_id,user_id,role) VALUES ($1,$2,'admin')", [chat.id, req.user.id]);
     if (Array.isArray(members)) {

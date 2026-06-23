@@ -9,7 +9,7 @@
 // Wire AFTER authMiddleware so req.user is populated.
 // ----------------------------------------------------------------------------
 
-const RANK = { bot: 0, user: 1, admin: 2, superadmin: 3 };
+const RANK = { bot: 0, user: 1, wizard: 1, admin: 2, superadmin: 3 };
 
 function rankOf(role) {
   return RANK[role] ?? -1;

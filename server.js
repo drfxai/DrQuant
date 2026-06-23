@@ -105,6 +105,7 @@ app.use("/api/live", require("./routes/live"));   // live-trading sessions + ICE
 app.use("/api/market", require("./routes/market")); // Market: Explore feed, creators/companies, products, follows/likes
 app.use("/api/signals", require("./routes/signals")); // read-only signals feed (published table + derived auto-detected)
 app.use("/api/translate", require("./routes/translate")); // chat translation (provider-agnostic; degrades to no-op if unconfigured)
+app.use("/api/wizard", require("./routes/wizard")); // wizard ("guard") panel: scoped moderation over regular users only
 
 // QNTM economy — internal ledger/wallet admin routes (mounts at /api/qntm/admin),
 // guarded by the host's auth + admin middleware so it shares one RBAC path.
