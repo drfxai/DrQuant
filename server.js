@@ -97,6 +97,9 @@ app.set("adminMiddleware", adminMiddleware);
 
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/chats", require("./routes/chats"));
+// Public, privacy-aware share landing for channel/group posts (no auth). Wrapped
+// so any problem here can never crash boot; must precede the SPA catch-all.
+try { app.use("/m", require("./routes/share")); } catch (e) { console.error("Share route disabled:", e.message); }
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/payment", require("./routes/payment"));
 app.use("/api/upload", require("./routes/upload"));

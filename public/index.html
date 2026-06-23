@@ -101,6 +101,8 @@ ${t.n==='dark'?'.mk-post{background:linear-gradient(180deg,rgba(36,48,92,.44),rg
 @keyframes pu{0%,100%{opacity:1}50%{opacity:.5}}@keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
 @keyframes sr{from{transform:translateX(-100%)}to{transform:translateX(0)}}
 @keyframes toastIn{from{opacity:0;transform:translateY(-22px)}to{opacity:1;transform:translateY(0)}}@keyframes toastOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-22px)}}
+.dq-vip{border:1.5px solid transparent!important;animation:vipGlow 2.6s ease-in-out infinite}
+@keyframes vipGlow{0%,100%{box-shadow:0 0 0 1.5px rgba(124,92,255,.6),0 0 13px rgba(124,92,255,.4),0 0 26px rgba(34,211,238,.2)}50%{box-shadow:0 0 0 1.5px rgba(34,211,238,.7),0 0 19px rgba(34,211,238,.55),0 0 36px rgba(124,92,255,.35)}}
 `;}
 
 function render(){applyCSS();if(!S.token||!S.user)renderLogin();else renderApp();}
@@ -309,7 +311,7 @@ async function globalSearch(q){
   }catch(e){console.error("Search:",e);}
 }
 async function joinOrOpen(id){try{await openChat(id);}catch{try{await api(`/chats/${id}/members`,{method:"POST",body:JSON.stringify({userId:S.user.id})});await loadChats();await openChat(id);}catch(e){alert(e.error||"Cannot join");}}}
-async function loadChats(){try{S.chats=await api("/chats");renderChatListItems();}catch(e){console.error("Load:",e);}}
+async function loadChats(){try{S.chats=await api("/chats");renderChatListItems();maybeApplyDeepLink();}catch(e){console.error("Load:",e);}}
 function renderChatListItems(){
   const cl=$("#cl");if(!cl)return;const chats=S.chats;cl.innerHTML="";
   if(!chats.length){cl.innerHTML=`<div style="text-align:center;padding:40px;color:${t.t3};font-size:14px">No chats yet. Tap ✏️ to start!</div>`;return;}
@@ -319,7 +321,7 @@ function renderChatListItems(){
     const online=c.type==="dm"&&c.partner?S.onlineUsers.includes(c.partner.id):false;
     d.style.cssText=`display:flex;align-items:center;gap:13px;padding:13px 14px;margin:7px 3px;cursor:pointer;border-radius:18px;background:${isA?t.act:t.ch};border:1px solid ${isA?t.ba:t.bd};box-shadow:${isA?`0 0 0 1px ${t.ba},0 8px 24px rgba(0,0,0,.3)`:"0 5px 16px rgba(0,0,0,.22)"};-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);transition:.16s;-webkit-tap-highlight-color:transparent`;
     d.innerHTML=`${avatar(av,46,online)}<div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;align-items:center"><span style="color:${t.t1};font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px">${c.type==="channel"?'<span style="color:'+t.pr+';opacity:.7;font-size:12px">'+I.channel+'</span>':c.type==="group"?'<span style="color:'+t.pr+';opacity:.7;font-size:12px">'+I.users+'</span>':""} ${esc(name)}${c.type==="dm"?proTag(c.partner,9):""}${c.type==="dm"?wizardTag(c.partner,9):""}</span><div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px"><span style="color:${t.t4};font-size:11px">${fmtTime(c.lastMessage?.created_at)}</span>${c.unread>0?`<span style="min-width:20px;height:20px;padding:0 6px;border-radius:11px;background:${t.pg};color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 10px ${t.pgw}">${c.unread>99?"99+":c.unread}</span>`:""}</div></div><div style="color:${t.t3};font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${c.lastMessage?.sender_name&&c.type!=="dm"?`<span style="color:${t.ac};font-weight:500">${esc(c.lastMessage.sender_name)}: </span>`:""}${esc(lastText)}</div></div>`;
-    d.onclick=()=>openChat(c.id);
+    if(c.pro_only)d.classList.add("dq-vip");d.onclick=()=>openChat(c.id);
     d.onmouseenter=()=>{if(!isA)d.style.background=t.cdh;};d.onmouseleave=()=>{if(!isA)d.style.background=t.ch;};cl.appendChild(d);
   });
   const _nb=$("#nav-chat-badge");if(_nb){const _u=(S.chats||[]).filter(c=>c.unread>0).length;if(_u>0){_nb.textContent=_u>99?"99+":_u;_nb.style.display="inline-flex";}else _nb.style.display="none";}
@@ -504,6 +506,47 @@ async function toggleReaction(mid,emoji){
   catch(e){showToast("Reaction failed",(e&&e.error)||"Try again");}
 }
 
+// ── Share & Forward (channel posts) ──
+async function shareMessage(msg){
+  const link=location.origin+"/m/"+msg.id;
+  const chan=(S.chatInfo&&S.chatInfo.name)||"DrFX Quant";
+  const vip=!!(S.chatInfo&&S.chatInfo.pro_only);
+  const text=vip?(chan+" on DrFX Quant"):(((msg.content||"").trim().slice(0,160))||chan);
+  try{if(navigator.share){await navigator.share({title:chan,text,url:link});return;}}
+  catch(e){if(e&&e.name==="AbortError")return;}
+  try{await navigator.clipboard.writeText(link);showToast("Link copied",link);}
+  catch{prompt("Copy this link:",link);}
+}
+function openForwardPicker(msg){
+  modal("Forward to…",(body,close)=>{
+    const list=(S.chats||[]).filter(c=>c.id!==S.activeChat&&(c.type!=="channel"||c.my_role==="admin"||S.user.role==="admin"));
+    if(!list.length){body.innerHTML=`<div style="color:${t.t3};text-align:center;padding:22px;font-size:14px">No chats available to forward to.</div>`;return;}
+    body.innerHTML=`<input id="fw-q" class="gi" placeholder="Search your chats…" style="margin-bottom:10px;font-size:14px"/><div id="fw-list" style="max-height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>`;
+    const draw=(q)=>{const fl=body.querySelector("#fw-list");fl.innerHTML="";list.filter(c=>!q||chatName(c).toLowerCase().includes(q)).forEach(c=>{const row=ce("div");row.style.cssText="display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;cursor:pointer;margin-bottom:3px";row.onmouseenter=()=>row.style.background=t.cdh;row.onmouseleave=()=>row.style.background="transparent";row.innerHTML=`${avatar(chatAvatar(c),38)}<div style="flex:1;min-width:0"><div style="color:${t.t1};font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(chatName(c))}</div><div style="color:${t.t3};font-size:12px">${c.type==="dm"?"Direct message":esc(c.type)}</div></div>`;row.onclick=()=>forwardTo(c.id,msg,close);fl.appendChild(row);});if(!fl.children.length)fl.innerHTML=`<div style="color:${t.t3};text-align:center;padding:16px;font-size:13px">No matches</div>`;};
+    draw("");
+    const q=body.querySelector("#fw-q");q.oninput=()=>draw(q.value.trim().toLowerCase());
+  });
+}
+async function forwardTo(targetId,msg,close){
+  const src=(S.chatInfo&&S.chatInfo.name)||"a channel";
+  const base=(msg.content||"").trim();
+  const payload={content:base?("↪ Forwarded from "+src+"\n"+base):("↪ Forwarded from "+src)};
+  if(msg.image)payload.image=msg.image;
+  if(msg.attachment)payload.attachment=msg.attachment;
+  try{await api(`/chats/${targetId}/messages`,{method:"POST",body:JSON.stringify(payload)});if(close)close();showToast("Forwarded","Sent to your chat");}
+  catch(e){showToast("Forward failed",(e&&e.error)||"Try again");}
+}
+// ── Deep link: /?chat=<id>&m=<msgId> opens the channel/post once on load ──
+let _dl=(function(){try{const p=new URLSearchParams(location.search);const c=p.get("chat");if(c)return{chat:parseInt(c,10),m:p.get("m")?parseInt(p.get("m"),10):null};}catch(e){}return null;})();
+let _dlDone=false;
+function maybeApplyDeepLink(){
+  if(_dlDone||!_dl||!_dl.chat)return;_dlDone=true;
+  const cid=_dl.chat,mid=_dl.m;_dl=null;
+  try{history.replaceState(null,"",location.pathname);}catch(e){}
+  openChat(cid);
+  if(mid)setTimeout(()=>{try{jumpToMessage(mid);}catch(e){}},800);
+}
+
 function dateLabel(ts){
   const d=new Date(ts);if(isNaN(d))return"";
   const now=new Date(),today=now.toDateString(),yest=new Date(now.getTime()-86400000).toDateString(),dd=d.toDateString();
@@ -570,6 +613,10 @@ function showMsgMenu(msgId){
   if(msg.content||msg.image){const rb=ce("button");rb.className="sbtn";rb.innerHTML="↩️ Reply";rb.onclick=()=>{ov.remove();S.replyTo={id:msg.id,content:msg.content||"📷 Image",sender_name:msg.sender_name||"User"};renderReplyPreview();const ta=$("#cv-ta");if(ta)ta.focus();};menu.appendChild(rb);}
   // Copy
   if(msg.content){const cb=ce("button");cb.className="sbtn";cb.innerHTML="📋 Copy Text";cb.onclick=()=>{navigator.clipboard?.writeText(msg.content).catch(()=>{});ov.remove();};menu.appendChild(cb);}if(msg.content&&window.dqTranslate&&dqTranslate.available()){const tbb=ce("button");tbb.className="sbtn";tbb.innerHTML="🌐 "+(dqTranslate.isShown(msg.id)?"Hide translation":"Translate");tbb.onclick=()=>{ov.remove();dqTranslate.translateMessage(msg.id);};menu.appendChild(tbb);}
+  // Share to other apps (channels & groups only — never DMs, for privacy)
+  if(S.chatInfo&&S.chatInfo.type!=="dm"){const sh=ce("button");sh.className="sbtn";sh.innerHTML="🔗 Share";sh.onclick=()=>{ov.remove();shareMessage(msg);};menu.appendChild(sh);}
+  // Forward into one of your own chats
+  if(msg.content||msg.image||msg.attachment){const fw=ce("button");fw.className="sbtn";fw.innerHTML="↪️ Forward";fw.onclick=()=>{ov.remove();openForwardPicker(msg);};menu.appendChild(fw);}
   // Edit
   if(msg.content&&(mine||canModerate)){const eb=ce("button");eb.className="sbtn";eb.innerHTML=`${I.edit} Edit Message`;eb.onclick=()=>{ov.remove();editMsgPrompt(msg);};menu.appendChild(eb);}
   // Pin / Unpin
