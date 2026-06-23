@@ -106,6 +106,7 @@ async function initDB() {
       ["chats", "username", "TEXT UNIQUE"],
       ["chats", "webhook_token", "TEXT"],
       ["chats", "pro_only", "BOOLEAN DEFAULT FALSE"],
+      ["chats", "pin_rank", "INTEGER"],
       ["messages", "edited_at", "TIMESTAMPTZ"],
       ["messages", "reply_to", "INTEGER REFERENCES messages(id) ON DELETE SET NULL"],
       ["messages", "pinned", "BOOLEAN DEFAULT FALSE"],
@@ -182,8 +183,8 @@ async function initDB() {
         );
         return ch.id;
       };
-      await ensureChannel("drfx", "DrFX", "Official DrFX channel — announcements and updates from the team.", "📈", false);
-      await ensureChannel(signalUsername, "Dr Signal", "Automated trading signals delivered from TradingView. Only admins post here.", "📊", true);
+      const drfxId = await ensureChannel("drfx", "DrFX", "Official DrFX channel — announcements and updates from the team.", "📈", false);
+      const drsignalId = await ensureChannel(signalUsername, "Dr Signal", "Automated trading signals delivered from TradingView. Only admins post here.", "📊", true);
       console.log("✅ Default channels ready (DrFX, Dr Signal)");
 
       // ── VIP (Pro-only) channels ───────────────────────────────────────────
@@ -221,10 +222,19 @@ async function initDB() {
         );
         return ch.id;
       };
-      await ensureProChannel("vipsignals", "VIP Forex & Crypto Signals", "Premium Forex & Crypto trading signals delivered from TradingView. Pro subscribers only.", "📡", true);
-      await ensureProChannel("vipalgo", "VIP Algo Channel", "Premium indicators and bots. Pro subscribers only.", "🤖", false);
-      await ensureProChannel("vipstrategies", "VIP Strategies", "Learn specific trading strategies, step by step. Pro subscribers only.", "🎯", false);
+      const vipSigId = await ensureProChannel("vipsignals", "VIP Forex & Crypto Signals", "Premium Forex & Crypto trading signals delivered from TradingView. Pro subscribers only.", "📡", true);
+      const vipAlgoId = await ensureProChannel("vipalgo", "VIP Algo Channel", "Premium indicators and bots. Pro subscribers only.", "🤖", false);
+      const vipStratId = await ensureProChannel("vipstrategies", "VIP Strategies", "Learn specific trading strategies, step by step. Pro subscribers only.", "🎯", false);
       console.log("✅ VIP channels ready (VIP Signals, VIP Algo, VIP Strategies)");
+      // ── Fixed top-of-list order for the 5 system channels ───────────────
+      // Lower pin_rank = higher in EVERY user's chat list. Seeded once (only when
+      // unset) so a later admin reorder via PUT /chats/:id/pin-rank persists across
+      // reboots. Regular users can never change these.
+      const fixedPins = [[vipSigId, 1], [vipAlgoId, 2], [vipStratId, 3], [drsignalId, 4], [drfxId, 5]];
+      for (const [cid, rank] of fixedPins) {
+        if (cid) await client.query("UPDATE chats SET pin_rank=$1 WHERE id=$2 AND pin_rank IS NULL", [rank, cid]).catch(() => {});
+      }
+      console.log("✅ Fixed channel order set (VIP Signals → Algo → Strategies → Dr Signal → DrFX)");
     }
 
     // ── Market section: Explore feed, creators/companies, products ────────
@@ -387,6 +397,20 @@ async function initDB() {
       CREATE INDEX IF NOT EXISTS idx_msg_reactions_msg ON message_reactions(message_id);
     `).catch((e) => console.error("Reactions schema:", e.message));
     console.log("✅ Reactions ready (message_reactions)");
+
+    // ── Per-user chat pins (favorites) ──
+    // A user pins a chat to the top of THEIR own list. These always sort BELOW
+    // the fixed system channels (chats.pin_rank). Cascade away with user or chat.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chat_pins (
+        user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        chat_id   INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+        pinned_at TIMESTAMPTZ DEFAULT NOW(),
+        PRIMARY KEY (user_id, chat_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_chat_pins_user ON chat_pins(user_id);
+    `).catch((e) => console.error("Chat pins schema:", e.message));
+    console.log("✅ Chat pins ready (chat_pins)");
 
     console.log("✅ PostgreSQL ready");
   } finally { client.release(); }

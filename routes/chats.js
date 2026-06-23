@@ -78,10 +78,19 @@ router.get("/", async (req, res) => {
   try {
     const { rows: chats } = await pool.query(`
       SELECT c.*, cm.role AS my_role, cm.last_read_id,
+        (up.user_id IS NOT NULL) AS pinned,
         (SELECT COUNT(*)::int FROM messages m WHERE m.chat_id=c.id AND m.id > cm.last_read_id) AS unread,
         (SELECT COUNT(*)::int FROM chat_members WHERE chat_id=c.id) AS member_count
-      FROM chats c JOIN chat_members cm ON c.id=cm.chat_id AND cm.user_id=$1
-      ORDER BY (SELECT MAX(created_at) FROM messages WHERE chat_id=c.id) DESC NULLS LAST, c.created_at DESC
+      FROM chats c
+        JOIN chat_members cm ON c.id=cm.chat_id AND cm.user_id=$1
+        LEFT JOIN chat_pins up ON up.chat_id=c.id AND up.user_id=$1
+      ORDER BY
+        (c.pin_rank IS NULL)::int,
+        c.pin_rank ASC,
+        (up.user_id IS NULL)::int,
+        up.pinned_at DESC NULLS LAST,
+        (SELECT MAX(created_at) FROM messages WHERE chat_id=c.id) DESC NULLS LAST,
+        c.created_at DESC
     `, [req.user.id]);
     const result = [];
     for (const ch of chats) {
@@ -104,12 +113,11 @@ router.post("/", async (req, res) => {
     const { type, name, bio, avatar, visibility, members, username } = req.body;
     if (!type || !["dm", "group", "channel"].includes(type)) return res.status(400).json({ error: "Invalid type" });
     if (avatar && badAvatar(avatar)) return res.status(400).json({ error: "Invalid avatar" });
-    // Admins create groups/channels (any visibility); wizards may create them
-    // too, but a wizard's group/channel is forced PRIVATE.
+    // Everyone may create groups/channels now. Visibility is forced by role:
+    // admins choose freely; wizards are forced PRIVATE; regular users are forced
+    // PUBLIC (they cannot create private/hidden channels).
     const _isAdmin = req.user.role === "admin" || req.user.role === "superadmin";
     const _isWizard = req.user.role === "wizard";
-    if ((type === "group" || type === "channel") && !_isAdmin && !_isWizard)
-      return res.status(403).json({ error: "Only admin or wizard can create groups and channels" });
     if (type === "dm") {
       const partnerId = parseInt(members?.[0]);
       if (!partnerId) return res.status(400).json({ error: "Partner required" });
@@ -129,7 +137,7 @@ router.post("/", async (req, res) => {
     }
     const { rows: [chat] } = await pool.query(
       "INSERT INTO chats (type,username,name,bio,avatar,visibility,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *",
-      [type, uname, name.trim().slice(0, 100), (bio || "").slice(0, 500), avatar || "", (_isWizard && !_isAdmin ? "private" : (visibility || "public")), req.user.id]
+      [type, uname, name.trim().slice(0, 100), (bio || "").slice(0, 500), avatar || "", (_isAdmin ? (visibility || "public") : (_isWizard ? "private" : "public")), req.user.id]
     );
     await pool.query("INSERT INTO chat_members (chat_id,user_id,role) VALUES ($1,$2,'admin')", [chat.id, req.user.id]);
     if (Array.isArray(members)) {
@@ -578,6 +586,48 @@ router.delete("/trading-notes/:id", async (req, res) => {
     await pool.query("DELETE FROM trading_notes WHERE id=$1 AND user_id=$2", [parseInt(req.params.id), req.user.id]);
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: "Server error" }); }
+});
+
+// ── Per-user chat pins (favorite a chat to the top of your own list) ──
+// These always sort BELOW the fixed system channels (chats.pin_rank). Members
+// only. The 5 fixed system channels (pin_rank set) cannot be user-pinned.
+router.post("/:id/pin-chat", async (req, res) => {
+  const pool = req.app.get("pool");
+  try {
+    const chatId = parseInt(req.params.id);
+    const { rows: [mem] } = await pool.query("SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
+    if (!mem) return res.status(403).json({ error: "Not a member" });
+    const { rows: [c] } = await pool.query("SELECT pin_rank FROM chats WHERE id=$1", [chatId]);
+    if (!c) return res.status(404).json({ error: "Chat not found" });
+    if (c.pin_rank != null) return res.status(400).json({ error: "This channel is pinned by the team" });
+    await pool.query("INSERT INTO chat_pins (user_id,chat_id) VALUES ($1,$2) ON CONFLICT (user_id,chat_id) DO NOTHING", [req.user.id, chatId]);
+    res.json({ ok: true, pinned: true });
+  } catch (err) { console.error("Pin chat:", err); res.status(500).json({ error: "Server error" }); }
+});
+router.delete("/:id/pin-chat", async (req, res) => {
+  const pool = req.app.get("pool");
+  try {
+    const chatId = parseInt(req.params.id);
+    await pool.query("DELETE FROM chat_pins WHERE user_id=$1 AND chat_id=$2", [req.user.id, chatId]);
+    res.json({ ok: true, pinned: false });
+  } catch (err) { console.error("Unpin chat:", err); res.status(500).json({ error: "Server error" }); }
+});
+
+// ── Admin-only: set/clear a channel's fixed top-of-list rank ──
+// Lower rank = higher. Pass { rank: null } to remove from the fixed band. This
+// is the ONLY way the order of the 5 system channels can change.
+router.put("/:id/pin-rank", async (req, res) => {
+  const pool = req.app.get("pool");
+  try {
+    if (req.user.role !== "admin" && req.user.role !== "superadmin") return res.status(403).json({ error: "Admin required" });
+    const chatId = parseInt(req.params.id);
+    let rank = req.body ? req.body.rank : null;
+    rank = (rank === null || rank === undefined || rank === "") ? null : parseInt(rank);
+    if (rank !== null && (isNaN(rank) || rank < 1 || rank > 9999)) return res.status(400).json({ error: "Invalid rank" });
+    const { rows: [c] } = await pool.query("UPDATE chats SET pin_rank=$1 WHERE id=$2 RETURNING id, pin_rank", [rank, chatId]);
+    if (!c) return res.status(404).json({ error: "Chat not found" });
+    res.json({ ok: true, id: c.id, pin_rank: c.pin_rank });
+  } catch (err) { console.error("Pin rank:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 module.exports = router;
