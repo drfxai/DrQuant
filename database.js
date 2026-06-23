@@ -371,6 +371,23 @@ async function initDB() {
     `).catch((e) => console.error("Translation schema:", e.message));
     console.log("✅ Translation cache ready (message_translations)");
 
+    // ── Message reactions (Telegram-style emoji reactions) ──
+    // One row per (message, user, emoji). `emoji` is a short custom key (e.g.
+    // 'rocket','fire','bull') rendered client-side by /emoji.js. Rows cascade
+    // away with their message or user.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS message_reactions (
+        id          BIGSERIAL PRIMARY KEY,
+        message_id  INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        user_id     INTEGER NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
+        emoji       TEXT NOT NULL,
+        created_at  TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (message_id, user_id, emoji)
+      );
+      CREATE INDEX IF NOT EXISTS idx_msg_reactions_msg ON message_reactions(message_id);
+    `).catch((e) => console.error("Reactions schema:", e.message));
+    console.log("✅ Reactions ready (message_reactions)");
+
     console.log("✅ PostgreSQL ready");
   } finally { client.release(); }
 }

@@ -454,7 +454,7 @@ function renderChatView(){
   bindMsgEvents(mc);
   wireVoice(mc);
   if(window.dqTranslate)dqTranslate.onChatRender(mc);
-  mc.addEventListener("click",e=>{const im=e.target.closest?e.target.closest("img.msg-img"):null;if(im){const s=im.getAttribute("src")||"";if(/^\/uploads\//.test(s)||/^https?:\/\//.test(s))window.open(s,"_blank","noopener");return;}const rq=e.target.closest?e.target.closest(".reply-quote"):null;if(rq){const el=mc.querySelector('[data-mid="'+rq.getAttribute("data-target")+'"]');if(el)el.scrollIntoView({behavior:"smooth",block:"center"});}});
+  mc.addEventListener("click",e=>{const rc=e.target.closest?e.target.closest(".dq-rx-chip"):null;if(rc){e.preventDefault();toggleReaction(parseInt(rc.getAttribute("data-rx-mid")),rc.getAttribute("data-rx-emoji"));return;}const im=e.target.closest?e.target.closest("img.msg-img"):null;if(im){const s=im.getAttribute("src")||"";if(/^\/uploads\//.test(s)||/^https?:\/\//.test(s))window.open(s,"_blank","noopener");return;}const rq=e.target.closest?e.target.closest(".reply-quote"):null;if(rq){const el=mc.querySelector('[data-mid="'+rq.getAttribute("data-target")+'"]');if(el)el.scrollIntoView({behavior:"smooth",block:"center"});}});
   updatePinBar();
   if(canPost)buildInputBar();
   if(S.showInfo&&info.type!=="dm")renderInfoPanel();
@@ -480,7 +480,28 @@ function msgBubble(m){
   const attHtml=m.attachment?renderAttachment(m.attachment,mine,lc):"";
   const textHtml=m.content?`<div class="dqtr-src" style="color:${lc?"#fff":t.t1};font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-break:break-word">${fmtMsg(m.content)}</div>`:"";
   const edited=m.edited_at?`<span style="font-size:10px;color:${lc?"rgba(255,255,255,.5)":t.t4};margin-right:3px">edited</span>`:"";
-  return`<div data-mid="${m.id}" style="display:flex;justify-content:${mine?"flex-end":"flex-start"};margin-bottom:3px;padding:0 12px;animation:fm .15s ease;-webkit-user-select:none;user-select:none"><div style="max-width:78%;min-width:70px">${senderLine}<div style="padding:7px 12px;border-radius:${mine?"16px 16px 5px 16px":"16px 16px 16px 5px"};background:${mine?t.bm:t.bo};border:1px solid ${mine?t.bmb:t.bob};backdrop-filter:blur(10px);box-shadow:${mine?`0 2px 14px ${t.pgw}`:"0 2px 10px rgba(0,0,0,.18)"}">${replyHtml}${imgHtml}${attHtml}${textHtml}<div style="display:flex;justify-content:flex-end;align-items:center;gap:3px;margin-top:2px">${edited}<span style="font-size:10px;color:${lc?"rgba(255,255,255,.6)":t.t4}">${fmtTime(m.created_at)}</span>${mine?`<span style="color:${lc?"rgba(255,255,255,.6)":t.pr+"99"}">${I.dbl}</span>`:""}</div></div>${window.dqSignalChip?window.dqSignalChip(m):""}</div></div>`;
+  return`<div data-mid="${m.id}" style="display:flex;justify-content:${mine?"flex-end":"flex-start"};margin-bottom:3px;padding:0 12px;animation:fm .15s ease;-webkit-user-select:none;user-select:none"><div style="max-width:78%;min-width:70px">${senderLine}<div style="padding:7px 12px;border-radius:${mine?"16px 16px 5px 16px":"16px 16px 16px 5px"};background:${mine?t.bm:t.bo};border:1px solid ${mine?t.bmb:t.bob};backdrop-filter:blur(10px);box-shadow:${mine?`0 2px 14px ${t.pgw}`:"0 2px 10px rgba(0,0,0,.18)"}">${replyHtml}${imgHtml}${attHtml}${textHtml}<div style="display:flex;justify-content:flex-end;align-items:center;gap:3px;margin-top:2px">${edited}<span style="font-size:10px;color:${lc?"rgba(255,255,255,.6)":t.t4}">${fmtTime(m.created_at)}</span>${mine?`<span style="color:${lc?"rgba(255,255,255,.6)":t.pr+"99"}">${I.dbl}</span>`:""}</div></div>${window.dqSignalChip?window.dqSignalChip(m):""}<div class="dq-rx" data-rx="${m.id}" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px;justify-content:${mine?"flex-end":"flex-start"}">${reactionsHTML(m)}</div></div></div>`;
+}
+
+// ── Message reactions (Telegram-style) ──
+function reactionsHTML(m){
+  const rx=m.reactions||[];if(!rx.length)return"";
+  return rx.map(r=>`<button type="button" class="dq-rx-chip" data-rx-mid="${m.id}" data-rx-emoji="${esc(r.emoji)}" title="${esc(window.dqEmoji?dqEmoji.label(r.emoji):r.emoji)}" style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px 2px 5px;border-radius:12px;border:1px solid ${r.mine?t.ba:t.bd};background:${r.mine?t.act:t.ch};color:${r.mine?t.ac:t.t2};font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;line-height:1;-webkit-tap-highlight-color:transparent">${window.dqEmoji?dqEmoji.render(r.emoji,15):""}<span>${r.count}</span></button>`).join("");
+}
+function renderMsgReactions(mid){
+  const m=S.chatMsgs.find(x=>x.id===mid);if(!m)return;
+  const box=document.querySelector(`.dq-rx[data-rx="${mid}"]`);if(!box)return;
+  box.innerHTML=reactionsHTML(m);
+  box.style.justifyContent=(m.user_id===S.user.id)?"flex-end":"flex-start";
+}
+function mergeReactions(m,counts){
+  const mineSet=new Set((m.reactions||[]).filter(r=>r.mine).map(r=>r.emoji));
+  m.reactions=(counts||[]).map(c=>({emoji:c.emoji,count:c.count,mine:mineSet.has(c.emoji)}));
+}
+async function toggleReaction(mid,emoji){
+  const m=S.chatMsgs.find(x=>x.id===mid);if(!m)return;
+  try{const d=await api(`/chats/${S.activeChat}/messages/${mid}/react`,{method:"POST",body:JSON.stringify({emoji})});m.reactions=d.reactions||[];renderMsgReactions(mid);}
+  catch(e){showToast("Reaction failed",(e&&e.error)||"Try again");}
 }
 
 function dateLabel(ts){
@@ -539,20 +560,22 @@ function showMsgMenu(msgId){
   const canModerate=["admin","manager","superadmin"].includes(S.user.role);
   // Users can act on their own messages; admins/managers on any message; anyone
   // who can manage pins can open the menu (to pin/unpin).
-  if(!mine&&!canModerate&&!canManagePins())return;
+  // Everyone may open the menu — at minimum to add a reaction.
   const old=$("#ctx-menu");if(old)old.remove();
   const ov=ce("div");ov.id="ctx-menu";ov.style.cssText=`position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;animation:fi .15s`;ov.onclick=()=>ov.remove();
   const menu=ce("div");menu.style.cssText=`background:${t.ctx};border:1px solid ${t.ba};border-radius:16px;padding:8px;min-width:220px;box-shadow:${t.sh}`;menu.onclick=e=>e.stopPropagation();
+  // Telegram-style quick reaction row at the top of the menu (all members).
+  if(window.dqEmoji){const rxRow=ce("div");rxRow.style.cssText=`display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 9px;margin-bottom:5px;border-bottom:1px solid ${t.bd}`;dqEmoji.REACTIONS.forEach(k=>{const rb=ce("button");rb.type="button";rb.title=dqEmoji.label(k);rb.style.cssText="background:none;border:none;cursor:pointer;padding:3px;border-radius:9px;flex-shrink:0;line-height:0;-webkit-tap-highlight-color:transparent";rb.innerHTML=dqEmoji.render(k,26);rb.onclick=()=>{ov.remove();toggleReaction(msgId,k);};rxRow.appendChild(rb);});menu.appendChild(rxRow);}
   // Reply
   if(msg.content||msg.image){const rb=ce("button");rb.className="sbtn";rb.innerHTML="↩️ Reply";rb.onclick=()=>{ov.remove();S.replyTo={id:msg.id,content:msg.content||"📷 Image",sender_name:msg.sender_name||"User"};renderReplyPreview();const ta=$("#cv-ta");if(ta)ta.focus();};menu.appendChild(rb);}
   // Copy
   if(msg.content){const cb=ce("button");cb.className="sbtn";cb.innerHTML="📋 Copy Text";cb.onclick=()=>{navigator.clipboard?.writeText(msg.content).catch(()=>{});ov.remove();};menu.appendChild(cb);}if(msg.content&&window.dqTranslate&&dqTranslate.available()){const tbb=ce("button");tbb.className="sbtn";tbb.innerHTML="🌐 "+(dqTranslate.isShown(msg.id)?"Hide translation":"Translate");tbb.onclick=()=>{ov.remove();dqTranslate.translateMessage(msg.id);};menu.appendChild(tbb);}
   // Edit
-  if(msg.content){const eb=ce("button");eb.className="sbtn";eb.innerHTML=`${I.edit} Edit Message`;eb.onclick=()=>{ov.remove();editMsgPrompt(msg);};menu.appendChild(eb);}
+  if(msg.content&&(mine||canModerate)){const eb=ce("button");eb.className="sbtn";eb.innerHTML=`${I.edit} Edit Message`;eb.onclick=()=>{ov.remove();editMsgPrompt(msg);};menu.appendChild(eb);}
   // Pin / Unpin
   if(canManagePins()){const pb=ce("button");pb.className="sbtn";pb.innerHTML=msg.pinned?"📌 Unpin Message":"📌 Pin Message";pb.onclick=async()=>{ov.remove();try{await api(`/chats/${msg.chat_id}/messages/${msg.id}/pin`,{method:msg.pinned?"DELETE":"POST"});}catch(e){alert(e.error||"Error");}};menu.appendChild(pb);}
-  // Delete
-  const db=ce("button");db.className="sbtn";db.style.color="#ef4444";db.innerHTML=`${I.trash} Delete Message`;db.onclick=async()=>{ov.remove();try{await api(`/chats/${msg.chat_id}/messages/${msg.id}`,{method:"DELETE"});}catch(e){alert(e.error||"Error");}};menu.appendChild(db);
+  // Delete (author or moderators only)
+  if(mine||canModerate){const db=ce("button");db.className="sbtn";db.style.color="#ef4444";db.innerHTML=`${I.trash} Delete Message`;db.onclick=async()=>{ov.remove();try{await api(`/chats/${msg.chat_id}/messages/${msg.id}`,{method:"DELETE"});}catch(e){alert(e.error||"Error");}};menu.appendChild(db);}
   ov.appendChild(menu);document.body.appendChild(ov);
 }
 function inputExtras(){
@@ -2070,8 +2093,9 @@ function connectSocket(){
       else if(msg.chat_id!==S.activeChat)showToast(fromName,preview,()=>openChat(msg.chat_id));
     }
   });
-  S.socket.on("message_edited",msg=>{const idx=S.chatMsgs.findIndex(m=>m.id===msg.id);if(idx>=0){S.chatMsgs[idx]=msg;const mc=$("#cv-msgs");if(mc){mc.innerHTML=msgsHTML(S.chatMsgs);scrollB(mc);bindMsgEvents(mc);wireVoice(mc);}}const pi=(S.pinnedMsgs||[]).findIndex(p=>p.id===msg.id);if(pi>=0){S.pinnedMsgs[pi]={...S.pinnedMsgs[pi],content:msg.content,image:msg.image};updatePinBar();}});
+  S.socket.on("message_edited",msg=>{const idx=S.chatMsgs.findIndex(m=>m.id===msg.id);if(idx>=0){msg.reactions=S.chatMsgs[idx]?.reactions||[];S.chatMsgs[idx]=msg;const mc=$("#cv-msgs");if(mc){mc.innerHTML=msgsHTML(S.chatMsgs);scrollB(mc);bindMsgEvents(mc);wireVoice(mc);}}const pi=(S.pinnedMsgs||[]).findIndex(p=>p.id===msg.id);if(pi>=0){S.pinnedMsgs[pi]={...S.pinnedMsgs[pi],content:msg.content,image:msg.image};updatePinBar();}});
   S.socket.on("message_deleted",({id,chat_id})=>{S.chatMsgs=S.chatMsgs.filter(m=>m.id!==id);if(chat_id===S.activeChat){const mc=$("#cv-msgs");if(mc){const el=mc.querySelector(`[data-mid="${id}"]`);if(el)el.remove();}if((S.pinnedMsgs||[]).some(p=>p.id===id)){S.pinnedMsgs=S.pinnedMsgs.filter(p=>p.id!==id);if(S.pinIndex>=S.pinnedMsgs.length)S.pinIndex=0;updatePinBar();}}});
+  S.socket.on("reaction_updated",d=>{if(!d||d.chat_id!==S.activeChat)return;const m=S.chatMsgs.find(x=>x.id===d.message_id);if(!m)return;mergeReactions(m,d.reactions);renderMsgReactions(d.message_id);});
   S.socket.on("message_pinned",msg=>{
     if(msg.chat_id!==S.activeChat)return;
     const i=S.chatMsgs.findIndex(m=>m.id===msg.id);if(i>=0)S.chatMsgs[i].pinned=true;
@@ -2111,6 +2135,7 @@ window.addEventListener("resize",()=>{
 <script src="/signals-feed.js"></script>
 <script src="/translate-ui.js"></script>
 <script src="/wizard-ui.js"></script>
+<script src="/emoji.js"></script>
 <script src="/market-ui.js"></script>
 <script src="/market-desktop.js"></script>
 </body></html>

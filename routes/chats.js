@@ -47,6 +47,31 @@ async function pinPermission(pool, chatId, user) {
   return { ok: true };
 }
 
+// ── Message reactions ──
+// Reaction "emoji" values are short custom KEYS rendered client-side by
+// /emoji.js. Only this fixed allow-list is accepted (keep in sync with
+// dqEmoji.REACTIONS on the client).
+const REACTION_KEYS = ["like", "heart", "fire", "rocket", "hundred", "clap", "chartup", "moneybag", "bull", "bear", "diamond", "star", "trophy"];
+
+// Aggregate reactions for a set of message ids:
+//   -> { [messageId]: [ { emoji, count, mine }, ... ] }  (ordered by first use)
+async function reactionsFor(pool, messageIds, userId) {
+  const map = {};
+  if (!messageIds || !messageIds.length) return map;
+  const { rows } = await pool.query(
+    `SELECT message_id, emoji, COUNT(*)::int AS count, BOOL_OR(user_id = $2) AS mine
+       FROM message_reactions
+      WHERE message_id = ANY($1::int[])
+      GROUP BY message_id, emoji
+      ORDER BY message_id, MIN(created_at)`,
+    [messageIds, userId]
+  );
+  for (const r of rows) {
+    (map[r.message_id] = map[r.message_id] || []).push({ emoji: r.emoji, count: r.count, mine: r.mine });
+  }
+  return map;
+}
+
 // List chats
 router.get("/", async (req, res) => {
   const pool = req.app.get("pool");
@@ -273,6 +298,8 @@ router.get("/:id/messages", async (req, res) => {
     if (before) { q += " AND m.id<$2"; params.push(before); }
     q += " ORDER BY m.created_at DESC LIMIT 50";
     const { rows } = await pool.query(q, params);
+    const rmap = await reactionsFor(pool, rows.map(r => r.id), req.user.id);
+    rows.forEach(r => { r.reactions = rmap[r.id] || []; });
     res.json(rows.reverse());
   } catch (err) { res.status(500).json({ error: "Server error" }); }
 });
@@ -416,6 +443,47 @@ router.delete("/:chatId/messages/:msgId/pin", async (req, res) => {
     members.forEach(m => io.to(`user_${m.user_id}`).emit("message_unpinned", { id: msgId, chat_id: chatId }));
     res.json({ ok: true });
   } catch (err) { console.error("Unpin:", err); res.status(500).json({ error: "Server error" }); }
+});
+
+// React / unreact to a message (toggle). Any chat member may react.
+router.post("/:chatId/messages/:msgId/react", async (req, res) => {
+  const pool = req.app.get("pool"), io = req.app.get("io");
+  try {
+    const chatId = parseInt(req.params.chatId), msgId = parseInt(req.params.msgId);
+    const emoji = String((req.body && req.body.emoji) || "");
+    if (!REACTION_KEYS.includes(emoji)) return res.status(400).json({ error: "Invalid reaction" });
+    const { rows: [mem] } = await pool.query("SELECT role FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
+    if (!mem) return res.status(403).json({ error: "Not a member" });
+    const { rows: [msg] } = await pool.query("SELECT id FROM messages WHERE id=$1 AND chat_id=$2", [msgId, chatId]);
+    if (!msg) return res.status(404).json({ error: "Message not found" });
+    // VIP gate: reacting needs the same access as reading a pro_only channel.
+    {
+      const { rows: [pc] } = await pool.query("SELECT pro_only FROM chats WHERE id=$1", [chatId]);
+      if (pc && pc.pro_only && mem.role !== "admin" && req.user.role !== "admin") {
+        const { rows: [su] } = await pool.query("SELECT subscription_status, subscription_expiry FROM users WHERE id=$1", [req.user.id]);
+        const active = !!su && su.subscription_status === "active" && (!su.subscription_expiry || new Date(su.subscription_expiry) > new Date());
+        if (!active) return res.status(403).json({ error: "PRO subscription required" });
+      }
+    }
+    // Toggle: remove if present, otherwise add.
+    const { rowCount: existed } = await pool.query("DELETE FROM message_reactions WHERE message_id=$1 AND user_id=$2 AND emoji=$3", [msgId, req.user.id, emoji]);
+    if (!existed) {
+      await pool.query("INSERT INTO message_reactions (message_id,user_id,emoji) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING", [msgId, req.user.id, emoji]);
+    }
+    // Recompute the aggregate for this message.
+    const { rows: agg } = await pool.query(
+      `SELECT emoji, COUNT(*)::int AS count, BOOL_OR(user_id=$2) AS mine
+         FROM message_reactions WHERE message_id=$1 GROUP BY emoji ORDER BY MIN(created_at)`,
+      [msgId, req.user.id]
+    );
+    const mine = agg.map(a => ({ emoji: a.emoji, count: a.count, mine: a.mine }));
+    const counts = agg.map(a => ({ emoji: a.emoji, count: a.count }));
+    // Broadcast counts-only to everyone in the chat; each client preserves its
+    // own `mine` state (the caller also gets `mine` in the REST response).
+    const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
+    members.forEach(m => io.to(`user_${m.user_id}`).emit("reaction_updated", { message_id: msgId, chat_id: chatId, reactions: counts, actor_id: req.user.id, emoji, added: !existed }));
+    res.json({ message_id: msgId, reactions: mine });
+  } catch (err) { console.error("React:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 // Pinned messages for a chat (most-recent first)
