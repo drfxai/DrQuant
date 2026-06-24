@@ -166,7 +166,7 @@
           }, DWELL);
         } else if (el._dqT) { clearTimeout(el._dqT); el._dqT = null; }
       });
-    }, { root: mc || null, rootMargin: "150px 0px", threshold: 0.01 });
+    }, { root: null, rootMargin: "150px 0px", threshold: 0.01 });
     return _io;
   }
   function observeVisible(mc) {
@@ -182,10 +182,15 @@
     });
   }
   function visibleIds(mc) {
-    var cr = mc.getBoundingClientRect(), out = [];
+    var vh = window.innerHeight || document.documentElement.clientHeight || 0;
+    var out = [];
+    // A message counts as visible when its box overlaps the viewport. This is
+    // robust no matter which ancestor actually scrolls, because
+    // getBoundingClientRect() is viewport-relative.
     Array.prototype.slice.call(mc.querySelectorAll("[data-mid]")).forEach(function (el) {
       var r = el.getBoundingClientRect();
-      if (r.bottom > cr.top && r.top < cr.bottom) out.push(parseInt(el.dataset.mid, 10));
+      if (r.height === 0) return;
+      if (r.bottom > 0 && r.top < vh) out.push(parseInt(el.dataset.mid, 10));
     });
     return out;
   }
