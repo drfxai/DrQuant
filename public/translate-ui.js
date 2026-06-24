@@ -133,6 +133,63 @@
     }
   }
 
+  // ── Lazy, viewport-based translation ────────────────────────────────
+  // Only messages the user actually sees get translated. An IntersectionObserver
+  // watches eligible messages; one is queued only after it stays in view briefly,
+  // so scrolling quickly past a message does NOT spend a translation on it. This
+  // avoids translating a whole 1000-message channel up front and keeps load
+  // proportional to what is being read.
+  var _io = null, _ioRoot = null, DWELL = 350;
+  function eligible(id) {
+    if (_shown[id]) return false;
+    var msg = findMsg(id);
+    if (!msg || !msg.content) return false;
+    if (S.user && msg.user_id === S.user.id) return false;
+    if (likelySame(msg.content, prefs.lang)) return false;
+    return true;
+  }
+  function rebuildObserver(mc) {
+    if (typeof IntersectionObserver !== "function") return null;
+    if (_io && _ioRoot === mc) return _io;
+    if (_io) { try { _io.disconnect(); } catch (e) {} }
+    _ioRoot = mc;
+    _io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        var el = en.target, id = parseInt(el.dataset.mid, 10);
+        if (en.isIntersecting) {
+          if (el._dqT) return;
+          el._dqT = setTimeout(function () {
+            el._dqT = null;
+            try { _io.unobserve(el); } catch (e) {}
+            if (!prefs.auto || !available() || !eligible(id)) return;
+            enqueue(id);
+          }, DWELL);
+        } else if (el._dqT) { clearTimeout(el._dqT); el._dqT = null; }
+      });
+    }, { root: mc || null, rootMargin: "150px 0px", threshold: 0.01 });
+    return _io;
+  }
+  function observeVisible(mc) {
+    var io = rebuildObserver(mc);
+    if (!io) { // no IntersectionObserver support → fall back to the last few only
+      Array.prototype.slice.call(mc.querySelectorAll("[data-mid]")).slice(-12).forEach(function (el) {
+        var id = parseInt(el.dataset.mid, 10); if (eligible(id)) enqueue(id);
+      });
+      return;
+    }
+    Array.prototype.slice.call(mc.querySelectorAll("[data-mid]")).forEach(function (el) {
+      var id = parseInt(el.dataset.mid, 10); if (eligible(id)) { try { io.observe(el); } catch (e) {} }
+    });
+  }
+  function visibleIds(mc) {
+    var cr = mc.getBoundingClientRect(), out = [];
+    Array.prototype.slice.call(mc.querySelectorAll("[data-mid]")).forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.bottom > cr.top && r.top < cr.bottom) out.push(parseInt(el.dataset.mid, 10));
+    });
+    return out;
+  }
+
   function onChatRender(mc) {
     refreshGlobe();
     if (!mc || !available()) return;
@@ -141,30 +198,27 @@
       var tr = _cache[id + "|" + prefs.lang]; if (tr && tr.translated != null && !tr.same) injectBlock(el, tr);
     });
     if (!prefs.auto) return;
-    Array.prototype.slice.call(mc.querySelectorAll("[data-mid]")).slice(-25).forEach(function (el) {
-      var id = parseInt(el.dataset.mid, 10); var msg = findMsg(id);
-      if (!msg || !msg.content) return;
-      if (S.user && msg.user_id === S.user.id) return;
-      if (_shown[id] || likelySame(msg.content, prefs.lang)) return;
-      enqueue(id);
-    });
+    observeVisible(mc);
   }
   function onIncoming(mc, msg) {
-    if (!available() || !prefs.auto || !msg || !msg.content) return;
-    if (S.user && msg.user_id === S.user.id) return;
-    if (likelySame(msg.content, prefs.lang)) return;
-    enqueue(msg.id);
+    if (!available() || !prefs.auto || !msg || !msg.id) return;
+    if (!eligible(msg.id)) return;
+    // Observe the new message so it translates only if it is actually on screen
+    // (i.e. the user is at the bottom). If it isn't rendered yet, the
+    // MutationObserver → onChatRender will pick it up and observe it.
+    var box = mc || document.getElementById("cv-msgs");
+    var io = box ? rebuildObserver(box) : null;
+    var el = mcEl(msg.id);
+    if (io && el) { try { io.observe(el); } catch (e) {} }
   }
   function translateConversationNow() {
     var mc = document.getElementById("cv-msgs"); if (!mc) return;
     if (!available()) { try { showToast("Translation unavailable", "The translation service isn't reachable right now."); } catch (e) {} return; }
+    // Translate what is currently on screen; scrolling (with auto on) handles the
+    // rest lazily, so we never blast a huge backlog at the engine at once.
     var n = 0;
-    Array.prototype.slice.call(mc.querySelectorAll("[data-mid]")).slice(-40).forEach(function (el) {
-      var id = parseInt(el.dataset.mid, 10); var msg = findMsg(id);
-      if (!msg || !msg.content || _shown[id] || likelySame(msg.content, prefs.lang)) return;
-      enqueue(id); n++;
-    });
-    if (!n) { try { showToast("Nothing to translate", "No messages in another language were found here."); } catch (e) {} }
+    visibleIds(mc).forEach(function (id) { if (eligible(id)) { enqueue(id); n++; } });
+    if (!n) { try { showToast("Nothing to translate", "No visible messages in another language were found."); } catch (e) {} }
   }
 
   // ── SELF-INSTALLING globe: create it next to the info button if absent, and
