@@ -193,11 +193,14 @@
       var wr = r.win_rate == null ? "\u2014" : (r.win_rate + "%");
       var bar = r.win_rate == null ? 0 : Math.max(2, Math.min(100, r.win_rate));
       var openTag = r.open ? ' <span style="color:' + t.t4 + ';font-size:10px">(' + r.open + ' open)</span>' : '';
+      var hasLv = (r.tp1 || r.tp2 || r.tp3 || r.sl);
+      var lvLine = hasLv ? '<span style="display:block;margin-top:4px;font-size:10px;color:' + t.t4 + '">TP1 ' + (r.tp1 || 0) + ' \u00b7 TP2 ' + (r.tp2 || 0) + ' \u00b7 TP3 ' + (r.tp3 || 0) + ' \u00b7 SL ' + (r.sl || 0) + '</span>' : '';
       return '<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid ' + t.bd + '">' +
         '<span style="width:20px;flex-shrink:0;color:' + t.t4 + ';font-size:12px;font-weight:700">' + (i + 1) + '</span>' +
         '<span style="flex:1;min-width:0">' +
           '<span style="display:block;color:' + t.t1 + ';font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.label) + '</span>' +
           '<span style="display:block;height:3px;margin-top:4px;border-radius:2px;background:' + t.bd + '"><span style="display:block;height:3px;border-radius:2px;width:' + bar + '%;background:' + wc + '"></span></span>' +
+          lvLine +
         '</span>' +
         '<span style="width:58px;text-align:right;color:' + wc + ';font-weight:800;font-size:13px">' + wr + '</span>' +
         '<span style="width:54px;text-align:right;color:' + t.t2 + ';font-size:12px;font-family:ui-monospace,monospace">' + r.wins + '\u2013' + r.losses + '</span>' +
@@ -226,7 +229,7 @@
       '<span><b style="color:' + t.t1 + '">' + (st.open || 0) + '</b> open</span>' +
       '<span><b style="color:' + t.t1 + '">' + (st.symbols_priced || 0) + '</b> priced</span></div>';
     var warn = (st.decided || 0) === 0
-      ? '<div style="font-size:11.5px;line-height:1.5;color:#f5c451;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.25);border-radius:10px;padding:9px 11px;margin-bottom:12px">No outcomes resolved yet. Win rates fill in once live prices cross a signal\u2019s TP or SL \u2014 make sure a price feed is active (a TradingView price alert pointed at /api/webhooks/price, or PRICE_FEED_BINANCE=on for crypto).</div>'
+      ? '<div style="font-size:11.5px;line-height:1.5;color:#f5c451;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.25);border-radius:10px;padding:9px 11px;margin-bottom:12px">No outcomes resolved yet. Win rates fill in as your bot posts TP/SL progress events to /api/webhooks/signal-update \u2014 or, as a fallback, when live prices cross a signal\u2019s level (TradingView price alert \u2192 /api/webhooks/price, or PRICE_FEED_BINANCE=on for crypto).</div>'
       : '';
     var capHtml = cap ? '<div style="font-size:11px;color:' + t.t4 + ';margin:10px 2px 8px">' + cap + '</div>' : '';
     return statLine + warn + '<div style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px">' + chips + '</div>' + capHtml + tbl;

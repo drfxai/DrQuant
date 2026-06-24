@@ -126,6 +126,7 @@ function coerceSignal(p) {
   return {
     symbol: pick("symbol", "ticker"),
     side,
+    id: pick("id", "signal_id", "signalId", "ticket", "uuid", "ref"),
     price: pick("price", "close", "entry"),
     stop_loss: pick("stop_loss", "sl", "stop"),
     take_profit: pick("take_profit", "tp", "target"),
@@ -399,7 +400,7 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
     // entry becomes a tracked, auto-resolving signal.
     try {
       if (n.price != null) scoreboard.setPrice(n.symbol, n.price);
-      scoreboard.ingestWebhook(n, { signalId: sig.id, chatId });
+      scoreboard.ingestWebhook(n, { signalId: sig.id, chatId, extId: fields.id });
     } catch (e) { /* scoreboard is non-critical */ }
 
     // Post the signal into the channel as a normal chat message so every member
@@ -448,6 +449,41 @@ router.post("/price", express.json({ limit: "32kb" }), (req, res) => {
     return res.status(500).json({ error: "Price intake failed" });
   }
   return res.json({ ok: true, accepted, resolved });
+});
+
+// ── POST /api/webhooks/signal-update — progress events (TP1/TP2/TP3/SL) ──
+// The operator's bot calls this as a trade plays out. Updates the in-memory
+// scoreboard ONLY (posts nothing, stores nothing). Body e.g.:
+//   {"secret":"...","signal_id":"abc123","event":"tp1","price":4020.5}
+//   {"secret":"...","symbol":"XAUUSD","direction":"long","event":"sl"}
+//   {"secret":"...","events":[{"signal_id":"abc","event":"tp2"}]}
+// Match priority: signal_id (the id you sent with the original signal) → most
+// recent open signal for that symbol/direction. Events: tp1/tp2/tp3, sl, close.
+router.post("/signal-update", express.json({ limit: "32kb" }), (req, res) => {
+  const b = req.body || {};
+  let authed = false;
+  if (SECRET && typeof b.secret === "string") authed = timingSafeEqual(b.secret, SECRET);
+  if (!authed) return res.status(401).json({ error: "Unauthorized" });
+  const one = (e) => scoreboard.applyEvent({
+    signalId: e.signal_id != null ? e.signal_id : (e.signalId != null ? e.signalId : (e.id != null ? e.id : null)),
+    symbol: e.symbol,
+    direction: e.direction != null ? e.direction : e.side,
+    event: e.event != null ? e.event : (e.type != null ? e.type : e.status),
+    price: e.price,
+    ts: e.time != null ? e.time : e.timestamp,
+  });
+  try {
+    if (Array.isArray(b.events)) {
+      const results = b.events.map(one);
+      const matched = results.filter((r) => r && r.matched).length;
+      return res.json({ ok: true, count: results.length, matched, results });
+    }
+    const r = one(b);
+    if (!r.matched) return res.status(404).json({ ok: false, matched: false, reason: r.reason });
+    return res.json({ ok: true, matched: true, status: r.status, max_tp: r.max_tp, closed: r.closed, id: r.id, ext_id: r.ext_id });
+  } catch (e) {
+    return res.status(500).json({ error: "Event intake failed" });
+  }
 });
 
 module.exports = router;
