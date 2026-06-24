@@ -145,7 +145,11 @@
     var msg = findMsg(id);
     if (!msg || !msg.content) return false;
     if (S.user && msg.user_id === S.user.id) return false;
-    if (likelySame(msg.content, prefs.lang)) return false;
+    // NOTE: we deliberately do NOT pre-skip by script. A matching script does not
+    // prove a matching language (English/French/Spanish all share Latin; Arabic
+    // and Persian share a script). The server detects the real source language
+    // and returns { same:true } when nothing needs translating — in that case no
+    // block is shown — so same-script language pairs still work correctly.
     return true;
   }
   function rebuildObserver(mc) {
@@ -216,14 +220,21 @@
     var el = mcEl(msg.id);
     if (io && el) { try { io.observe(el); } catch (e) {} }
   }
+  function shownCount() { var n = 0; for (var k in _shown) { if (_shown[k]) n++; } return n; }
   function translateConversationNow() {
     var mc = document.getElementById("cv-msgs"); if (!mc) return;
     if (!available()) { try { showToast("Translation unavailable", "The translation service isn't reachable right now."); } catch (e) {} return; }
-    // Translate what is currently on screen; scrolling (with auto on) handles the
-    // rest lazily, so we never blast a huge backlog at the engine at once.
-    var n = 0;
-    visibleIds(mc).forEach(function (id) { if (eligible(id)) { enqueue(id); n++; } });
-    if (!n) { try { showToast("Nothing to translate", "No visible messages in another language were found."); } catch (e) {} }
+    // Translate what is on screen. The server decides per message whether a
+    // translation is actually needed (same-language messages return { same:true }
+    // and simply show no block).
+    var ids = visibleIds(mc).filter(eligible);
+    if (!ids.length) { try { showToast("Nothing to translate", "No messages are on screen to translate right now."); } catch (e) {} return; }
+    var before = shownCount();
+    Promise.all(ids.map(function (id) { return showTranslation(id, false); })).then(function () {
+      if (shownCount() <= before) {
+        try { showToast("Already in your language", "These messages already appear to be in " + langName(prefs.lang) + ". Tap the globe to choose a different language."); } catch (e) {}
+      }
+    });
   }
 
   // ── SELF-INSTALLING globe: create it next to the info button if absent, and
