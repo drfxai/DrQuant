@@ -538,12 +538,14 @@ async function forwardTo(targetId,msg,close){
   catch(e){showToast("Forward failed",(e&&e.error)||"Try again");}
 }
 // ── Deep link: /?chat=<id>&m=<msgId> opens the channel/post once on load ──
-let _dl=(function(){try{const p=new URLSearchParams(location.search);const c=p.get("chat");if(c)return{chat:parseInt(c,10),m:p.get("m")?parseInt(p.get("m"),10):null};}catch(e){}return null;})();
+let _dl=(function(){try{const p=new URLSearchParams(location.search);const c=p.get("chat");const po=p.get("post");if(c)return{chat:parseInt(c,10),m:p.get("m")?parseInt(p.get("m"),10):null};if(po)return{post:parseInt(po,10)};}catch(e){}return null;})();
 let _dlDone=false;
 function maybeApplyDeepLink(){
-  if(_dlDone||!_dl||!_dl.chat)return;_dlDone=true;
-  const cid=_dl.chat,mid=_dl.m;_dl=null;
+  if(_dlDone||!_dl)return;
+  if(!_dl.chat&&!_dl.post)return;_dlDone=true;
+  const cid=_dl.chat,mid=_dl.m,pid=_dl.post;_dl=null;
   try{history.replaceState(null,"",location.pathname);}catch(e){}
+  if(pid){try{if(typeof openMarket==="function")openMarket();}catch(e){}setTimeout(()=>{try{mkOpenPost(pid);}catch(e){}},300);return;}
   openChat(cid);
   if(mid)setTimeout(()=>{try{jumpToMessage(mid);}catch(e){}},800);
 }
@@ -1538,6 +1540,7 @@ function mkBodyClick(e){
   if((el=tg.closest('.mk-foll'))){e.preventDefault();mkToggleFollow(el);return;}
   if((el=tg.closest('.mk-buy'))){e.preventDefault();mkBuy(el);return;}
   if((el=tg.closest('.mk-cmt'))){e.preventDefault();mkOpenPost(el.dataset.pid);return;}
+  if((el=tg.closest('.mk-share'))){e.preventDefault();mkSharePost(el.dataset.pid);return;}
   if((el=tg.closest('.mk-editpost'))){e.preventDefault();mkEditPost(el.dataset.pid);return;}
   if((el=tg.closest('.mk-editp'))){e.preventDefault();mkEditProduct(el.dataset.pid);return;}
   if((el=tg.closest('.mk-openp'))){mkOpenProduct(el.dataset.pid);return;}
@@ -1949,6 +1952,13 @@ function mkLightbox(url){
   ov.innerHTML=`<img src="${esc(url)}" alt="" style="max-width:100%;max-height:100%;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.6)"/><button type="button" aria-label="Close" style="position:absolute;top:16px;right:16px;width:40px;height:40px;border-radius:50%;border:none;background:rgba(255,255,255,.14);color:#fff;font-size:22px;cursor:pointer">&times;</button>`;
   ov.onclick=()=>{ov.remove();};
   document.body.appendChild(ov);
+}
+async function mkSharePost(id){
+  const link=location.origin+"/p/"+id;
+  try{if(navigator.share){await navigator.share({title:"DrFX Quant",text:"Check out this post on DrFX Quant",url:link});return;}}
+  catch(e){if(e&&e.name==="AbortError")return;}
+  try{await navigator.clipboard.writeText(link);showToast("Link copied",link);}
+  catch(_){prompt("Copy this link:",link);}
 }
 function mkOpenPost(id){
   modal('Post',(body,close)=>{

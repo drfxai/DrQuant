@@ -100,6 +100,9 @@ app.use("/api/chats", require("./routes/chats"));
 // Public, privacy-aware share landing for channel/group posts (no auth). Wrapped
 // so any problem here can never crash boot; must precede the SPA catch-all.
 try { app.use("/m", require("./routes/share")); } catch (e) { console.error("Share route disabled:", e.message); }
+// Public, privacy-aware share landing for Market/Explore posts (no auth). Same
+// boot-protection as /m; must precede the SPA catch-all.
+try { app.use("/p", require("./routes/share-post")); } catch (e) { console.error("Post share route disabled:", e.message); }
 app.use("/api/admin", require("./routes/admin"));
 app.use("/api/payment", require("./routes/payment"));
 app.use("/api/upload", require("./routes/upload"));
