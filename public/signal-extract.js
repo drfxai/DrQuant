@@ -219,8 +219,8 @@
     if (text == null) return null;
     var str = String(text).trim();
     if (!str || str.length > MAX_LEN) return null;
-    // Skip our own already-formatted signal messages (webhook/manual output).
-    if (/tradingview\s*signal/i.test(str) || /^📡/.test(str)) return null; // skip our own formatted signal posts
+    // Skip our own already-formatted signal messages (webhook/manual/bot output).
+    if (/tradingview\s*signal/i.test(str) || /^📡/.test(str) || /god\s*mode/i.test(str)) return null; // skip our own formatted signal / GOD MODE bot posts
 
     var toks = tokens(str);
 

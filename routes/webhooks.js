@@ -200,6 +200,36 @@ async function postRawTextToChannel(pool, io, chatId, text) {
   members.forEach((m) => io.to(`user_${m.user_id}`).emit("chat_message", payload));
 }
 
+// ── DRFX scoreboard tag ──────────────────────────────────────────────────────────
+// GOD MODE (and any bot) can append a hidden, machine-readable tag to an alert
+// body: [[DRFX]]{...json...}[[/DRFX]]. We parse it to drive the in-memory
+// scoreboard, then STRIP it before the text is posted to the channel, so the
+// channel/Telegram message is byte-for-byte unchanged.
+function extractDrfxTag(text) {
+  if (!text) return { clean: text, data: null };
+  const m = text.match(/\[\[DRFX\]\]([\s\S]*?)\[\[\/DRFX\]\]/);
+  if (!m) return { clean: text, data: null };
+  let data = null;
+  try { data = JSON.parse(m[1]); } catch { data = null; }
+  const clean = text.replace(/\s*\[\[DRFX\]\][\s\S]*?\[\[\/DRFX\]\]\s*/g, "").trim();
+  return { clean, data };
+}
+function feedScoreboardFromTag(data, chatId) {
+  if (!data || !data.event) return;
+  const ev = String(data.event).toLowerCase();
+  if (ev === "entry") {
+    scoreboard.ingestWebhook(
+      { symbol: data.symbol, side: data.direction, price: data.entry, stop_loss: data.sl, take_profit: data.tp1, timeframe: data.tf },
+      { extId: data.signal_id, chatId }
+    );
+  } else {
+    scoreboard.applyEvent({
+      signalId: data.signal_id, symbol: data.symbol, direction: data.direction,
+      event: data.event, price: data.price, result: data.result,
+    });
+  }
+}
+
 router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
   const pool = req.app.get("pool");
   const io = req.app.get("io");
@@ -310,9 +340,14 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
           return res.status(500).json({ error: "Webhook storage not ready (run migrations)" });
         }
         if (claimP.rowCount === 0) return res.status(202).json({ status: "duplicate_ignored" });
+        // Pull the hidden DRFX tag (if any) → feed the scoreboard → strip it so
+        // the posted channel message stays clean.
+        const drfx = extractDrfxTag(ptext);
+        try { feedScoreboardFromTag(drfx.data, tokenChatId); } catch (e) { /* scoreboard non-critical */ }
+        const bodyToPost = drfx.clean;
         try {
-          await postRawTextToChannel(pool, io, tokenChatId, ptext);
-          return res.status(201).json({ status: "published", mode: "passthrough" });
+          if (bodyToPost && bodyToPost.trim()) await postRawTextToChannel(pool, io, tokenChatId, bodyToPost);
+          return res.status(201).json({ status: "published", mode: "passthrough", posted: !!(bodyToPost && bodyToPost.trim()), scoreboard: drfx.data ? (drfx.data.event || true) : false });
         } catch (e) {
           console.error("[webhook] passthrough post error:", e.message);
           await pool.query(`UPDATE webhook_logs SET status='error', reason=$2 WHERE id=$1`, [claimP.rows[0].id, e.message]).catch(() => {});
@@ -470,6 +505,7 @@ router.post("/signal-update", express.json({ limit: "32kb" }), (req, res) => {
     direction: e.direction != null ? e.direction : e.side,
     event: e.event != null ? e.event : (e.type != null ? e.type : e.status),
     price: e.price,
+    result: e.result,
     ts: e.time != null ? e.time : e.timestamp,
   });
   try {

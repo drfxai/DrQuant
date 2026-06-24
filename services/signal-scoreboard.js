@@ -157,20 +157,22 @@ function findRecentOpen(symbol, direction) {
   }
   return best;
 }
-function applyKindToSig(sig, kind, ts, price) {
+function applyKindToSig(sig, kind, ts, price, result) {
   if (kind === "entry") { if (!sig.entryAt) sig.entryAt = ts; return true; }
   if (kind === "be") { sig.beAt = ts; return true; }
   if (sig.closed) return false; // already terminal — ignore further hits
   if (kind === "close") {
     sig.closed = true;
-    if (sig.status === "open") sig.status = sig.maxTp >= 1 ? "win" : "expired";
+    sig.status = result === "win" ? "win" : result === "loss" ? "loss" : (sig.maxTp >= 1 ? "win" : "expired");
     sig.resolvedAt = ts; if (price != null) sig.resolvedPrice = price;
     return true;
   }
   if (kind === "sl") {
     sig.slHit = true; sig.closed = true;
-    if (sig.maxTp >= 1) { sig.slAfterTp = true; if (sig.status === "open") sig.status = "win"; }
-    else sig.status = "loss";
+    if (result === "win") { sig.status = "win"; sig.slAfterTp = sig.maxTp >= 1; }
+    else if (result === "loss") { sig.status = "loss"; }
+    else if (sig.maxTp >= 1) { sig.slAfterTp = true; sig.status = "win"; }
+    else { sig.status = "loss"; }
     sig.resolvedAt = ts; if (price != null) sig.resolvedPrice = price;
     return true;
   }
@@ -178,8 +180,11 @@ function applyKindToSig(sig, kind, ts, price) {
   if (n >= 1 && n <= 3) {
     if (!sig.targets["tp" + n]) sig.targets["tp" + n] = ts;
     if (n > sig.maxTp) sig.maxTp = n;
-    if (sig.status === "open") { sig.status = "win"; sig.resolvedAt = ts; if (price != null) sig.resolvedPrice = price; }
-    if (n >= 3) sig.closed = true; // full target → terminal
+    if (n >= 3) { // full target → terminal
+      sig.closed = true;
+      sig.status = result === "loss" ? "loss" : "win";
+      sig.resolvedAt = ts; if (price != null) sig.resolvedPrice = price;
+    }
     return true;
   }
   return false;
@@ -198,8 +203,9 @@ function applyEvent(ev) {
   let ts = Date.now();
   if (ev.ts) { const t2 = new Date(ev.ts).getTime(); if (!isNaN(t2)) ts = t2; }
   const price = (ev.price != null && isFinite(Number(ev.price))) ? Number(ev.price) : null;
+  const result = ev.result ? String(ev.result).toLowerCase() : null;
   if (price != null) prices.set(sig.symbol, { price, at: Date.now() });
-  const applied = applyKindToSig(sig, kind, ts, price);
+  const applied = applyKindToSig(sig, kind, ts, price, result);
   return { matched: true, applied, id: sig.id, ext_id: sig.extId || null, event: kind, status: sig.status, max_tp: sig.maxTp, closed: !!sig.closed };
 }
 

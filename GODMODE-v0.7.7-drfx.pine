@@ -1,0 +1,2236 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © DrPouria
+
+//@version=5
+
+// ╔═══════════════════════════════════════════════════════════════════════════╗
+// ║                                                                           ║
+// ║   ⚡ GOD MODE v0.7.7 - QUAD CONSENSUS TRADING SYSTEM ⚡                  ║
+// ║                                                                           ║
+// ║   A sophisticated multi-system consensus indicator that combines          ║
+// ║   four independent trading algorithms to generate high-probability        ║
+// ║   trading signals with built-in risk management.                          ║
+// ║                                                                           ║
+// ╠═══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                           ║
+// ║   SYSTEMS INCLUDED:                                                       ║
+// ║   ├─ 🧠 AtroNox AI    : Bollinger Band breakout system with trend         ║
+// ║   │                     detection and multi-filter options                ║
+// ║   ├─ 🦅 RAPTOR Pro    : SuperTrend-based momentum system with             ║
+// ║   │                     EMA cloud and reversal detection                  ║
+// ║   ├─ 🎯 Scalper X     : Fast SuperTrend scalping system with              ║
+// ║   │                     ADX-based market condition detection              ║
+// ║   └─ 🏆 Elite Algo    : Range filter system for trend confirmation        ║
+// ║                                                                           ║
+// ╠═══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                           ║
+// ║   HOW IT WORKS:                                                           ║
+// ║   • Each system independently analyzes the market                         ║
+// ║   • GOD MODE signal triggers when minimum systems agree                   ║
+// ║   • Signal strength calculated from consensus + market conditions         ║
+// ║   • ATR-based targets (TP1, TP2, TP3) and stop loss auto-calculated       ║
+// ║   • Performance tracking with win/loss statistics                         ║
+// ║                                                                           ║
+// ╠═══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                           ║
+// ║   WIN/LOSS LOGIC:                                                         ║
+// ║   • TP3 Hit           → WIN (trade closed at full target)                 ║
+// ║   • TP2 Hit → then SL → WIN (secured profits at TP2)                      ║
+// ║   • TP1 Hit → then SL → LOSS (insufficient profit)                        ║
+// ║   • No TP → SL        → LOSS (stopped out)                                ║
+// ║                                                                           ║
+// ║   NOTE: When both TP and SL levels are breached on the same candle,       ║
+// ║   the stop loss is evaluated first (worst-case assumption).               ║
+// ║                                                                           ║
+// ║   NOTE: Entry is taken at bar close. TP/SL evaluation begins on the       ║
+// ║   bar AFTER entry — the entry bar's own high/low printed before the       ║
+// ║   entry existed and is never used (no lookahead).                         ║
+// ║                                                                           ║
+// ╠═══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                           ║
+// ║   QUICK START:                                                            ║
+// ║   1. Select a Configuration Preset (Conservative/Balanced/Aggressive)     ║
+// ║   2. Enable/disable individual systems as needed                          ║
+// ║   3. Adjust risk management settings (TP/SL multipliers)                  ║
+// ║   4. Set up alerts for GOD MODE signals                                   ║
+// ║                                                                           ║
+// ╠═══════════════════════════════════════════════════════════════════════════╣
+// ║                                                                           ║
+// ║   RECOMMENDED SETTINGS:                                                   ║
+// ║   • Timeframes: 15m, 1H, 4H (best results)                                ║
+// ║   • Markets: Forex, Crypto, Indices, Commodities                          ║
+// ║   • Min Systems: 2-3 for more signals, 4 for highest quality              ║
+// ║   • Signal Strength: 60%+ recommended                                     ║
+// ║                                                                           ║
+// ╚═══════════════════════════════════════════════════════════════════════════╝
+//
+// ⚠️ DISCLAIMER:
+// This indicator is for educational and informational purposes only.
+// It does not constitute financial advice. Trading involves substantial
+// risk of loss. Past performance is not indicative of future results.
+// Always conduct your own analysis and use proper risk management.
+// Never risk more than you can afford to lose.
+//
+// 📝 CHANGELOG:
+// v0.7.7 - DrFX Quant scoreboard integration (no visual/logic change)
+//        - ADDED: A unique per-trade id (godTradeId) is stamped at entry from
+//          syminfo.ticker + the entry bar's time, and the id of a trade closed
+//          by replacement / invalidation / trailing stop is preserved
+//          (closedTradeId) so its closing alert carries the correct id.
+//        - ADDED: Every trade-relevant alert (entry long/short, TP1, TP2, TP3,
+//          SL, trailing-stop, invalidation, replacement) now appends a hidden,
+//          machine-readable tag of the form [[DRFX]]{...json...}[[/DRFX]] after
+//          the version footer. The DrFX Quant server parses this tag to drive
+//          its live signal scoreboard, then STRIPS it before posting, so the
+//          Telegram / channel message is byte-for-byte unchanged. Entry tags
+//          carry the full level set + verdict-bearing terminal events (the
+//          server trusts the indicator's own TP2=win rule). Individual-system
+//          alerts are deliberately left untagged (they are not trades).
+//        - No indicator math, inputs, plots, dashboard, or alert *text* were
+//          changed in this release. Bumped shorttitle to v0.7.7.
+//
+// v0.7.6 - Consensus & scoring honesty pass
+//        - FIXED: Signal-strength trend term was a flat +20 on nearly every
+//          signal (atronoxTrend is ±1 after the first band touch) and did not
+//          check direction — a counter-trend short scored the same bonus as a
+//          with-trend long. The bonus is now awarded only when the trend
+//          agrees with the signal's direction. NOTE: this can lower some
+//          scores below the Minimum Signal Strength threshold, so expect
+//          slightly fewer (and better-aligned) signals than v0.7.5.
+//        - FIXED: A single system that whipsawed (fired long then short, or
+//          vice-versa, inside one lookback window) was counted on BOTH the
+//          long and short consensus tallies. Each system now contributes to at
+//          most one side — whichever direction it signalled most recently.
+//        - CHANGED: The dashboard performance block is relabelled
+//          "SESSION TALLY (not a track record)". The win/loss counts are a
+//          live tally accumulated from the history currently loaded on the
+//          chart since the script was added; they are NOT a verified backtest
+//          and depend on timeframe, loaded bars, and settings. See the release
+//          notes regarding performance claims before publishing.
+//
+// v0.7.5 - Backtest integrity & signal-channel reliability release
+//        - FIXED (critical): Entry-bar lookahead — TP/SL checks ran on the
+//          entry bar against highs/lows that printed BEFORE the close-based
+//          entry existed, inflating win statistics. Trade management now
+//          begins on the bar after entry (godEntryBar guard).
+//        - FIXED (critical): Entry alerts now use alert.freq_once_per_bar_close.
+//          Previously, intrabar consensus that disappeared by bar close still
+//          sent Telegram signals that never appeared on the chart or in the
+//          stats. TP/SL hit alerts remain once_per_bar (a level touch is real
+//          and should be reported immediately).
+//        - FIXED (critical): A new GOD MODE signal arriving while a trade was
+//          still open silently destroyed the open trade — it was never counted
+//          as a win or loss, so totalSignals drifted away from W+L. Open
+//          trades are now resolved by the TP2 rule and announced via a
+//          "♻️ TRADE CLOSED — NEW SIGNAL" alert before being replaced.
+//        - FIXED (critical): Dashboard table is now cleared on each render.
+//          Stale "ACTIVE TRADE" rows previously remained visible after a
+//          trade closed and the layout shrank.
+//        - ADDED: Close alerts for trailing-stop exits and signal
+//          invalidation (previously these closed trades silently — channel
+//          subscribers received an entry signal and then nothing).
+//        - FIXED: Trailing stop lookahead — the stop was raised using the
+//          current bar's high and the SAME bar's low was then tested against
+//          the freshly raised stop. Exits are now tested against the prior
+//          stop before it is moved; no exit check on the activation bar.
+//        - FIXED: Same-bar dual consensus tiebreak — when both directions
+//          reach consensus on one bar, the side with more agreeing systems
+//          wins (short no longer wins purely by code order; ties favor long).
+//        - FIXED: A signal can no longer be invalidated on its own entry bar.
+//        - CHANGED: Custom default targets aligned with the Balanced preset
+//          (TP3 5.0, SL 1.0 ATR). The previous Custom SL default of 8.0 ATR
+//          contradicted the documentation and produced inverted risk geometry.
+//        - CHANGED: Minimum Systems Required is auto-clamped to the number of
+//          currently enabled systems — the Conservative preset (4 systems) no
+//          longer produces zero signals while AtroNox ships disabled.
+//        - CHANGED: Pip factor now auto-derives from the symbol's mintick
+//          (10 ticks = 1 pip convention) with a manual override; moved into
+//          the Risk Management group (was hardcoded for XAUUSD in a stray
+//          "Targets" group).
+//        - REMOVED dead compute: unused EMA-high array (4 EMAs), 16-element
+//          SMA array (only SMA-9 was read), unused minor TP signal and its
+//          constants, fixed-value scalper sensitivity var, unused ocAvg and
+//          color constants.
+//        - CLEANED: removed deprecated transp= argument on Elite filter plot,
+//          removed redundant Elite bar-color toggle (mode selector is enough),
+//          dashboard entry price now uses chart precision (format.mintick),
+//          corrected shorttitle version string (was v0.7.41).
+//
+// v0.7.4 - Input validation hotfix
+//        - Removed runtime.error for TP order validation — it fired on every
+//          bar, so any mid-edit transient state (e.g. typing a new TP2 value
+//          before TP3 is updated) caused an immediate script crash.
+//        - Removed runtime.error for SL >= TP1 validation (same reason, and
+//          wide-SL / tight-TP1 setups are legitimate in certain strategies).
+//        - Replaced both with silent clamping: TP2 is auto-floored to
+//          TP1 + 0.1 ATR, TP3 auto-floored to TP2 + 0.1 ATR. Values on
+//          chart always remain geometrically valid without ever erroring.
+//        - No logic or visual changes beyond validation handling.
+//
+// v0.7.3 - Public release hardening
+//        - Fixed critical bug: TP/SL alert direction strings showing "—"
+//          Added godLastDirection variable cached at signal creation time.
+//        - Fixed: Signal invalidation now resets all TP/SL hit flags.
+//        - Removed dead code: cleanupTrade() stub function.
+//        - Removed unused variables: sma4/5_strongScalper, isNormal.
+//        - Added na() guard on volatilityRatio division.
+//        - Added na() guard on dashboard calcRisk division.
+//        - Updated all individual alert footers to v0.7.3.
+//
+// v0.7.2 - Telegram Signal Channel Integration
+//        - Reformatted all alert() messages for Telegram readability
+//        - Professional signal layout with emoji structure
+//        - TP/SL hit alerts include trade context
+//        - Individual system alerts with clean formatting
+//        - Added system breakdown to GOD MODE signal alerts
+//
+// v0.7.1 - Bug fixes & public release preparation
+//        - Fixed duplicate title parameter in RAPTOR Reversal input
+//        - Fixed tp_sell/tp_buy signal variables to reset per bar
+//        - Removed unused variables (pivotHigh/Low, rr1/rr3 in alerts)
+//        - Updated deprecated input() calls to input.bool()/input.source()
+//        - Removed unimplemented Order Block and S/R inputs
+//        - Unified barcolor() into single priority-based call
+//        - Removed precision=0 to use chart default precision
+//        - Added same-bar TP/SL conflict documentation
+//        - Replaced signalInWindow() with explicit var tracking
+//
+// v0.7 - Quad Consensus System with enhanced dashboard
+//      - Added 4-system consensus logic
+//      - Signal strength calculation
+//      - Volatility filtering
+//      - Performance tracking
+//      - Multiple dashboard themes
+//      - Trailing stop functionality
+//
+// ═══════════════════════════════════════════════════════════════════════════
+
+indicator("GOD MODE - Quad Consensus",
+  shorttitle="⚡GOD MODE v0.7.7⚡",
+  overlay=true,
+  max_bars_back=3000,
+  max_labels_count=500,
+  max_lines_count=500,
+  max_boxes_count=500,
+  explicit_plot_zorder=true)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚙️ QUICK SETUP - CONFIGURATION PRESETS
+// ═══════════════════════════════════════════════════════════════════════════
+
+presetMode = input.string("Custom", "📋 Configuration Preset",
+     options=["Custom", "Conservative", "Balanced", "Aggressive", "Scalping"],
+     group='⚙️ QUICK SETUP',
+     tooltip='Select a preset to automatically configure settings:\n\n• Conservative: High quality signals, wider stops, requires all 4 systems\n• Balanced: Standard settings, requires 3 systems\n• Aggressive: More signals, tighter stops\n• Scalping: Quick trades, small targets, requires 2 systems\n• Custom: Manual configuration')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚡ GOD MODE CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+godModeEnabled = input.bool(true, title='✨ Enable GOD Mode Signals', group='🔥 GOD MODE SETTINGS',
+     tooltip='Master switch for consensus signals. When enabled, shows signals only when multiple systems agree on direction.')
+
+godModeWindow_input = input.int(10, title='📊 Consensus Window (Candles)', minval=3, maxval=10, group='🔥 GOD MODE SETTINGS',
+     tooltip='Number of candles to look back for signal consensus. Larger window = more flexible timing but potentially delayed signals.')
+
+godModeMinSystems_input = input.int(2, title='🎯 Minimum Systems Required', minval=1, maxval=4, group='🔥 GOD MODE SETTINGS',
+     tooltip='Minimum number of systems that must agree for a GOD MODE signal:\n• 2 = More signals, lower quality\n• 3 = Balanced approach\n• 4 = Highest quality, fewer signals\n\nNote: automatically clamped to the number of currently ENABLED systems.')
+
+minSignalStrength_input = input.float(60.0, "💪 Minimum Signal Strength %", minval=0, maxval=100, step=5, group='🔥 GOD MODE SETTINGS',
+     tooltip='Minimum quality score for signals (0-100). Higher values = fewer but better quality signals. Considers system count, volatility, RSI, and trend.')
+
+showIndividualSignals = input.bool(false, title='📌 Show Individual System Signals', group='🔥 GOD MODE SETTINGS',
+     tooltip='Display signals from each individual system on the chart. Useful for analysis but can clutter the chart.')
+
+// Apply presets
+int godModeWindow     = presetMode == "Conservative" ? 3 : presetMode == "Balanced" ? 5 : presetMode == "Aggressive" ? 7 : presetMode == "Scalping" ? 4 : godModeWindow_input
+// [v0.7.5] Made the Aggressive branch explicit — it previously resolved to 3
+//          only by falling through to the trailing default, which was fragile.
+int godModeMinSystems = presetMode == "Conservative" ? 4 : presetMode == "Balanced" ? 3 : presetMode == "Aggressive" ? 3 : presetMode == "Scalping" ? 2 : godModeMinSystems_input
+float minSignalStrength = presetMode == "Conservative" ? 70.0 : presetMode == "Balanced" ? 60.0 : presetMode == "Aggressive" ? 50.0 : presetMode == "Scalping" ? 55.0 : minSignalStrength_input
+
+useVolatilityFilter = input.bool(true, "🌊 Volatility Filter", group='🔥 GOD MODE SETTINGS', inline='vol1',
+     tooltip='Filter signals based on market volatility. Helps avoid trading in unfavorable conditions.')
+minVolatility = input.float(0.8, "Min", group='🔥 GOD MODE SETTINGS', inline='vol1', tooltip='Minimum ATR ratio - avoid low volatility')
+maxVolatility = input.float(2.5, "Max", group='🔥 GOD MODE SETTINGS', inline='vol1', tooltip='Maximum ATR ratio - avoid extreme volatility')
+
+useSignalTimeout = input.bool(true, "⏱️ Signal Invalidation", group='🔥 GOD MODE SETTINGS', inline='timeout',
+     tooltip='Invalidate position if opposing signal appears. Helps exit trades when market direction changes.')
+signalTimeout = input.int(10, "bars", minval=3, maxval=30, group='🔥 GOD MODE SETTINGS', inline='timeout')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯 RISK MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+godTargetsEnabled = input.bool(true, title='🎯 Enable Target System', group='🎯 RISK MANAGEMENT',
+     tooltip='Show ATR-based take profit levels and stop loss on chart.')
+
+godTargetATRLength = input.int(14, title='ATR Period', minval=1, group='🎯 RISK MANAGEMENT',
+     tooltip='ATR calculation period for targets. Standard is 14.')
+
+godTP1_Multiplier_input = input.float(1.5, title='🥉 Target 1 (ATR)', minval=0.1, step=0.1, group='🎯 RISK MANAGEMENT',
+     tooltip='First take profit level. Conservative target for partial profits.')
+
+godTP2_Multiplier_input = input.float(3.0, title='🥈 Target 2 (ATR)', minval=0.2, step=0.1, group='🎯 RISK MANAGEMENT',
+     tooltip='Second take profit level. Moderate target - reaching this counts as WIN even if stopped out after.')
+
+// [v0.7.5] Custom defaults aligned with the Balanced preset (TP3 was 8.0).
+godTP3_Multiplier_input = input.float(8.0, title='🥇 Target 3 (ATR)', minval=0.3, step=0.5, group='🎯 RISK MANAGEMENT',
+     tooltip='Full take profit level. Aggressive target for maximum gains.')
+
+// [v0.7.5] Default was 8.0 ATR — wider than TP3 and contradicting the docs.
+//          Tooltip reworded: since v0.7.4 SL >= TP1 is allowed (clamping
+//          removed the hard validation), but it produces poor risk geometry.
+godSL_Multiplier_input = input.float(8.0, title='🛡️ Stop Loss (ATR)', minval=0.1, step=0.1, group='🎯 RISK MANAGEMENT',
+     tooltip='Stop loss distance from entry in ATR multiples. Values larger than TP1 are allowed but produce poor risk:reward geometry — review the R:R shown on the dashboard before trading.')
+
+// Apply presets to targets
+float godTP1_Multiplier = presetMode == "Conservative" ? 2.0 : presetMode == "Balanced" ? 1.5 : presetMode == "Aggressive" ? 1.2 : presetMode == "Scalping" ? 0.8 : godTP1_Multiplier_input
+float godTP2_Multiplier = presetMode == "Conservative" ? 4.0 : presetMode == "Balanced" ? 3.0 : presetMode == "Aggressive" ? 2.5 : presetMode == "Scalping" ? 1.5 : godTP2_Multiplier_input
+float godTP3_Multiplier = presetMode == "Conservative" ? 6.0 : presetMode == "Balanced" ? 5.0 : presetMode == "Aggressive" ? 4.0 : presetMode == "Scalping" ? 2.5 : godTP3_Multiplier_input
+float godSL_Multiplier  = presetMode == "Conservative" ? 1.5 : presetMode == "Balanced" ? 1.0 : presetMode == "Aggressive" ? 0.8 : presetMode == "Scalping" ? 0.5 : godSL_Multiplier_input
+
+// ── Ensure valid target ordering via silent clamping ──────────────────────
+// [v0.7.4] Replaced runtime.error with clamping. runtime.error fires on
+//          every bar, so any mid-edit transient invalid state caused a crash.
+//          Clamping silently enforces TP1 < TP2 < TP3 without ever erroring.
+float safeTP1 = godTP1_Multiplier
+float safeTP2 = math.max(godTP2_Multiplier, safeTP1 + 0.1)
+float safeTP3 = math.max(godTP3_Multiplier, safeTP2 + 0.1)
+godTP1_Multiplier := safeTP1
+godTP2_Multiplier := safeTP2
+godTP3_Multiplier := safeTP3
+
+godSLEnabled = input.bool(true, "🛡️ Enable Stop Loss", group='🎯 RISK MANAGEMENT',
+     tooltip='⚠️ DISABLING STOP LOSS IS NOT RECOMMENDED! Only disable for backtesting purposes.')
+
+useTrailingStop = input.bool(false, "🔒 Enable Trailing Stop", group='🎯 RISK MANAGEMENT',
+     tooltip='Activate trailing stop after price moves favorably. Locks in profits as trade moves in your favor.')
+
+trailActivation = input.float(3.5, "Trail Activation (ATR)", minval=0.5, step=0.1, group='🎯 RISK MANAGEMENT',
+     tooltip='Price must move this far in profit before trailing activates.')
+
+trailDistance = input.float(3.0, "Trail Distance (ATR)", minval=0.3, step=0.1, group='🎯 RISK MANAGEMENT',
+     tooltip='Distance to maintain behind price once trailing is active.')
+
+showTargetLines  = input.bool(true,  title='Show Target Lines',   group='🎯 RISK MANAGEMENT', inline='visual1')
+showTargetLabels = input.bool(true,  title='Show Labels',         group='🎯 RISK MANAGEMENT', inline='visual1')
+extendTargetLines = input.bool(false, title='Extend Lines Right',  group='🎯 RISK MANAGEMENT')
+
+targetLineStyle = input.string('Dotted', title='Line Style', options=['Solid', 'Dashed', 'Dotted'], group='🎯 RISK MANAGEMENT')
+targetLineWidth = input.int(1, title='Line Width', minval=1, maxval=4, group='🎯 RISK MANAGEMENT')
+
+// ---- Pip Conversion ----
+// [v0.7.5] Auto-derived from the symbol's mintick using the standard
+//          "10 ticks = 1 pip" convention (correct for forex and metals;
+//          equivalent to points/10 elsewhere). Previously hardcoded for
+//          XAUUSD in a stray "Targets" settings group.
+autoPipFactor = input.bool(true, "Auto Pip Factor (10 ticks = 1 pip)", group='🎯 RISK MANAGEMENT',
+     tooltip='Derive pip size from the symbol automatically. Disable to use the manual factor below.')
+pipFactorManual = input.float(10.0, "Manual Pip Factor", minval=0.0001, group='🎯 RISK MANAGEMENT',
+     tooltip='Used only when Auto Pip Factor is off.\nExamples: XAUUSD = 10, EURUSD = 10000, USDJPY = 100.')
+
+colorTP1   = input.color(color.new(#00ff00, 20), title='TP1',       group='🎯 RISK MANAGEMENT', inline='colors1')
+colorTP2   = input.color(color.new(#ffff00, 20), title='TP2',       group='🎯 RISK MANAGEMENT', inline='colors1')
+colorTP3   = input.color(color.new(#ff6600, 20), title='TP3',       group='🎯 RISK MANAGEMENT', inline='colors2')
+colorEntry = input.color(color.new(#ffffff, 30), title='Entry',     group='🎯 RISK MANAGEMENT', inline='colors2')
+colorSL    = input.color(color.new(#ff0000, 20), title='Stop Loss', group='🎯 RISK MANAGEMENT', inline='colors3')
+colorTrail = input.color(color.new(#ff9900, 30), title='Trail Stop',group='🎯 RISK MANAGEMENT', inline='colors3')
+
+alertOnTP1 = input.bool(true, title='Alert TP1', group='🎯 RISK MANAGEMENT', inline='alerts1')
+alertOnTP2 = input.bool(true, title='Alert TP2', group='🎯 RISK MANAGEMENT', inline='alerts1')
+alertOnTP3 = input.bool(true, title='Alert TP3', group='🎯 RISK MANAGEMENT', inline='alerts2')
+alertOnSL  = input.bool(true, title='Alert SL',  group='🎯 RISK MANAGEMENT', inline='alerts2')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧠 ATRONOX SYSTEM SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+atronoxEnabled = input.bool(false, title='✅ Enable AtroNox System', group='🧠 ATRONOX SETTINGS',
+     tooltip='Bollinger Band breakout system with trend detection. Uses price breakouts above/below bands to identify trend changes.')
+
+showAtronoxLongSignals  = input.bool(true, title='Long Signals',  group='🧠 ATRONOX SETTINGS', inline='atronox1')
+showAtronoxShortSignals = input.bool(true, title='Short Signals', group='🧠 ATRONOX SETTINGS', inline='atronox1')
+
+selectedFilterAtronox = input.string('No Filtering', title='Market Filter',
+     options=['Filter with ATR', 'Filter with RSI', 'ATR or RSI', 'ATR and RSI', 'No Filtering', 'Entry Only in Flat Market (ATR or RSI)', 'Entry Only in Flat Market (ATR and RSI)'],
+     group='🧠 ATRONOX SETTINGS',
+     tooltip='Additional filtering for entry conditions based on ATR and/or RSI.')
+
+atronoxSensitivity = input.int(100, minval=1, title='Sensitivity', group='🧠 ATRONOX SETTINGS',
+     tooltip='Bollinger Band period. Higher = smoother, lower = more responsive.')
+
+atronoxOffset = input.float(1.5, step=0.01, minval=0.01, title='Offset', group='🧠 ATRONOX SETTINGS',
+     tooltip='Bollinger Band standard deviation multiplier.')
+
+rsiPeriodAtronox    = input.int(7,  title='RSI Period', group='🧠 ATRONOX SETTINGS')
+rsiUpperLimitAtronox = input.int(45, title='RSI Upper', group='🧠 ATRONOX SETTINGS', inline='rsi1')
+rsiLowerLimitAtronox = input.int(10, title='Lower',     group='🧠 ATRONOX SETTINGS', inline='rsi1')
+
+atrLengthAtronox   = input.int(5, minval=1, title='ATR Length',  group='🧠 ATRONOX SETTINGS')
+atrMaTypeAtronox   = input.string('EMA', options=['SMA', 'EMA'], title='ATR MA Type', group='🧠 ATRONOX SETTINGS', inline='atr1')
+atrMaLengthAtronox = input.int(5, minval=1, title='MA Length',   group='🧠 ATRONOX SETTINGS', inline='atr1')
+
+showBandsAtronox    = input.bool(false, title='Show Bollinger Bands', group='🧠 ATRONOX SETTINGS', inline='visual1')
+showTrendLineAtronox = input.bool(false, title='Show Trend Line',     group='🧠 ATRONOX SETTINGS', inline='visual1')
+showZonesAtronox    = input.bool(false, title='Show Trading Zones',   group='🧠 ATRONOX SETTINGS')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🦅 RAPTOR SYSTEM SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+raptorEnabled = input.bool(true, title='✅ Enable RAPTOR System', group='🦅 RAPTOR SETTINGS',
+     tooltip='SuperTrend-based momentum system. Identifies trend changes when price crosses the SuperTrend line with SMA confirmation.')
+
+sensitivityRaptor = input.float(6.5, "SuperTrend Sensitivity", 0.5, 12, step=0.05, group='🦅 RAPTOR SETTINGS',
+     tooltip='SuperTrend ATR multiplier. Higher = fewer signals, lower = more signals.')
+
+showSMARaptor      = input.bool(false, 'SMA Bands',      inline='raptor1', group='🦅 RAPTOR SETTINGS')
+majRaptor          = input.bool(false, 'TP Points',      inline='raptor1', group='🦅 RAPTOR SETTINGS')
+showEMARaptor      = input.bool(false, 'EMA Cloud',      inline='raptor2', group='🦅 RAPTOR SETTINGS')
+enableReversalRaptor = input.bool(false, 'Reversal Signal', inline='raptor2', group='🦅 RAPTOR SETTINGS')
+show_haRaptor      = input.bool(false, 'Trend Tracker',  inline='raptor3', group='🦅 RAPTOR SETTINGS')
+enableSRRaptor     = input.bool(false, 'S/R Levels',     inline='raptor3', group='🦅 RAPTOR SETTINGS')
+Show_TBORaptor     = input.bool(false, 'Show TBO',       inline='raptor4', group='🦅 RAPTOR SETTINGS')
+Show_SuperIchiRaptor = input.bool(false, 'SuperIchi Cloud', inline='raptor4', group='🦅 RAPTOR SETTINGS')
+
+BLuERaptor  = input.color(color.rgb(95,155,245,0),   'Up Trend',   group='🦅 RAPTOR - SMA Settings', inline='sma1')
+GRayRaptor  = input.color(color.rgb(160,165,185,0),  'Down Trend', group='🦅 RAPTOR - SMA Settings', inline='sma1')
+BFiLLRaptor = input.color(color.rgb(95,155,245,60),  'Up Fill',    group='🦅 RAPTOR - SMA Settings', inline='sma2')
+GFiLLRaptor = input.color(color.rgb(160,165,185,40), 'Down Fill',  group='🦅 RAPTOR - SMA Settings', inline='sma2')
+
+fastLenRaptor    = input.int(34, 'Fast EMA Length', group='🦅 RAPTOR - EMA Cloud', minval=1)
+slowLenRaptor    = input.int(63, 'Slow EMA Length', group='🦅 RAPTOR - EMA Cloud', minval=1)
+emaFastColorRaptor = input.color(color.blue,   'Fast EMA Color', group='🦅 RAPTOR - EMA Cloud')
+emaSlowColorRaptor = input.color(color.orange, 'Slow EMA Color', group='🦅 RAPTOR - EMA Cloud')
+
+custom_tboRaptor  = input.bool(false, "Enable Custom Periods", group="🦅 RAPTOR - TBO Settings")
+tbo_fastRaptor    = input.int(20,  "TBO Fast EMA",   1, group="🦅 RAPTOR - TBO Settings")
+tbo_mediumRaptor  = input.int(40,  "TBO Medium EMA", 2, group="🦅 RAPTOR - TBO Settings")
+tbo_medfastRaptor = input.int(50,  "TBO Med-Fast SMA", 3, group="🦅 RAPTOR - TBO Settings")
+tbo_slowRaptor    = input.int(150, "TBO Slow SMA",   4, group="🦅 RAPTOR - TBO Settings")
+
+use_rsiRaptor          = input.bool(false,        "Enable RSI Filter",  group="🦅 RAPTOR - TBO RSI")
+short_rsi_levelRaptor  = input.int(70,  "Short RSI Level", 1, 100, group="🦅 RAPTOR - TBO RSI")
+short_comparisonRaptor = input.string("Greater Than", "Short Condition", ["Greater Than", "Less Than"], group="🦅 RAPTOR - TBO RSI")
+long_rsi_levelRaptor   = input.int(30,  "Long RSI Level",  1, 100, group="🦅 RAPTOR - TBO RSI")
+long_comparisonRaptor  = input.string("Less Than",    "Long Condition",  ["Greater Than", "Less Than"], group="🦅 RAPTOR - TBO RSI")
+rsi_periodRaptor       = input.int(14,  "RSI Period", 1, group="🦅 RAPTOR - TBO RSI")
+
+reversal_sensitivityRaptor  = input.int(14, title="Reversal Sensitivity", minval=1, group="🦅 RAPTOR - Reversal")
+reversal_down_levelRaptor   = input.int(75, 'Reversal Down Level', group='🦅 RAPTOR - Reversal')
+reversal_up_levelRaptor     = input.int(25, 'Reversal Up Level',   group='🦅 RAPTOR - Reversal')
+
+sr_strengthRaptor    = input.int(4, "S/R Strength", 1, group="🦅 RAPTOR - S/R")
+line_style_srRaptor  = input.string("Solid", "Line Style", ["Solid", "Dotted", "Dashed"], group="🦅 RAPTOR - S/R")
+use_zones_srRaptor   = input.bool(true, "Show S/R Zones", group="🦅 RAPTOR - S/R")
+
+macd_fastRaptor   = input.int(12, "MACD Fast Length",  group="🦅 RAPTOR - Candle Color")
+macd_slowRaptor   = input.int(26, "MACD Slow Length",  group="🦅 RAPTOR - Candle Color")
+macd_sourceRaptor = input.source(close, "MACD Source", group="🦅 RAPTOR - Candle Color")
+macd_signalRaptor = input.int(9,  "Signal Smoothing", 1, 50, group="🦅 RAPTOR - Candle Color")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯 SCALPER SYSTEM SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+scalperEnabled = input.bool(true, title='✅ Enable Scalper System', group='🎯 SCALPER SETTINGS',
+     tooltip='Fast SuperTrend scalping system. Designed for quick entries with ADX-based sideways market detection.')
+
+nbuysellScalper = input.bool(true, 'Show Signals', group='🎯 SCALPER SETTINGS')
+
+sidewaysThresholdScalper = input.int(15, 'ADX Sideways Threshold', minval=2, group='🎯 SCALPER SETTINGS',
+     tooltip='ADX level below which market is considered sideways. Bars turn purple in sideways markets.')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏆 ELITE ALGO SYSTEM SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+eliteEnabled = input.bool(true, title='✅ Enable Elite Algo System', group='🏆 ELITE ALGO SETTINGS',
+     tooltip='Range filter system for trend confirmation. Uses dynamic range calculations to identify trend direction changes.')
+
+rng_src = input.source(defval=close, title='Swing Source', group='🏆 ELITE ALGO SETTINGS')
+rng_per = input.int(defval=200, minval=1, title='Swing Period', group='🏆 ELITE ALGO SETTINGS',
+     tooltip='Lookback period for range calculation. Higher = smoother.')
+
+rng_qty = input.float(defval=7.5, minval=0.0000001, title='Swing Multiplier', group='🏆 ELITE ALGO SETTINGS',
+     tooltip='Range multiplier. Higher = wider range, fewer signals.')
+
+showEliteFilter    = input.bool(false, title='Show Range Filter Line',  group='🏆 ELITE ALGO SETTINGS')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎨 BAR COLOR SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+// [v0.7.5] Removed the redundant Elite "Bar Colors On/Off" toggle — selecting
+//          "Elite Algo" here is sufficient (previously BOTH switches were
+//          required, which was confusing).
+barColorMode = input.string("Scalper Trend", "Bar Color Priority",
+     options=["Scalper Trend", "RAPTOR MACD", "Elite Algo", "None"],
+     group='🎨 BAR COLORS',
+     tooltip='Select which system controls bar coloring.\n• Scalper Trend: Green/Red trend + Purple sideways\n• RAPTOR MACD: MACD-based momentum colors\n• Elite Algo: Range filter trend colors\n• None: Default chart colors')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📲 DASHBOARD SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+dashboardEnabled = input.bool(true, '📲 Show Dashboard', group='📲 DASHBOARD',
+     tooltip='Display the information dashboard with system status and performance stats.')
+
+dashboardLocation = input.string("Top Right", "Position", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group='📲 DASHBOARD')
+
+dashboardMode = input.string("Normal", "Display Mode", options=["Compact", "Normal"], group='📲 DASHBOARD',
+     tooltip='Compact = Mobile-friendly minimal view, Normal = Full information display')
+
+dashboardSize = input.string("Small", "Dashboard Size", options=["Small", "Normal", "Large"], group='📲 DASHBOARD')
+
+dashboardTransparency = input.int(15, "Background Transparency", minval=0, maxval=100, group='📲 DASHBOARD',
+     tooltip='0 = Solid background, 100 = Fully transparent')
+
+dashboardStyle = input.string("Dark Pro", "Theme", options=["Dark Pro", "Light", "Neon"], group='📲 DASHBOARD',
+     tooltip='Dashboard color theme to match your chart style')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔔 ALERT SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════
+
+alertEnabled = input.bool(true, title='🔔 Enable Alerts', group='🔔 ALERT SETTINGS',
+     tooltip='Enable alert notifications for GOD MODE signals and target hits.\n\n[v0.7.5] Entry signals fire on BAR CLOSE (no intrabar repaint). TP/SL hit alerts fire immediately when a level is touched.')
+
+alertIndividualSystems = input.bool(false, title='Alert Individual Systems', group='🔔 ALERT SETTINGS',
+     tooltip='Also send alerts for individual system signals (AtroNox, RAPTOR, Scalper, Elite).')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🛠️ HELPER FUNCTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+getLineStyle() =>
+    targetLineStyle == 'Solid' ? line.style_solid : targetLineStyle == 'Dashed' ? line.style_dashed : line.style_dotted
+
+createTargetLine(level, lineColor) =>
+    line.new(bar_index, level, bar_index + 1, level,
+             xloc=xloc.bar_index,
+             extend=extendTargetLines ? extend.right : extend.none,
+             color=lineColor,
+             style=getLineStyle(),
+             width=targetLineWidth)
+
+createTargetLabel(level, labelText, labelColor, txtColor = color.black) =>
+    label.new(bar_index, level,
+              text=labelText,
+              style=label.style_label_right,
+              color=labelColor,
+              textcolor=txtColor,
+              size=size.small)
+
+// [v0.7.5] Pip factor auto-derivation (see input tooltip above).
+float effectivePipFactor = autoPipFactor and syminfo.mintick > 0 ? 0.1 / syminfo.mintick : pipFactorManual
+toPips(priceDelta) =>
+    math.round(math.abs(priceDelta) * effectivePipFactor)
+
+// [v0.7.6] Added `dir` (+1 long / -1 short). The trend bonus is now awarded
+//          only when the AtroNox trend AGREES with the signal direction.
+//          Previously the term was `trendValue == 1 or trendValue == -1`,
+//          which is true on essentially every bar (atronoxTrend settles to ±1
+//          after the first band touch) — so it added a flat +20 to every
+//          signal regardless of direction, contributing nothing to ranking
+//          and rating counter-trend shorts identically to with-trend longs.
+//          NOTE: the volatility/RSI inputs are AtroNox's ATR(5)/RSI(7); they
+//          feed the score even when AtroNox is disabled as a system. This is
+//          intentional (they are GOD MODE's market-context proxy), but it
+//          means AtroNox's indicator settings influence GOD MODE filtering.
+calcSignalStrength(systemCount, atrRatio, rsiValue, trendValue, dir) =>
+    float strength = 0.0
+    strength += (systemCount / 4.0) * 40
+    strength += atrRatio > 1.2 ? 20 : atrRatio > 1.0 ? 15 : atrRatio > 0.8 ? 10 : 0
+    if rsiValue > 30 and rsiValue < 70
+        strength += 20
+    else if rsiValue > 20 and rsiValue < 80
+        strength += 10
+    else if rsiValue > 10 and rsiValue < 90
+        strength += 5
+    strength += trendValue == dir ? 20 : 0
+    strength
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📡 SIGNAL WINDOW TRACKING (explicit var per system)
+// ═══════════════════════════════════════════════════════════════════════════
+
+var int lastBarAtronoxLong  = -999
+var int lastBarAtronoxShort = -999
+var int lastBarRaptorLong   = -999
+var int lastBarRaptorShort  = -999
+var int lastBarScalperLong  = -999
+var int lastBarScalperShort = -999
+var int lastBarEliteLong    = -999
+var int lastBarEliteShort   = -999
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧠 ATRONOX CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+rsiValueAtronox = ta.rsi(close, rsiPeriodAtronox)
+atrValueAtronox = ta.atr(atrLengthAtronox)
+atrMaAtronox    = atrMaTypeAtronox == 'EMA' ? ta.ema(atrValueAtronox, atrMaLengthAtronox) : ta.sma(atrValueAtronox, atrMaLengthAtronox)
+
+bbBasisAtronox = ta.sma(close, atronoxSensitivity)
+bbDevAtronox   = ta.stdev(close, atronoxSensitivity) * atronoxOffset
+bbUpperAtronox = bbBasisAtronox + bbDevAtronox
+bbLowerAtronox = bbBasisAtronox - bbDevAtronox
+
+midPointAtronox        = (close + open) / 2
+isBullishBreakoutAtronox = close > bbUpperAtronox and midPointAtronox > bbUpperAtronox
+isBearishBreakoutAtronox = close < bbLowerAtronox and midPointAtronox < bbLowerAtronox
+
+isAtrFilteredAtronox    = atrValueAtronox >= atrMaAtronox
+isRsiFilteredAtronox    = rsiValueAtronox > rsiUpperLimitAtronox or rsiValueAtronox < rsiLowerLimitAtronox
+isAtrOrRsiAtronox       = isAtrFilteredAtronox or isRsiFilteredAtronox
+isAtrAndRsiAtronox      = isAtrFilteredAtronox and isRsiFilteredAtronox
+isFlatByAtrAtronox      = atrValueAtronox <= atrMaAtronox
+isFlatByRsiAtronox      = rsiValueAtronox < rsiUpperLimitAtronox and rsiValueAtronox > rsiLowerLimitAtronox
+isFlatAtrOrRsiAtronox   = isFlatByAtrAtronox or isFlatByRsiAtronox
+isFlatAtrAndRsiAtronox  = isFlatByAtrAtronox and isFlatByRsiAtronox
+
+filterConditionAtronox =
+     selectedFilterAtronox == 'Filter with ATR'                       ? isAtrFilteredAtronox    :
+     selectedFilterAtronox == 'Filter with RSI'                       ? isRsiFilteredAtronox    :
+     selectedFilterAtronox == 'ATR or RSI'                            ? isAtrOrRsiAtronox       :
+     selectedFilterAtronox == 'ATR and RSI'                           ? isAtrAndRsiAtronox      :
+     selectedFilterAtronox == 'No Filtering'                          ? true                    :
+     selectedFilterAtronox == 'Entry Only in Flat Market (ATR or RSI)'? isFlatAtrOrRsiAtronox   :
+     selectedFilterAtronox == 'Entry Only in Flat Market (ATR and RSI)'? isFlatAtrAndRsiAtronox : true
+
+var float atronoxTrendLine  = na
+var int   atronoxTrend      = 0
+var bool  atronoxLongSignal  = false
+var bool  atronoxShortSignal = false
+
+bbSignalAtronox = close > bbUpperAtronox ? 1 : close < bbLowerAtronox ? -1 : 0
+
+if bbSignalAtronox == 1
+    atronoxTrendLine := low
+    if na(atronoxTrendLine[1]) or atronoxTrendLine < atronoxTrendLine[1]
+        atronoxTrendLine := atronoxTrendLine[1]
+else if bbSignalAtronox == -1
+    atronoxTrendLine := high
+    if na(atronoxTrendLine[1]) or atronoxTrendLine > atronoxTrendLine[1]
+        atronoxTrendLine := atronoxTrendLine[1]
+else
+    atronoxTrendLine := nz(atronoxTrendLine[1], close)
+
+// [v0.7.5] Removed the dead na(atronoxTrend[1]) branch — atronoxTrend is a
+//          var int initialized to 0 and can never be na. The var keeps its
+//          previous value automatically, so no explicit else is needed.
+if atronoxTrendLine > atronoxTrendLine[1]
+    atronoxTrend := 1
+else if atronoxTrendLine < atronoxTrendLine[1]
+    atronoxTrend := -1
+
+atronoxLongSignal  := atronoxTrend[1] == -1 and atronoxTrend == 1
+atronoxShortSignal := atronoxTrend[1] == 1  and atronoxTrend == -1
+
+longSignalAtronox  = atronoxLongSignal  and showAtronoxLongSignals  and filterConditionAtronox and atronoxEnabled
+shortSignalAtronox = atronoxShortSignal and showAtronoxShortSignals and filterConditionAtronox and atronoxEnabled
+
+if longSignalAtronox
+    lastBarAtronoxLong  := bar_index
+if shortSignalAtronox
+    lastBarAtronoxShort := bar_index
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🦅 RAPTOR CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+calc_supertrendRaptor(_price, _factor, _period) =>
+    atr_value       = ta.atr(_period)
+    upper_threshold = _price + (_factor * atr_value)
+    lower_threshold = _price - (_factor * atr_value)
+    prev_lower      = nz(lower_threshold[1])
+    prev_upper      = nz(upper_threshold[1])
+    lower_threshold := (lower_threshold > prev_lower) or (close[1] < prev_lower) ? lower_threshold : prev_lower
+    upper_threshold := (upper_threshold < prev_upper) or (close[1] > prev_upper) ? upper_threshold : prev_upper
+    int   trend_dir   = na
+    float final_level = na
+    prev_final = final_level[1]
+    if na(atr_value[1])
+        trend_dir := 1
+    else if prev_final == prev_upper
+        trend_dir := close > upper_threshold ? -1 : 1
+    else
+        trend_dir := close < lower_threshold ? 1 : -1
+    final_level := trend_dir == -1 ? lower_threshold : upper_threshold
+    [final_level, trend_dir]
+
+// [v0.7.5] Removed dead compute: unused ocAvg, unused EMA-high array
+//          (4 ta.ema calls never read), and the 16-element SMA array of
+//          which only index 4 (SMA-9) was ever used.
+sma9Raptor = ta.sma(close, 9)
+[supertrendRaptor, directionRaptor] = calc_supertrendRaptor(close, sensitivityRaptor, 11)
+
+price_above_stRaptor  = close > supertrendRaptor
+price_below_stRaptor  = close < supertrendRaptor
+price_above_smaRaptor = close >= sma9Raptor
+price_below_smaRaptor = close <= sma9Raptor
+
+was_below_stRaptor = close[1] <= supertrendRaptor[1]
+was_above_stRaptor = close[1] >= supertrendRaptor[1]
+
+bullish_crossRaptor = price_above_stRaptor and was_below_stRaptor and price_above_smaRaptor
+bearish_crossRaptor = price_below_stRaptor and was_above_stRaptor and price_below_smaRaptor
+
+longSignalRaptor  = bullish_crossRaptor and raptorEnabled
+shortSignalRaptor = bearish_crossRaptor and raptorEnabled
+
+if longSignalRaptor
+    lastBarRaptorLong  := bar_index
+if shortSignalRaptor
+    lastBarRaptorShort := bar_index
+
+tp_major_qualityRaptor = 13
+tp_major_lengthRaptor  = 40
+
+calc_tp_signalRaptor(_quality, _length) =>
+    var buy_pressure  = 0.0
+    var sell_pressure = 0.0
+    price_change  = close - close[4]
+    buy_pressure  := price_change > 0 ? buy_pressure + 1 : buy_pressure
+    sell_pressure := price_change < 0 ? sell_pressure + 1 : sell_pressure
+    signal_output = 0
+    is_red_candle  = close < open
+    at_high        = high >= ta.highest(high, _length)
+    sell_condition = (buy_pressure > _quality) and is_red_candle and at_high
+    is_green_candle = close > open
+    at_low         = low <= ta.lowest(low, _length)
+    buy_condition  = (sell_pressure > _quality) and is_green_candle and at_low
+    if sell_condition
+        buy_pressure  := 0
+        signal_output := -1
+    if buy_condition
+        sell_pressure := 0
+        signal_output := 1
+    signal_output
+
+// [v0.7.5] Removed unused minor TP signal (computed but never read).
+major_tpRaptor = calc_tp_signalRaptor(tp_major_qualityRaptor, tp_major_lengthRaptor)
+
+float tp_sell_signalRaptor = 0.0
+float tp_buy_signalRaptor  = 0.0
+tp_sell_signalRaptor := (major_tpRaptor == -1 and majRaptor) ? 2 : tp_sell_signalRaptor
+tp_buy_signalRaptor  := (major_tpRaptor == 1  and majRaptor) ? 2 : tp_buy_signalRaptor
+
+ha_smoothingRaptor  = 100
+ha_smoothing2Raptor = 100
+
+smooth_oRaptor = ta.ema(open,  ha_smoothingRaptor)
+smooth_cRaptor = ta.ema(close, ha_smoothingRaptor)
+smooth_hRaptor = ta.ema(high,  ha_smoothingRaptor)
+smooth_lRaptor = ta.ema(low,   ha_smoothingRaptor)
+
+ha_close_calcRaptor  = (smooth_oRaptor + smooth_hRaptor + smooth_lRaptor + smooth_cRaptor) / 4
+ha_open_rawRaptor    = (smooth_oRaptor + smooth_cRaptor) / 2
+ha_open_calcRaptor   = na(ha_open_rawRaptor[1]) ? ha_open_rawRaptor : (ha_open_rawRaptor[1] + ha_close_calcRaptor[1]) / 2
+ha_high_calcRaptor   = math.max(smooth_hRaptor, math.max(ha_open_calcRaptor, ha_close_calcRaptor))
+ha_low_calcRaptor    = math.min(smooth_lRaptor, math.min(ha_open_calcRaptor, ha_close_calcRaptor))
+
+ha_o2Raptor = ta.ema(ha_open_calcRaptor,  ha_smoothing2Raptor)
+ha_c2Raptor = ta.ema(ha_close_calcRaptor, ha_smoothing2Raptor)
+ha_h2Raptor = ta.ema(ha_high_calcRaptor,  ha_smoothing2Raptor)
+ha_l2Raptor = ta.ema(ha_low_calcRaptor,   ha_smoothing2Raptor)
+
+ha_averageRaptor = (ha_h2Raptor + ha_l2Raptor) / 2
+
+osc_smoothingRaptor = 7
+osc_valueRaptor     = 100 * (ha_c2Raptor - ha_o2Raptor)
+osc_emaRaptor       = ta.ema(osc_valueRaptor, osc_smoothingRaptor)
+
+color_signalRaptor = color.rgb(74, 119, 243, 35)
+if osc_valueRaptor > 0
+    color_signalRaptor := osc_valueRaptor >= osc_emaRaptor ? #6e82f3a6 : color.rgb(163, 134, 243, 75)
+else
+    color_signalRaptor := osc_valueRaptor <= osc_emaRaptor ? color.new(color.red, 35) : color.new(color.red, 75)
+
+p_hRaptor   = plot(ha_h2Raptor,   "Bias High",    color=color(na), display=display.none, editable=false)
+p_lRaptor   = plot(ha_l2Raptor,   "Bias Low",     color=color(na), display=display.none, editable=false)
+p_avgRaptor = plot(ha_averageRaptor, "Bias Average", color=color(na), display=display.none, editable=false)
+fill(p_lRaptor, p_hRaptor, show_haRaptor ? color_signalRaptor : na, title="RAPTOR Trend Tracker")
+
+fast_tbo_maRaptor    = ta.ema(close, custom_tboRaptor ? tbo_fastRaptor    : 20)
+medium_tbo_maRaptor  = ta.ema(close, custom_tboRaptor ? tbo_mediumRaptor  : 40)
+medfast_tbo_maRaptor = ta.sma(close, custom_tboRaptor ? tbo_medfastRaptor : 50)
+slow_tbo_maRaptor    = ta.sma(close, custom_tboRaptor ? tbo_slowRaptor    : 150)
+
+rsi_valueRaptor    = ta.rsi(close, rsi_periodRaptor)
+
+rsi_short_okRaptor = not use_rsiRaptor ? true : (short_comparisonRaptor == "Greater Than" ? rsi_valueRaptor > short_rsi_levelRaptor : rsi_valueRaptor < short_rsi_levelRaptor)
+rsi_long_okRaptor  = not use_rsiRaptor ? true : (long_comparisonRaptor  == "Less Than"    ? rsi_valueRaptor < long_rsi_levelRaptor  : rsi_valueRaptor > long_rsi_levelRaptor)
+
+fast_above_mediumRaptor = fast_tbo_maRaptor > medium_tbo_maRaptor
+fast_below_mediumRaptor = fast_tbo_maRaptor < medium_tbo_maRaptor
+was_fast_belowRaptor    = fast_tbo_maRaptor[1] <= medium_tbo_maRaptor[1]
+was_fast_aboveRaptor    = fast_tbo_maRaptor[1] >= medium_tbo_maRaptor[1]
+
+tbo_long_crossRaptor  = fast_above_mediumRaptor and was_fast_belowRaptor
+tbo_short_crossRaptor = fast_below_mediumRaptor and was_fast_aboveRaptor
+
+tbo_long_signalRaptor  = tbo_long_crossRaptor  and rsi_long_okRaptor
+tbo_short_signalRaptor = tbo_short_crossRaptor and rsi_short_okRaptor
+
+greennRaptor = #2FD282
+pinkRaptor   = #E34DED
+
+srcRaptor  = close
+s180Raptor = ta.sma(ta.sma(srcRaptor, 200), 100)
+s200Raptor = ta.sma(ta.sma(srcRaptor, 200), 70)
+m180Raptor = true
+a200Raptor = true
+
+emaFastRaptor = ta.ema(close, fastLenRaptor)
+emaSlowRaptor = ta.ema(close, slowLenRaptor)
+
+midRaptor        = (emaFastRaptor + emaSlowRaptor) / 2
+cloudColorRaptor = midRaptor > midRaptor[1] ? color.new(color.green, 80) : midRaptor < midRaptor[1] ? color.new(color.red, 80) : color.new(color.gray, 80)
+
+tenkan_periodRaptor  = 6
+tenkan_factorRaptor  = 2
+kijun_periodRaptor   = 5
+kijun_factorRaptor   = 3.0
+spanB_periodRaptor   = 26
+spanB_factorRaptor   = 4.0
+displacementRaptor   = 0
+
+calculate_super_avgRaptor(_src, _len, _mult) =>
+    atr_band    = ta.atr(_len) * _mult
+    upper_level = hl2 + atr_band
+    lower_level = hl2 - atr_band
+    var upper_trail = 0.0
+    var lower_trail = 0.0
+    upper_trail := _src[1] < upper_trail[1] ? math.min(upper_level, upper_trail[1]) : upper_level
+    lower_trail := _src[1] > lower_trail[1] ? math.max(lower_level, lower_trail[1]) : lower_level
+    var oscillator = 0
+    oscillator := _src > upper_trail ? 1 : _src < lower_trail ? 0 : oscillator[1]
+    support_resist = oscillator == 1 ? lower_trail : upper_trail
+    var max_price = 0.0
+    var min_price = 0.0
+    crossed    = ta.cross(_src, support_resist)
+    max_price := crossed ? math.max(_src, max_price[1]) : oscillator == 1 ? math.max(_src, max_price[1]) : support_resist
+    min_price := crossed ? math.min(_src, min_price[1]) : oscillator == 0 ? math.min(_src, min_price[1]) : support_resist
+    (max_price + min_price) / 2
+
+tenkan_lineRaptor  = calculate_super_avgRaptor(close, tenkan_periodRaptor, tenkan_factorRaptor)
+kijun_lineRaptor   = calculate_super_avgRaptor(close, kijun_periodRaptor,  kijun_factorRaptor)
+senkou_aRaptor     = (kijun_lineRaptor + tenkan_lineRaptor) / 2
+senkou_bRaptor     = calculate_super_avgRaptor(close, spanB_periodRaptor, spanB_factorRaptor)
+
+tenkan_colorRaptor = #2157f3
+kijun_colorRaptor  = #ff5d00
+cloud_bullRaptor   = color.new(color.teal, 80)
+cloud_bearRaptor   = color.new(color.red,  80)
+
+tenkan_crosses_aboveRaptor = tenkan_lineRaptor > kijun_lineRaptor and tenkan_lineRaptor[1] <= kijun_lineRaptor[1]
+tenkan_crosses_belowRaptor = tenkan_lineRaptor < kijun_lineRaptor and tenkan_lineRaptor[1] >= kijun_lineRaptor[1]
+
+price_gainsRaptor  = math.max(ta.change(close), 0)
+price_lossesRaptor = -math.min(ta.change(close), 0)
+avg_gainsRaptor    = ta.rma(price_gainsRaptor,  reversal_sensitivityRaptor)
+avg_lossesRaptor   = ta.rma(price_lossesRaptor, reversal_sensitivityRaptor)
+
+rsi_sourceRaptor = avg_lossesRaptor == 0 ? 100 : avg_gainsRaptor == 0 ? 0 : 100 - (100 / (1 + avg_gainsRaptor / avg_lossesRaptor))
+
+was_above_obRaptor = rsi_sourceRaptor[1] >= reversal_down_levelRaptor
+is_below_obRaptor  = rsi_sourceRaptor    <  reversal_down_levelRaptor
+reversal_downRaptor = was_above_obRaptor and is_below_obRaptor and enableReversalRaptor
+
+was_below_osRaptor = rsi_sourceRaptor[1] <= reversal_up_levelRaptor
+is_above_osRaptor  = rsi_sourceRaptor    >  reversal_up_levelRaptor
+reversal_upRaptor  = was_below_osRaptor and is_above_osRaptor and enableReversalRaptor
+
+[macd_lineRaptor, signal_lineRaptor, histogramRaptor] = ta.macd(macd_sourceRaptor, macd_fastRaptor, macd_slowRaptor, macd_signalRaptor)
+
+color_green_highRaptor = #05df09
+color_green_midRaptor  = #388E3C
+color_red_highRaptor   = #ea0402
+color_red_midRaptor    = #cc0402
+color_neutralRaptor    = #5f3a97
+
+var bar_colorRaptor = color_neutralRaptor
+
+hist_positiveRaptor  = histogramRaptor > 0
+hist_negativeRaptor  = histogramRaptor < 0
+hist_increasingRaptor = histogramRaptor > histogramRaptor[1]
+hist_decreasingRaptor = histogramRaptor < histogramRaptor[1]
+macd_positiveRaptor  = macd_lineRaptor > 0
+macd_negativeRaptor  = macd_lineRaptor < 0
+
+if hist_positiveRaptor and hist_increasingRaptor and histogramRaptor[1] > 0
+    bar_colorRaptor := color_green_midRaptor
+else if hist_negativeRaptor and hist_decreasingRaptor and histogramRaptor[1] < 0
+    bar_colorRaptor := color_red_midRaptor
+else if hist_positiveRaptor
+    bar_colorRaptor := color_neutralRaptor
+else if hist_negativeRaptor
+    bar_colorRaptor := color_neutralRaptor
+
+if macd_positiveRaptor and hist_positiveRaptor
+    bar_colorRaptor := color_green_midRaptor
+    if hist_increasingRaptor and macd_lineRaptor[1] > 0 and histogramRaptor[1] > 0
+        bar_colorRaptor := color_green_midRaptor
+        if histogramRaptor > histogramRaptor[2] and macd_lineRaptor[2] > 0 and histogramRaptor[2] > 0
+            bar_colorRaptor := color_green_highRaptor
+
+if macd_negativeRaptor and hist_negativeRaptor
+    bar_colorRaptor := color_red_midRaptor
+    if hist_decreasingRaptor and macd_lineRaptor[1] < 0 and histogramRaptor[1] < 0
+        bar_colorRaptor := color_red_midRaptor
+        if histogramRaptor < histogramRaptor[2] and macd_lineRaptor[2] < 0 and histogramRaptor[2] < 0
+            bar_colorRaptor := color_red_highRaptor
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯 SCALPER CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+supertrend_scalper(_src, factor, atrLen) =>
+    atr           = ta.atr(atrLen)
+    upperBand     = _src + factor * atr
+    lowerBand     = _src - factor * atr
+    prevLowerBand = nz(lowerBand[1])
+    prevUpperBand = nz(upperBand[1])
+    lowerBand    := lowerBand > prevLowerBand or close[1] < prevLowerBand ? lowerBand : prevLowerBand
+    upperBand    := upperBand < prevUpperBand or close[1] > prevUpperBand ? upperBand : prevUpperBand
+    var int   direction  = na
+    var float superTrend = na
+    prevSuperTrend = nz(superTrend[1])
+    if na(atr[1])
+        direction := 1
+    else if prevSuperTrend == prevUpperBand
+        direction := close > upperBand ? -1 : 1
+    else
+        direction := close < lowerBand ? 1 : -1
+    superTrend := direction == -1 ? lowerBand : upperBand
+    [superTrend, direction]
+
+// [v0.7.5] Removed nsensitivityScalper — a var float fixed at 1 that only
+//          ever multiplied the constant factor below.
+[supertrendScalper, directionScalper] = supertrend_scalper(close, 7, 10)
+
+bullScalper = ta.crossover(close,  supertrendScalper)
+bearScalper = ta.crossunder(close, supertrendScalper)
+
+longSignalScalper  = bullScalper and nbuysellScalper and scalperEnabled
+shortSignalScalper = bearScalper and nbuysellScalper and scalperEnabled
+
+if longSignalScalper
+    lastBarScalperLong  := bar_index
+if shortSignalScalper
+    lastBarScalperShort := bar_index
+
+adxlenScalper = 15
+dilenScalper  = 15
+
+dirmov_scalper(len) =>
+    up      = ta.change(high)
+    down    = -ta.change(low)
+    plusDM  = na(up)   ? na : up   > down and up   > 0 ? up   : 0
+    minusDM = na(down) ? na : down > up   and down > 0 ? down : 0
+    truerange = ta.rma(ta.tr, len)
+    plus  = fixnan(100 * ta.rma(plusDM,  len) / truerange)
+    minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+    [plus, minus]
+
+adx_scalper(dilen, adxlen) =>
+    [plus, minus] = dirmov_scalper(dilen)
+    sum = plus + minus
+    adx = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+    adx
+
+sigScalper        = adx_scalper(dilenScalper, adxlenScalper)
+bool isSidewaysScalper = sigScalper < sidewaysThresholdScalper
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🏆 ELITE ALGO CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+rng_size(x, qty, n) =>
+    wper  = n * 2 - 1
+    avrng = ta.ema(math.abs(x - x[1]), n)
+    ta.ema(avrng, wper) * qty
+
+rng_filt(x, rng_, n) =>
+    r = rng_
+    var rfilt = array.new_float(2, x)
+    array.set(rfilt, 1, array.get(rfilt, 0))
+    if x - r > array.get(rfilt, 1)
+        array.set(rfilt, 0, x - r)
+    if x + r < array.get(rfilt, 1)
+        array.set(rfilt, 0, x + r)
+    rng_filt1 = array.get(rfilt, 0)
+    hi_band   = rng_filt1 + r
+    lo_band   = rng_filt1 - r
+    [hi_band, lo_band, rng_filt1]
+
+[h_band_elite, l_band_elite, filt_elite] = rng_filt(rng_src, rng_size(rng_src, rng_qty, rng_per), rng_per)
+
+var fdir_elite  = 0.0
+fdir_elite     := filt_elite > filt_elite[1] ? 1 : filt_elite < filt_elite[1] ? -1 : fdir_elite
+upward_elite   = fdir_elite == 1  ? 1 : 0
+downward_elite = fdir_elite == -1 ? 1 : 0
+
+longCond_elite  = rng_src > filt_elite and rng_src > rng_src[1] and upward_elite   > 0 or rng_src > filt_elite and rng_src < rng_src[1] and upward_elite   > 0
+shortCond_elite = rng_src < filt_elite and rng_src < rng_src[1] and downward_elite > 0 or rng_src < filt_elite and rng_src > rng_src[1] and downward_elite > 0
+
+CondIni_elite  = 0
+CondIni_elite := longCond_elite ? 1 : shortCond_elite ? -1 : CondIni_elite[1]
+longCondition_elite  = longCond_elite  and CondIni_elite[1] == -1
+shortCondition_elite = shortCond_elite and CondIni_elite[1] == 1
+
+filt_color_elite = upward_elite ? #2adf06e5 : downward_elite ? #ec0606e0 : #cccccc
+bar_color_elite  = upward_elite and rng_src > filt_elite ? #76ff05 : downward_elite and rng_src < filt_elite ? #ff0505 : #109404
+
+longSignalElite  = longCondition_elite  and eliteEnabled
+shortSignalElite = shortCondition_elite and eliteEnabled
+
+if longSignalElite
+    lastBarEliteLong  := bar_index
+if shortSignalElite
+    lastBarEliteShort := bar_index
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔥 GOD MODE CONSENSUS LOGIC
+// ═══════════════════════════════════════════════════════════════════════════
+
+// [v0.7.5] Clamp the required system count to the number of systems that are
+//          actually enabled. Previously the Conservative preset (4 required)
+//          produced ZERO signals forever with default settings, because
+//          AtroNox ships disabled and the maximum reachable consensus was 3.
+int enabledSystemCount    = (atronoxEnabled ? 1 : 0) + (raptorEnabled ? 1 : 0) + (scalperEnabled ? 1 : 0) + (eliteEnabled ? 1 : 0)
+int godModeMinSystemsRaw  = godModeMinSystems
+godModeMinSystems := math.min(godModeMinSystems, math.max(enabledSystemCount, 1))
+bool minSystemsClamped = godModeMinSystems < godModeMinSystemsRaw  // drives a dashboard warning
+
+// [v0.7.6] A system now contributes to AT MOST ONE side. Previously, if a
+//          system fired long and then short within the same lookback window
+//          (a whipsaw), both its long and short flags were "in window" and it
+//          was counted on BOTH sides, inflating consensus. Each side now also
+//          requires that its signal be the more recent of the two, so only the
+//          latest direction per system counts.
+atronoxLongInWindow  = (bar_index - lastBarAtronoxLong)  <= godModeWindow and (bar_index - lastBarAtronoxLong)  >= 0 and lastBarAtronoxLong  >= lastBarAtronoxShort
+raptorLongInWindow   = (bar_index - lastBarRaptorLong)   <= godModeWindow and (bar_index - lastBarRaptorLong)   >= 0 and lastBarRaptorLong   >= lastBarRaptorShort
+scalperLongInWindow  = (bar_index - lastBarScalperLong)  <= godModeWindow and (bar_index - lastBarScalperLong)  >= 0 and lastBarScalperLong  >= lastBarScalperShort
+eliteLongInWindow    = (bar_index - lastBarEliteLong)    <= godModeWindow and (bar_index - lastBarEliteLong)    >= 0 and lastBarEliteLong    >= lastBarEliteShort
+
+atronoxShortInWindow = (bar_index - lastBarAtronoxShort) <= godModeWindow and (bar_index - lastBarAtronoxShort) >= 0 and lastBarAtronoxShort > lastBarAtronoxLong
+raptorShortInWindow  = (bar_index - lastBarRaptorShort)  <= godModeWindow and (bar_index - lastBarRaptorShort)  >= 0 and lastBarRaptorShort  > lastBarRaptorLong
+scalperShortInWindow = (bar_index - lastBarScalperShort) <= godModeWindow and (bar_index - lastBarScalperShort) >= 0 and lastBarScalperShort > lastBarScalperLong
+eliteShortInWindow   = (bar_index - lastBarEliteShort)   <= godModeWindow and (bar_index - lastBarEliteShort)   >= 0 and lastBarEliteShort   > lastBarEliteLong
+
+longSystemCount  = (atronoxLongInWindow  ? 1 : 0) + (raptorLongInWindow  ? 1 : 0) + (scalperLongInWindow  ? 1 : 0) + (eliteLongInWindow  ? 1 : 0)
+shortSystemCount = (atronoxShortInWindow ? 1 : 0) + (raptorShortInWindow ? 1 : 0) + (scalperShortInWindow ? 1 : 0) + (eliteShortInWindow ? 1 : 0)
+
+// [v0.7.3] Guard against zero atrMaAtronox before division
+volatilityRatio = nz(atrMaAtronox) > 0 ? atrValueAtronox / atrMaAtronox : 1.0
+volatilityOK    = not useVolatilityFilter or (volatilityRatio >= minVolatility and volatilityRatio <= maxVolatility)
+
+longSignalStrength  = calcSignalStrength(longSystemCount,  volatilityRatio, rsiValueAtronox, atronoxTrend, 1)
+shortSignalStrength = calcSignalStrength(shortSystemCount, volatilityRatio, rsiValueAtronox, atronoxTrend, -1)
+
+godModeLongConsensus  = longSystemCount  >= godModeMinSystems and longSignalStrength  >= minSignalStrength and volatilityOK
+godModeShortConsensus = shortSystemCount >= godModeMinSystems and shortSignalStrength >= minSignalStrength and volatilityOK
+
+var int lastGodLongBar  = -999
+var int lastGodShortBar = -999
+
+// [v0.7.5] Same-bar dual consensus tiebreak. Overlapping signal windows can
+//          put both directions in consensus on one bar; previously the SHORT
+//          block always won purely because it executed second in source
+//          order. Now the side with more agreeing systems wins (ties → long).
+bool dualConsensus = godModeLongConsensus and godModeShortConsensus
+
+godModeLongSignal  = godModeLongConsensus  and (not dualConsensus or longSystemCount  >= shortSystemCount) and (bar_index - lastGodLongBar)  > godModeWindow and godModeEnabled
+godModeShortSignal = godModeShortConsensus and (not dualConsensus or shortSystemCount >  longSystemCount)  and (bar_index - lastGodShortBar) > godModeWindow and godModeEnabled
+
+if godModeLongSignal
+    lastGodLongBar  := bar_index
+
+if godModeShortSignal
+    lastGodShortBar := bar_index
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯 TARGET & STOP LOSS MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+godATR = ta.atr(godTargetATRLength)
+
+var float godEntryPrice    = na
+var int   godDirection     = 0
+// [v0.7.3] Cache direction at signal creation; used in alerts AFTER godDirection
+//          is cleared so alert strings never show "—" for direction.
+var int   godLastDirection = 0
+// [v0.7.5] Bar on which the current trade was opened. TP/SL management is
+//          skipped on this bar — entry is at close, so the entry bar's own
+//          high/low printed BEFORE the entry existed (lookahead otherwise).
+var int   godEntryBar      = na
+// [v0.7.7] DrFX scoreboard linkage. godTradeId is a unique id stamped at entry
+//          (symbol + entry-bar time); every TP/SL alert for the trade carries
+//          it so the server can map events to the exact trade. closedTradeId
+//          preserves the id of a trade closed by replacement / invalidation /
+//          trailing stop, whose closing alert fires AFTER godTradeId may have
+//          already been overwritten by a replacing entry.
+var string godTradeId      = na
+var string closedTradeId   = na
+var float godTP1_Level     = na
+var float godTP2_Level     = na
+var float godTP3_Level     = na
+var float godSL_Level      = na
+var float godTrailingStop  = na
+var bool  godTrailActive   = false
+
+var line godEntryLine  = na
+var line godTP1_Line   = na
+var line godTP2_Line   = na
+var line godTP3_Line   = na
+var line godSL_Line    = na
+var line godTrail_Line = na
+
+var label godEntryLabel = na
+var label godTP1_Label  = na
+var label godTP2_Label  = na
+var label godTP3_Label  = na
+var label godSL_Label   = na
+
+var bool godTP1_Hit = false
+var bool godTP2_Hit = false
+var bool godTP3_Hit = false
+var bool godSL_Hit  = false
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📊 PERFORMANCE TRACKING
+// ═══════════════════════════════════════════════════════════════════════════
+
+var int totalSignals  = 0
+var int winningTrades = 0
+var int losingTrades  = 0
+var int totalTP1Hits  = 0
+var int totalTP2Hits  = 0
+var int totalTP3Hits  = 0
+var int totalSLHits   = 0
+
+bool tp1HitThisBar = false
+bool tp2HitThisBar = false
+bool tp3HitThisBar = false
+bool slHitThisBar  = false
+
+// [v0.7.5] Per-bar flags for the three close paths that previously resolved
+//          trades SILENTLY (no Telegram alert): trailing-stop exit, signal
+//          invalidation, and replacement by a new GOD MODE signal. The
+//          result and direction are captured at close time because the hit
+//          flags / godDirection may be reset before the alert section runs.
+bool trailHitThisBar    = false
+bool invalidatedThisBar = false
+bool replacedThisBar    = false
+bool closedTradeWasWin  = false
+int  closedTradeDir     = 0
+
+// ─── Signal Invalidation ─────────────────────────────────────────────────
+// [v0.7.3] Now also resets TP/SL hit flags to prevent stale state
+//          bleeding into the next signal's dashboard and alerts.
+// [v0.7.5] A trade can no longer be invalidated on its own entry bar
+//          (bar_index > godEntryBar guard).
+checkSignalInvalidation() =>
+    if useSignalTimeout and not na(godEntryPrice) and not na(godEntryBar) and bar_index > godEntryBar
+        if godDirection == 1 and godModeShortConsensus and (bar_index - lastGodLongBar) < signalTimeout
+            label.new(bar_index, high, "⚠️ SIGNAL INVALIDATED\nOpposing Signal Detected",
+                      color=color.new(color.orange, 0), style=label.style_label_down,
+                      textcolor=color.white, size=size.tiny)
+            true
+        else if godDirection == -1 and godModeLongConsensus and (bar_index - lastGodShortBar) < signalTimeout
+            label.new(bar_index, low, "⚠️ SIGNAL INVALIDATED\nOpposing Signal Detected",
+                      color=color.new(color.orange, 0), style=label.style_label_up,
+                      textcolor=color.white, size=size.tiny)
+            true
+        else
+            false
+    else
+        false
+
+// ─── New GOD Mode Long Signal ─────────────────────────────────────────────
+if godModeLongSignal and godTargetsEnabled
+    // [v0.7.5] Resolve any still-open trade BEFORE overwriting it. Previously
+    //          a new signal silently destroyed the open trade — it was never
+    //          counted as a win or loss, so totalSignals drifted away from
+    //          winningTrades + losingTrades.
+    if not na(godEntryPrice)
+        replacedThisBar   := true
+        closedTradeWasWin := godTP2_Hit
+        closedTradeDir    := godDirection
+        closedTradeId     := godTradeId  // [v0.7.7] preserve id for the close alert
+        if godTP2_Hit
+            winningTrades += 1
+        else
+            losingTrades  += 1
+
+    line.delete(godEntryLine)
+    line.delete(godTP1_Line)
+    line.delete(godTP2_Line)
+    line.delete(godTP3_Line)
+    line.delete(godSL_Line)
+    line.delete(godTrail_Line)
+    label.delete(godEntryLabel)
+    label.delete(godTP1_Label)
+    label.delete(godTP2_Label)
+    label.delete(godTP3_Label)
+    label.delete(godSL_Label)
+
+    godEntryPrice    := close
+    godDirection     := 1
+    godLastDirection := 1  // [v0.7.3] Cache for alert use after cleanup
+    godEntryBar      := bar_index  // [v0.7.5] Management starts NEXT bar
+    godTradeId       := syminfo.ticker + "-" + str.tostring(time)  // [v0.7.7] unique trade id
+
+    godTP1_Level := godEntryPrice + (godATR * godTP1_Multiplier)
+    godTP2_Level := godEntryPrice + (godATR * godTP2_Multiplier)
+    godTP3_Level := godEntryPrice + (godATR * godTP3_Multiplier)
+    godSL_Level  := godEntryPrice - (godATR * godSL_Multiplier)
+
+    godTP1_Hit    := false
+    godTP2_Hit    := false
+    godTP3_Hit    := false
+    godSL_Hit     := false
+    godTrailActive := false
+    godTrailingStop := na
+
+    totalSignals += 1
+
+    if showTargetLines
+        godEntryLine := createTargetLine(godEntryPrice, colorEntry)
+        godTP1_Line  := createTargetLine(godTP1_Level,  colorTP1)
+        godTP2_Line  := createTargetLine(godTP2_Level,  colorTP2)
+        godTP3_Line  := createTargetLine(godTP3_Level,  colorTP3)
+        if godSLEnabled
+            godSL_Line := createTargetLine(godSL_Level, colorSL)
+
+    if showTargetLabels
+        risk = godSLEnabled ? godEntryPrice - godSL_Level : godATR
+        rr1  = risk > 0 ? (godTP1_Level - godEntryPrice) / risk : 0
+        rr2  = risk > 0 ? (godTP2_Level - godEntryPrice) / risk : 0
+        rr3  = risk > 0 ? (godTP3_Level - godEntryPrice) / risk : 0
+        godEntryLabel := createTargetLabel(godEntryPrice, 'ENTRY: ' + str.tostring(godEntryPrice, format.mintick), colorEntry, color.white)
+        godTP1_Label  := createTargetLabel(godTP1_Level,  '🥉 TP1: ' + str.tostring(godTP1_Level, format.mintick) + '\n+' + str.tostring(toPips(godTP1_Level - godEntryPrice)) + ' pips (R:R 1:' + str.tostring(rr1, '#.#') + ')', colorTP1)
+        godTP2_Label  := createTargetLabel(godTP2_Level,  '🥈 TP2: ' + str.tostring(godTP2_Level, format.mintick) + '\n+' + str.tostring(toPips(godTP2_Level - godEntryPrice)) + ' pips (R:R 1:' + str.tostring(rr2, '#.#') + ')', colorTP2)
+        godTP3_Label  := createTargetLabel(godTP3_Level,  '🥇 TP3: ' + str.tostring(godTP3_Level, format.mintick) + '\n+' + str.tostring(toPips(godTP3_Level - godEntryPrice)) + ' pips (R:R 1:' + str.tostring(rr3, '#.#') + ')', colorTP3)
+        if godSLEnabled
+            godSL_Label := createTargetLabel(godSL_Level, '🛡️ STOP: ' + str.tostring(godSL_Level, format.mintick) + '\n-' + str.tostring(toPips(godEntryPrice - godSL_Level)) + ' pips', colorSL, color.white)
+
+
+// ─── New GOD Mode Short Signal ────────────────────────────────────────────
+if godModeShortSignal and godTargetsEnabled
+    // [v0.7.5] Resolve any still-open trade BEFORE overwriting it (see above).
+    if not na(godEntryPrice)
+        replacedThisBar   := true
+        closedTradeWasWin := godTP2_Hit
+        closedTradeDir    := godDirection
+        closedTradeId     := godTradeId  // [v0.7.7] preserve id for the close alert
+        if godTP2_Hit
+            winningTrades += 1
+        else
+            losingTrades  += 1
+
+    line.delete(godEntryLine)
+    line.delete(godTP1_Line)
+    line.delete(godTP2_Line)
+    line.delete(godTP3_Line)
+    line.delete(godSL_Line)
+    line.delete(godTrail_Line)
+    label.delete(godEntryLabel)
+    label.delete(godTP1_Label)
+    label.delete(godTP2_Label)
+    label.delete(godTP3_Label)
+    label.delete(godSL_Label)
+
+    godEntryPrice    := close
+    godDirection     := -1
+    godLastDirection := -1  // [v0.7.3] Cache for alert use after cleanup
+    godEntryBar      := bar_index  // [v0.7.5] Management starts NEXT bar
+    godTradeId       := syminfo.ticker + "-" + str.tostring(time)  // [v0.7.7] unique trade id
+
+    godTP1_Level := godEntryPrice - (godATR * godTP1_Multiplier)
+    godTP2_Level := godEntryPrice - (godATR * godTP2_Multiplier)
+    godTP3_Level := godEntryPrice - (godATR * godTP3_Multiplier)
+    godSL_Level  := godEntryPrice + (godATR * godSL_Multiplier)
+
+    godTP1_Hit    := false
+    godTP2_Hit    := false
+    godTP3_Hit    := false
+    godSL_Hit     := false
+    godTrailActive := false
+    godTrailingStop := na
+
+    totalSignals += 1
+
+    if showTargetLines
+        godEntryLine := createTargetLine(godEntryPrice, colorEntry)
+        godTP1_Line  := createTargetLine(godTP1_Level,  colorTP1)
+        godTP2_Line  := createTargetLine(godTP2_Level,  colorTP2)
+        godTP3_Line  := createTargetLine(godTP3_Level,  colorTP3)
+        if godSLEnabled
+            godSL_Line := createTargetLine(godSL_Level, colorSL)
+    if showTargetLabels
+        risk = godSLEnabled ? godSL_Level - godEntryPrice : godATR
+        rr1  = risk > 0 ? (godEntryPrice - godTP1_Level) / risk : 0
+        rr2  = risk > 0 ? (godEntryPrice - godTP2_Level) / risk : 0
+        rr3  = risk > 0 ? (godEntryPrice - godTP3_Level) / risk : 0
+        godEntryLabel := createTargetLabel(godEntryPrice, 'ENTRY: ' + str.tostring(godEntryPrice, format.mintick), colorEntry, color.white)
+        godTP1_Label  := createTargetLabel(godTP1_Level,  '🥉 TP1: ' + str.tostring(godTP1_Level, format.mintick) + '\n+' + str.tostring(toPips(godTP1_Level - godEntryPrice)) + ' pips (R:R 1:' + str.tostring(rr1, '#.#') + ')', colorTP1)
+        godTP2_Label  := createTargetLabel(godTP2_Level,  '🥈 TP2: ' + str.tostring(godTP2_Level, format.mintick) + '\n+' + str.tostring(toPips(godTP2_Level - godEntryPrice)) + ' pips (R:R 1:' + str.tostring(rr2, '#.#') + ')', colorTP2)
+        godTP3_Label  := createTargetLabel(godTP3_Level,  '🥇 TP3: ' + str.tostring(godTP3_Level, format.mintick) + '\n+' + str.tostring(toPips(godTP3_Level - godEntryPrice)) + ' pips (R:R 1:' + str.tostring(rr3, '#.#') + ')', colorTP3)
+        if godSLEnabled
+            godSL_Label := createTargetLabel(godSL_Level, '🛡️ STOP: ' + str.tostring(godSL_Level, format.mintick) + '\n-' + str.tostring(toPips(godEntryPrice - godSL_Level)) + ' pips', colorSL, color.white)
+
+
+// ─── Signal Invalidation Check ────────────────────────────────────────────
+bool wasInvalidated = checkSignalInvalidation()
+if wasInvalidated
+    // [v0.7.5] Capture result BEFORE the hit flags are reset — the alert
+    //          section at the bottom of the script needs it.
+    invalidatedThisBar := true
+    closedTradeWasWin  := godTP2_Hit
+    closedTradeDir     := godDirection
+    closedTradeId      := godTradeId  // [v0.7.7] preserve id for the close alert
+    if godTP2_Hit
+        winningTrades += 1
+    else
+        losingTrades  += 1
+    // [v0.7.3] Reset all hit flags on invalidation to prevent stale state
+    godTP1_Hit     := false
+    godTP2_Hit     := false
+    godTP3_Hit     := false
+    godSL_Hit      := false
+    godEntryPrice  := na
+    godDirection   := 0
+    godTrailActive := false
+
+// ─── Target / Stop Loss Checks ────────────────────────────────────────────
+// [v0.7.5] bar_index > godEntryBar: management begins on the bar AFTER entry.
+//          Previously the entry bar's own high/low (which printed before the
+//          close-based entry existed) could instantly trigger TP or SL —
+//          lookahead bias that inflated the win statistics.
+if not wasInvalidated and not na(godEntryPrice) and godTargetsEnabled and not godSL_Hit and bar_index > godEntryBar
+
+    if godDirection == 1  // Long position
+
+        // ── Stop Loss (evaluated first: worst-case same-bar conflict) ──────
+        if godSLEnabled and low <= godSL_Level
+            godSL_Hit     := true
+            slHitThisBar  := true
+            totalSLHits   += 1
+            if godTP2_Hit
+                winningTrades += 1
+            else
+                losingTrades  += 1
+            if showTargetLabels
+                string slResultText = godTP2_Hit ? "❌ SL HIT (WIN - TP2 reached)" : "❌ SL HIT (LOSS)"
+                color  slResultColor = godTP2_Hit ? color.new(color.green, 0) : color.new(colorSL, 0)
+                label.new(bar_index, godSL_Level, text=slResultText, style=label.style_label_up, color=slResultColor, textcolor=color.white, size=size.tiny)
+            godEntryPrice  := na
+            godDirection   := 0
+            godTrailActive := false
+
+        // ── Trailing Stop ─────────────────────────────────────────────────
+        // [v0.7.5] Exit is tested against the PRIOR stop before the stop is
+        //          raised. Previously the stop was first raised using the
+        //          current bar's high and the SAME bar's low was then tested
+        //          against it — registering exits at stop levels that did
+        //          not exist when the low printed. No exit check on the
+        //          activation bar for the same reason.
+        else if godSLEnabled and useTrailingStop
+            if godTrailActive
+                if low <= godTrailingStop
+                    trailHitThisBar   := true
+                    closedTradeWasWin := godTP2_Hit
+                    closedTradeDir    := godDirection
+                    closedTradeId     := godTradeId  // [v0.7.7] preserve id for the close alert
+                    totalSLHits += 1
+                    if godTP2_Hit
+                        winningTrades += 1
+                    else
+                        losingTrades  += 1
+                    if showTargetLabels
+                        string trailResultText  = godTP2_Hit ? "🔒 TRAIL HIT (WIN)" : "🔒 TRAIL HIT (LOSS)"
+                        color  trailResultColor = godTP2_Hit ? color.new(color.green, 0) : color.new(colorTrail, 0)
+                        label.new(bar_index, godTrailingStop, text=trailResultText, style=label.style_label_up, color=trailResultColor, textcolor=color.white, size=size.tiny)
+                    godEntryPrice  := na
+                    godDirection   := 0
+                    godTrailActive := false
+                else
+                    newStop = high - (godATR * trailDistance)
+                    if newStop > godTrailingStop
+                        godTrailingStop := newStop
+            else if high >= godEntryPrice + (godATR * trailActivation)
+                godTrailActive  := true
+                godTrailingStop := high - (godATR * trailDistance)
+                if showTargetLabels and showTargetLines
+                    label.new(bar_index, godTrailingStop, text='🔒 Trail Active', style=label.style_label_up, color=color.new(colorTrail, 0), textcolor=color.white, size=size.tiny)
+
+        // ── TP1 ───────────────────────────────────────────────────────────
+        if not godTP1_Hit and high >= godTP1_Level and not godSL_Hit and not na(godEntryPrice)
+            godTP1_Hit   := true
+            tp1HitThisBar := true
+            totalTP1Hits += 1
+            if showTargetLabels
+                label.new(bar_index, godTP1_Level, text='✅ TP1 HIT', style=label.style_label_down, color=color.new(colorTP1, 0), textcolor=color.black, size=size.tiny)
+
+        // ── TP2 ───────────────────────────────────────────────────────────
+        if not godTP2_Hit and high >= godTP2_Level and not godSL_Hit and not na(godEntryPrice)
+            godTP2_Hit   := true
+            tp2HitThisBar := true
+            totalTP2Hits += 1
+            if showTargetLabels
+                label.new(bar_index, godTP2_Level, text='✅ TP2 HIT', style=label.style_label_down, color=color.new(colorTP2, 0), textcolor=color.black, size=size.tiny)
+
+        // ── TP3 — Full WIN ────────────────────────────────────────────────
+        if not godTP3_Hit and high >= godTP3_Level and not godSL_Hit and not na(godEntryPrice)
+            godTP3_Hit    := true
+            tp3HitThisBar := true
+            totalTP3Hits  += 1
+            winningTrades += 1
+            if showTargetLabels
+                label.new(bar_index, godTP3_Level, text='🎯 TP3 HIT! (WIN)', style=label.style_label_down, color=color.new(colorTP3, 0), textcolor=color.white, size=size.small)
+            godEntryPrice  := na
+            godDirection   := 0
+            godTrailActive := false
+
+    else if godDirection == -1  // Short position
+
+        // ── Stop Loss (evaluated first: worst-case same-bar conflict) ──────
+        if godSLEnabled and high >= godSL_Level
+            godSL_Hit     := true
+            slHitThisBar  := true
+            totalSLHits   += 1
+            if godTP2_Hit
+                winningTrades += 1
+            else
+                losingTrades  += 1
+            if showTargetLabels
+                string slResultText  = godTP2_Hit ? "❌ SL HIT (WIN - TP2 reached)" : "❌ SL HIT (LOSS)"
+                color  slResultColor = godTP2_Hit ? color.new(color.green, 0) : color.new(colorSL, 0)
+                label.new(bar_index, godSL_Level, text=slResultText, style=label.style_label_down, color=slResultColor, textcolor=color.white, size=size.tiny)
+            godEntryPrice  := na
+            godDirection   := 0
+            godTrailActive := false
+
+        // ── Trailing Stop ─────────────────────────────────────────────────
+        // [v0.7.5] Same prior-stop-first restructure as the long side.
+        else if godSLEnabled and useTrailingStop
+            if godTrailActive
+                if high >= godTrailingStop
+                    trailHitThisBar   := true
+                    closedTradeWasWin := godTP2_Hit
+                    closedTradeDir    := godDirection
+                    closedTradeId     := godTradeId  // [v0.7.7] preserve id for the close alert
+                    totalSLHits += 1
+                    if godTP2_Hit
+                        winningTrades += 1
+                    else
+                        losingTrades  += 1
+                    if showTargetLabels
+                        string trailResultText  = godTP2_Hit ? "🔒 TRAIL HIT (WIN)" : "🔒 TRAIL HIT (LOSS)"
+                        color  trailResultColor = godTP2_Hit ? color.new(color.green, 0) : color.new(colorTrail, 0)
+                        label.new(bar_index, godTrailingStop, text=trailResultText, style=label.style_label_down, color=trailResultColor, textcolor=color.white, size=size.tiny)
+                    godEntryPrice  := na
+                    godDirection   := 0
+                    godTrailActive := false
+                else
+                    newStop = low + (godATR * trailDistance)
+                    if newStop < godTrailingStop
+                        godTrailingStop := newStop
+            else if low <= godEntryPrice - (godATR * trailActivation)
+                godTrailActive  := true
+                godTrailingStop := low + (godATR * trailDistance)
+                if showTargetLabels and showTargetLines
+                    label.new(bar_index, godTrailingStop, text='🔒 Trail Active', style=label.style_label_down, color=color.new(colorTrail, 0), textcolor=color.white, size=size.tiny)
+
+        // ── TP1 ───────────────────────────────────────────────────────────
+        if not godTP1_Hit and low <= godTP1_Level and not godSL_Hit and not na(godEntryPrice)
+            godTP1_Hit   := true
+            tp1HitThisBar := true
+            totalTP1Hits += 1
+            if showTargetLabels
+                label.new(bar_index, godTP1_Level, text='✅ TP1 HIT', style=label.style_label_up, color=color.new(colorTP1, 0), textcolor=color.black, size=size.tiny)
+
+        // ── TP2 ───────────────────────────────────────────────────────────
+        if not godTP2_Hit and low <= godTP2_Level and not godSL_Hit and not na(godEntryPrice)
+            godTP2_Hit   := true
+            tp2HitThisBar := true
+            totalTP2Hits += 1
+            if showTargetLabels
+                label.new(bar_index, godTP2_Level, text='✅ TP2 HIT', style=label.style_label_up, color=color.new(colorTP2, 0), textcolor=color.black, size=size.tiny)
+
+        // ── TP3 — Full WIN ────────────────────────────────────────────────
+        if not godTP3_Hit and low <= godTP3_Level and not godSL_Hit and not na(godEntryPrice)
+            godTP3_Hit    := true
+            tp3HitThisBar := true
+            totalTP3Hits  += 1
+            winningTrades += 1
+            if showTargetLabels
+                label.new(bar_index, godTP3_Level, text='🎯 TP3 HIT! (WIN)', style=label.style_label_up, color=color.new(colorTP3, 0), textcolor=color.white, size=size.small)
+            godEntryPrice  := na
+            godDirection   := 0
+            godTrailActive := false
+
+// ─── Extend Active Target Lines ───────────────────────────────────────────
+if not na(godEntryPrice) and showTargetLines
+    line.set_x2(godEntryLine, bar_index + 1)
+    if not godTP1_Hit
+        line.set_x2(godTP1_Line, bar_index + 1)
+    if not godTP2_Hit
+        line.set_x2(godTP2_Line, bar_index + 1)
+    if not godTP3_Hit
+        line.set_x2(godTP3_Line, bar_index + 1)
+    if godSLEnabled and not godSL_Hit
+        line.set_x2(godSL_Line, bar_index + 1)
+    if godSLEnabled and godTrailActive and not na(godTrailingStop)
+        line.delete(godTrail_Line)
+        godTrail_Line := line.new(bar_index - 1, godTrailingStop, bar_index + 1, godTrailingStop,
+                                  xloc=xloc.bar_index,
+                                  extend=extendTargetLines ? extend.right : extend.none,
+                                  color=colorTrail,
+                                  style=line.style_solid,
+                                  width=targetLineWidth + 1)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📊 VISUALIZATION — ATRONOX
+// ═══════════════════════════════════════════════════════════════════════════
+
+bandTransparencyAtronox = showBandsAtronox ? 70 : 100
+
+upperBandAtronox = plot(bbUpperAtronox, "BB Upper", color=color.new(color.green, bandTransparencyAtronox))
+basisLineAtronox = plot(bbBasisAtronox, "BB Basis", color=color.new(color.gray,  bandTransparencyAtronox))
+lowerBandAtronox = plot(bbLowerAtronox, "BB Lower", color=color.new(color.red,   bandTransparencyAtronox))
+fill(upperBandAtronox, lowerBandAtronox,
+     color=color.new(isBullishBreakoutAtronox ? color.green : isBearishBreakoutAtronox ? color.red : color.gray,
+                     bandTransparencyAtronox + 10))
+
+trendLineColorAtronox = atronoxTrend == 1 ? color.new(color.green, 0) : color.new(color.red, 0)
+plot(showTrendLineAtronox ? atronoxTrendLine : na, "AtroNox Trend", color=trendLineColorAtronox, linewidth=3)
+
+plotshape(showIndividualSignals and longSignalAtronox,  style=shape.triangleup,   location=location.belowbar, color=#02d4f0, size=size.tiny, text='AtroNox', textcolor=color.white, title='AtroNox Long')
+plotshape(showIndividualSignals and shortSignalAtronox, style=shape.triangledown, location=location.abovebar, color=#fc5757, size=size.tiny, text='AtroNox', textcolor=color.white, title='AtroNox Short')
+
+var int zoneStateAtronox = 0
+zoneStateAtronox := longSignalAtronox ? 1 : shortSignalAtronox ? -1 : nz(zoneStateAtronox[1])
+bgcolor(showZonesAtronox ? zoneStateAtronox == 1 ? color.new(color.green, 95) : zoneStateAtronox == -1 ? color.new(color.red, 95) : na : na)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📊 VISUALIZATION — RAPTOR
+// ═══════════════════════════════════════════════════════════════════════════
+
+atr_multiplierRaptor   = ta.atr(30) * 2
+label_low_posRaptor    = low  - atr_multiplierRaptor
+label_high_posRaptor   = high + atr_multiplierRaptor
+
+if showIndividualSignals and longSignalRaptor
+    label.new(bar_index, label_low_posRaptor,  "Raptor📈", xloc.bar_index, yloc.price, color.rgb(156, 202, 50), label.style_label_up,   color.white, size.small)
+
+if showIndividualSignals and shortSignalRaptor
+    label.new(bar_index, label_high_posRaptor, "Raptor📉", xloc.bar_index, yloc.price, #866bfd,                 label.style_label_down, color.white, size.small)
+
+plotshape(tp_sell_signalRaptor == 2, style=shape.xcross, location=location.abovebar, color=color.new(#354996, 0), textcolor=color.new(color.white, 0), offset=0, title="RAPTOR TP Sell")
+plotshape(tp_buy_signalRaptor  == 2, style=shape.xcross, location=location.belowbar, color=color.new(#354996, 0), textcolor=color.new(color.white, 0), offset=0, title="RAPTOR TP Buy")
+
+plotshape(Show_TBORaptor ? tbo_long_signalRaptor  : na, "▲ TBO Long",  shape.triangleup,   location.belowbar, greennRaptor, size=size.tiny)
+plotshape(Show_TBORaptor ? tbo_short_signalRaptor : na, "▼ TBO Short", shape.triangledown, location.abovebar, pinkRaptor,   size=size.tiny)
+
+plot(showSMARaptor and m180Raptor ? s180Raptor : na, linewidth=1, color=color.new(s180Raptor > s200Raptor[30] ? BLuERaptor : GRayRaptor, 7), title='RAPTOR SMA 180')
+plot(showSMARaptor and a200Raptor ? s200Raptor : na, linewidth=2, color=color.new(s180Raptor > s200Raptor[30] ? BFiLLRaptor : GFiLLRaptor, 7), title='RAPTOR SMA 200')
+
+p1Raptor = plot(showSMARaptor and srcRaptor > s200Raptor ? s200Raptor : na, display=display.none)
+p2Raptor = plot(showSMARaptor and s200Raptor < srcRaptor ? srcRaptor   : na, display=display.none)
+fill(p1Raptor, p2Raptor, bottom_value=s200Raptor, top_color=na, bottom_color=BFiLLRaptor, top_value=srcRaptor)
+
+p3Raptor = plot(showSMARaptor and srcRaptor < s200Raptor ? s200Raptor : na, display=display.none)
+p4Raptor = plot(showSMARaptor and s200Raptor > srcRaptor ? srcRaptor   : na, display=display.none)
+fill(p3Raptor, p4Raptor, bottom_value=s200Raptor, top_color=na, bottom_color=GFiLLRaptor, top_value=srcRaptor)
+
+pFastRaptor = plot(showEMARaptor ? emaFastRaptor : na, title="RAPTOR Fast EMA", color=emaFastColorRaptor)
+pSlowRaptor = plot(showEMARaptor ? emaSlowRaptor : na, title="RAPTOR Slow EMA", color=emaSlowColorRaptor)
+fill(pFastRaptor, pSlowRaptor, color=showEMARaptor ? cloudColorRaptor : na, title="RAPTOR EMA Cloud")
+
+plot(Show_SuperIchiRaptor ? tenkan_lineRaptor : na, 'RAPTOR Tenkan-Sen', tenkan_colorRaptor)
+plot(Show_SuperIchiRaptor ? kijun_lineRaptor  : na, 'RAPTOR Kijun-Sen',  kijun_colorRaptor)
+
+plot(tenkan_crosses_aboveRaptor ? kijun_lineRaptor : na, 'RAPTOR Crossover',  #2157f3, 3, plot.style_circles)
+plot(tenkan_crosses_belowRaptor ? kijun_lineRaptor : na, 'RAPTOR Crossunder', #ff5d00, 3, plot.style_circles)
+
+ARaptor = plot(Show_SuperIchiRaptor ? senkou_aRaptor : na, 'RAPTOR Senkou Span A', na, offset=displacementRaptor - 1)
+BRaptor = plot(Show_SuperIchiRaptor ? senkou_bRaptor : na, 'RAPTOR Senkou Span B', na, offset=displacementRaptor - 1)
+fill(ARaptor, BRaptor, senkou_aRaptor > senkou_bRaptor ? cloud_bullRaptor : cloud_bearRaptor, title="RAPTOR SuperIchi Cloud")
+
+plotshape(reversal_upRaptor,   'RAPTOR Reversal Up Signal',   shape.labelup,   location.belowbar, color.new(#2157f9, 65), text='Reversal Up Chance',   size=size.small, textcolor=color.white)
+plotshape(reversal_downRaptor, 'RAPTOR Reversal Down Signal', shape.labeldown, location.abovebar, color.new(#ff1100, 65), text='Reversal Down Chance', size=size.small, textcolor=color.white)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📊 VISUALIZATION — SCALPER
+// ═══════════════════════════════════════════════════════════════════════════
+
+y1Scalper = low  - (ta.atr(30) * 2)
+y2Scalper = high + (ta.atr(30) * 2)
+
+if showIndividualSignals and longSignalScalper
+    label.new(bar_index, y1Scalper, "Scalper🚀", xloc.bar_index, yloc.price, color.new(#9c27b0, 0), label.style_label_up,   color.white, size.small)
+
+if showIndividualSignals and shortSignalScalper
+    label.new(bar_index, y2Scalper, "Scalper🐻", xloc.bar_index, yloc.price, color.new(#ff5722, 0), label.style_label_down, color.white, size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📊 VISUALIZATION — ELITE ALGO
+// ═══════════════════════════════════════════════════════════════════════════
+
+// [v0.7.5] Removed deprecated transp= argument (ignored with series colors
+//          in Pine v5); the hex colors below already carry their own alpha.
+filt_plot_elite   = plot(showEliteFilter ? filt_elite   : na, color=filt_color_elite, linewidth=3, title='Elite Filter')
+h_band_plot_elite = plot(showEliteFilter ? h_band_elite : na, color=color.new(#05ff9b, 100), title='Elite High Band')
+l_band_plot_elite = plot(showEliteFilter ? l_band_elite : na, color=color.new(#ff0583, 100), title='Elite Low Band')
+fill(h_band_plot_elite, filt_plot_elite, showEliteFilter ? #00b36b00 : na, title='Elite High Band Fill')
+fill(l_band_plot_elite, filt_plot_elite, showEliteFilter ? #b8005c00 : na, title='Elite Low Band Fill')
+
+if showIndividualSignals and longSignalElite
+    label.new(bar_index, low  - (ta.atr(30) * 2.5), "Elite🏆", xloc.bar_index, yloc.price, color.new(#00cf4b, 0), label.style_label_up,   color.white, size.small)
+
+if showIndividualSignals and shortSignalElite
+    label.new(bar_index, high + (ta.atr(30) * 2.5), "Elite⚡", xloc.bar_index, yloc.price, color.new(#ff0000, 0), label.style_label_down, color.white, size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚡ GOD MODE SIGNAL VISUALIZATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+if godModeLongSignal
+    label.new(bar_index, low - (ta.atr(30) * 3),
+              text="⚡💎 GOD MODE 💎⚡\n🚀 LONG 🚀\n[" + str.tostring(longSystemCount) + " Systems | " + str.tostring(longSignalStrength, '#') + "% Strength]",
+              xloc=xloc.bar_index, yloc=yloc.price,
+              color=color.new(#00ff00, 0), style=label.style_label_up,
+              textcolor=color.black, size=size.tiny,
+              tooltip="Consensus Long Signal\nSystems: " + str.tostring(longSystemCount) + "/4\nStrength: " + str.tostring(longSignalStrength, '#.#') + "%\nVolatility: " + str.tostring(volatilityRatio, '#.##'))
+
+if godModeShortSignal
+    label.new(bar_index, high + (ta.atr(30) * 3),
+              text="⚡🏆 GOD MODE 🏆⚡\n🐻 SHORT 🐻\n[" + str.tostring(shortSystemCount) + " Systems | " + str.tostring(shortSignalStrength, '#') + "% Strength]",
+              xloc=xloc.bar_index, yloc=yloc.price,
+              color=color.new(#ff0000, 0), style=label.style_label_down,
+              textcolor=color.white, size=size.tiny,
+              tooltip="Consensus Short Signal\nSystems: " + str.tostring(shortSystemCount) + "/4\nStrength: " + str.tostring(shortSignalStrength, '#.#') + "%\nVolatility: " + str.tostring(volatilityRatio, '#.##'))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎨 UNIFIED BAR COLORING (single priority-based barcolor call)
+// ═══════════════════════════════════════════════════════════════════════════
+
+color finalBarColor = na
+
+if barColorMode == "Scalper Trend"
+    finalBarColor := isSidewaysScalper ? #b102fc : close > supertrendScalper ? #3cff00 : #fe0100
+else if barColorMode == "RAPTOR MACD"
+    finalBarColor := bar_colorRaptor
+else if barColorMode == "Elite Algo"
+    // [v0.7.5] Redundant secondary on/off toggle removed — selecting this
+    //          mode is the single switch for Elite bar colors.
+    finalBarColor := bar_color_elite
+
+barcolor(finalBarColor, title="Unified Bar Color")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 📲 DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════
+
+bool isCompact = dashboardMode == "Compact"
+
+// Theme Colors
+color themeBgPrimary   = dashboardStyle == "Dark Pro" ? color.rgb(13,17,23,   dashboardTransparency) : dashboardStyle == "Light" ? color.rgb(255,255,255,dashboardTransparency) : color.rgb(10,10,30,  dashboardTransparency)
+color themeBgSecondary = dashboardStyle == "Dark Pro" ? color.rgb(22,27,34,   dashboardTransparency) : dashboardStyle == "Light" ? color.rgb(240,240,245,dashboardTransparency) : color.rgb(20,20,50,  dashboardTransparency)
+color themeBgHeader    = dashboardStyle == "Dark Pro" ? color.rgb(33,38,45,0)   : dashboardStyle == "Light" ? color.rgb(59,130,246,0)   : color.rgb(139,92,246,0)
+color themeAccent      = dashboardStyle == "Dark Pro" ? color.rgb(255,215,0,0)  : dashboardStyle == "Light" ? color.rgb(59,130,246,0)   : color.rgb(139,92,246,0)
+color themeTextPrimary = dashboardStyle == "Dark Pro" ? color.rgb(230,237,243,0): dashboardStyle == "Light" ? color.rgb(30,30,30,0)     : color.rgb(255,255,255,0)
+color themeTextSecondary = dashboardStyle == "Dark Pro" ? color.rgb(139,148,158,0): dashboardStyle == "Light" ? color.rgb(100,100,100,0): color.rgb(180,180,220,0)
+color themeBorder      = dashboardStyle == "Dark Pro" ? color.rgb(48,54,61,0)   : dashboardStyle == "Light" ? color.rgb(200,200,200,0)  : color.rgb(139,92,246,30)
+
+color statusBullish = color.rgb(46, 204, 113, 0)
+color statusBearish = color.rgb(231, 76,  60,  0)
+color statusNeutral = color.rgb(149, 165, 166, 0)
+color statusWarning = color.rgb(241, 196, 15,  0)
+
+string txtSizeHeader = dashboardSize == "Small" ? size.normal : dashboardSize == "Normal" ? size.large  : size.huge
+string txtSizeNormal = dashboardSize == "Small" ? size.small  : dashboardSize == "Normal" ? size.normal : size.large
+string txtSizeLabel  = dashboardSize == "Small" ? size.tiny   : dashboardSize == "Normal" ? size.small  : size.normal
+
+string godStatusDisplay = godModeLongConsensus ? (isCompact ? "▲ LONG" : "▲ LONG CONSENSUS") : godModeShortConsensus ? (isCompact ? "▼ SHORT" : "▼ SHORT CONSENSUS") : (isCompact ? "◆ WAIT" : "◆ SCANNING...")
+color  godStatusCol     = godModeLongConsensus ? statusBullish : godModeShortConsensus ? statusBearish : statusNeutral
+color  godStatusBg      = godModeLongConsensus ? color.new(statusBullish, 85) : godModeShortConsensus ? color.new(statusBearish, 85) : color.new(statusNeutral, 90)
+
+float strengthValue   = godModeLongConsensus ? longSignalStrength : godModeShortConsensus ? shortSignalStrength : 0
+color strengthCol     = strengthValue >= 80 ? statusBullish : strengthValue >= 60 ? statusWarning : statusBearish
+string strengthDisplay    = str.tostring(strengthValue, "#") + "%"
+string strengthBarDisplay = strengthValue >= 80 ? "████████░░" : strengthValue >= 70 ? "███████░░░" : strengthValue >= 60 ? "██████░░░░" : strengthValue >= 50 ? "█████░░░░░" : strengthValue >= 40 ? "████░░░░░░" : "███░░░░░░░"
+
+string longSystemsDisplay  = str.tostring(longSystemCount)  + "/4"
+string shortSystemsDisplay = str.tostring(shortSystemCount) + "/4"
+color  longSystemsCol      = longSystemCount  >= godModeMinSystems ? statusBullish : themeTextSecondary
+color  shortSystemsCol     = shortSystemCount >= godModeMinSystems ? statusBearish : themeTextSecondary
+
+string atronoxStatusDisplay = atronoxLongInWindow ? "▲ LONG" : atronoxShortInWindow ? "▼ SHORT" : "● IDLE"
+color  atronoxStatusCol     = atronoxLongInWindow ? statusBullish : atronoxShortInWindow ? statusBearish : themeTextSecondary
+color  atronoxBgCol         = atronoxLongInWindow ? color.new(statusBullish, 90) : atronoxShortInWindow ? color.new(statusBearish, 90) : themeBgSecondary
+
+string raptorStatusDisplay  = raptorLongInWindow  ? "▲ LONG" : raptorShortInWindow  ? "▼ SHORT" : "● IDLE"
+color  raptorStatusCol      = raptorLongInWindow  ? statusBullish : raptorShortInWindow  ? statusBearish : themeTextSecondary
+color  raptorBgCol          = raptorLongInWindow  ? color.new(statusBullish, 90) : raptorShortInWindow  ? color.new(statusBearish, 90) : themeBgSecondary
+
+string scalperStatusDisplay = scalperLongInWindow ? "▲ LONG" : scalperShortInWindow ? "▼ SHORT" : "● IDLE"
+color  scalperStatusCol     = scalperLongInWindow ? statusBullish : scalperShortInWindow ? statusBearish : themeTextSecondary
+color  scalperBgCol         = scalperLongInWindow ? color.new(statusBullish, 90) : scalperShortInWindow ? color.new(statusBearish, 90) : themeBgSecondary
+
+string eliteStatusDisplay   = eliteLongInWindow   ? "▲ LONG" : eliteShortInWindow   ? "▼ SHORT" : "● IDLE"
+color  eliteStatusCol       = eliteLongInWindow   ? statusBullish : eliteShortInWindow   ? statusBearish : themeTextSecondary
+color  eliteBgCol           = eliteLongInWindow   ? color.new(statusBullish, 90) : eliteShortInWindow   ? color.new(statusBearish, 90) : themeBgSecondary
+
+string positionDisplay = godDirection == 1 ? "▲ LONG ACTIVE" : "▼ SHORT ACTIVE"
+color  positionCol     = godDirection == 1 ? statusBullish : statusBearish
+color  positionBgCol   = godDirection == 1 ? color.new(statusBullish, 85) : color.new(statusBearish, 85)
+// [v0.7.5] Entry now uses chart precision like every other displayed price.
+string entryDisplay    = str.tostring(godEntryPrice, format.mintick)
+
+// [v0.7.3] Guard against zero/na risk before division
+float calcRisk    = godSLEnabled and not na(godEntryPrice) ? (godDirection == 1 ? godEntryPrice - godSL_Level : godSL_Level - godEntryPrice) : nz(godATR, 1)
+float calcReward1 = not na(godEntryPrice) ? (godDirection == 1 ? godTP1_Level - godEntryPrice : godEntryPrice - godTP1_Level) : 0
+float calcReward3 = not na(godEntryPrice) ? (godDirection == 1 ? godTP3_Level - godEntryPrice : godEntryPrice - godTP3_Level) : 0
+float calcRR1     = calcRisk > 0 ? calcReward1 / calcRisk : 0
+float calcRR3     = calcRisk > 0 ? calcReward3 / calcRisk : 0
+string rrDisplay  = "1:" + str.tostring(calcRR1, "#.#") + " → 1:" + str.tostring(calcRR3, "#.#")
+color  rrCol      = calcRR1 >= 2 ? statusBullish : statusWarning
+
+string tp1Display = godTP1_Hit ? "✓ HIT" : str.tostring(godTP1_Level, format.mintick)
+color  tp1Col     = godTP1_Hit ? statusBullish : themeTextPrimary
+color  tp1BgCol   = godTP1_Hit ? color.new(statusBullish, 85) : themeBgSecondary
+
+string tp2Display = godTP2_Hit ? "✓ HIT" : str.tostring(godTP2_Level, format.mintick)
+color  tp2Col     = godTP2_Hit ? statusBullish : themeTextPrimary
+color  tp2BgCol   = godTP2_Hit ? color.new(statusBullish, 85) : themeBgSecondary
+
+string tp3Display = godTP3_Hit ? "★ WIN!" : str.tostring(godTP3_Level, format.mintick)
+color  tp3Col     = godTP3_Hit ? statusBullish : themeTextPrimary
+color  tp3BgCol   = godTP3_Hit ? color.new(statusBullish, 85) : themeBgSecondary
+
+string slDisplay = godSL_Hit ? "✗ HIT" : godTrailActive ? "🔒 " + str.tostring(godTrailingStop, format.mintick) : str.tostring(godSL_Level, format.mintick)
+color  slCol     = godSL_Hit ? statusBearish : godTrailActive ? statusWarning : themeTextPrimary
+color  slBgCol   = godSL_Hit ? color.new(statusBearish, 85) : godTrailActive ? color.new(statusWarning, 85) : themeBgSecondary
+string slLabel   = godTrailActive ? "🔒 TRAILING" : "🛡️ STOP LOSS"
+
+int   completedTrades = winningTrades + losingTrades
+float winRateCalc     = completedTrades > 0 ? (winningTrades * 1.0 / completedTrades) * 100.0 : 0.0
+string winRateDisplay = str.tostring(winRateCalc, "#.#") + "%"
+color  winRateCol     = winRateCalc >= 60 ? statusBullish : winRateCalc >= 40 ? statusWarning : statusBearish
+string winRateBar     = winRateCalc >= 90 ? "██████████" : winRateCalc >= 80 ? "████████░░" : winRateCalc >= 70 ? "███████░░░" : winRateCalc >= 60 ? "██████░░░░" : winRateCalc >= 50 ? "█████░░░░░" : winRateCalc >= 40 ? "████░░░░░░" : winRateCalc >= 30 ? "███░░░░░░░" : winRateCalc >= 20 ? "██░░░░░░░░" : "█░░░░░░░░░"
+
+string volStatusDisplay = volatilityOK ? "✓ OPTIMAL" : (volatilityRatio < minVolatility ? "⚠ LOW" : "⚠ HIGH")
+color  volStatusCol     = volatilityOK ? statusBullish : statusWarning
+
+if dashboardEnabled and barstate.islast
+    var tblPos = dashboardLocation == "Top Right" ? position.top_right : dashboardLocation == "Top Left" ? position.top_left : dashboardLocation == "Bottom Right" ? position.bottom_right : position.bottom_left
+
+    var table dash = table.new(tblPos, 3, 45, bgcolor=themeBgPrimary, border_width=1, border_color=themeBorder, frame_width=2, frame_color=themeAccent)
+
+    // [v0.7.5] Clear all data rows on every render. The layout shrinks when
+    //          the ACTIVE TRADE section disappears; without clearing, stale
+    //          cells from the longer layout remained as ghost rows.
+    table.clear(dash, 0, 1, 2, 44)
+
+    table.cell(dash, 0, 0, isCompact ? "⚡" : "  ⚡  ", bgcolor=themeAccent, text_color=color.rgb(0,0,0), text_size=txtSizeHeader)
+    table.cell(dash, 1, 0, isCompact ? "GOD MODE"  : "GOD MODE ",  bgcolor=themeAccent, text_color=color.rgb(0,0,0), text_size=txtSizeHeader, text_halign=text.align_left)
+    table.cell(dash, 2, 0, isCompact ? "" : "QUAD", bgcolor=themeAccent, text_color=color.rgb(0,0,0), text_size=txtSizeLabel)
+
+    var int r = 1
+    r := 1
+
+    table.cell(dash, 0, r, "", bgcolor=godStatusBg, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, godStatusDisplay, bgcolor=godStatusBg, text_color=godStatusCol, text_size=txtSizeNormal, text_halign=text.align_left)
+    table.cell(dash, 2, r, "", bgcolor=godStatusBg, text_size=txtSizeLabel)
+    r += 1
+
+    if not isCompact
+        table.cell(dash, 0, r, "POWER", bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, strengthBarDisplay, bgcolor=themeBgSecondary, text_color=strengthCol, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, strengthDisplay, bgcolor=themeBgSecondary, text_color=strengthCol, text_size=txtSizeLabel)
+        r += 1
+
+    table.cell(dash, 0, r, "LONG",  bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, longSystemsDisplay  + " systems", bgcolor=themeBgSecondary, text_color=longSystemsCol,  text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, longSystemCount  >= godModeMinSystems ? "●" : "○", bgcolor=themeBgSecondary, text_color=longSystemsCol,  text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "SHORT", bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, shortSystemsDisplay + " systems", bgcolor=themeBgSecondary, text_color=shortSystemsCol, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, shortSystemCount >= godModeMinSystems ? "●" : "○", bgcolor=themeBgSecondary, text_color=shortSystemsCol, text_size=txtSizeLabel)
+    r += 1
+
+    // [v0.7.5] Warn when Minimum Systems was auto-clamped to the enabled count.
+    if minSystemsClamped
+        table.cell(dash, 0, r, "⚠️", bgcolor=color.new(statusWarning, 85), text_color=statusWarning, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "Min systems → " + str.tostring(godModeMinSystems), bgcolor=color.new(statusWarning, 85), text_color=statusWarning, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, str.tostring(enabledSystemCount) + " on", bgcolor=color.new(statusWarning, 85), text_color=statusWarning, text_size=txtSizeLabel)
+        r += 1
+
+    table.cell(dash, 0, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, isCompact ? "SYSTEMS" : "━━━ SYSTEMS ━━━", bgcolor=themeBgHeader, text_color=themeAccent, text_size=txtSizeLabel, text_halign=text.align_center)
+    table.cell(dash, 2, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "🧠", bgcolor=atronoxBgCol, text_color=themeTextPrimary, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, isCompact ? "AtroNox" : "AtroNox AI", bgcolor=atronoxBgCol, text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, atronoxStatusDisplay, bgcolor=atronoxBgCol, text_color=atronoxStatusCol, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "🦅", bgcolor=raptorBgCol,  text_color=themeTextPrimary, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, isCompact ? "RAPTOR" : "RAPTOR Pro", bgcolor=raptorBgCol, text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, raptorStatusDisplay,  bgcolor=raptorBgCol,  text_color=raptorStatusCol,  text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "🎯", bgcolor=scalperBgCol, text_color=themeTextPrimary, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, isCompact ? "Scalper" : "Scalper X", bgcolor=scalperBgCol, text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, scalperStatusDisplay, bgcolor=scalperBgCol, text_color=scalperStatusCol, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "🏆", bgcolor=eliteBgCol,   text_color=themeTextPrimary, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, isCompact ? "Elite" : "Elite Algo", bgcolor=eliteBgCol, text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, eliteStatusDisplay,   bgcolor=eliteBgCol,   text_color=eliteStatusCol,   text_size=txtSizeLabel)
+    r += 1
+
+    if godTargetsEnabled and not na(godEntryPrice)
+        table.cell(dash, 0, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, isCompact ? "TRADE" : "━━━ ACTIVE TRADE ━━━", bgcolor=themeBgHeader, text_color=themeAccent, text_size=txtSizeLabel, text_halign=text.align_center)
+        table.cell(dash, 2, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "📍", bgcolor=positionBgCol, text_color=themeTextPrimary, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, positionDisplay, bgcolor=positionBgCol, text_color=positionCol, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, "", bgcolor=positionBgCol, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "💰", bgcolor=themeBgSecondary, text_color=themeTextPrimary, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "Entry", bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, entryDisplay, bgcolor=themeBgSecondary, text_color=themeTextPrimary, text_size=txtSizeLabel)
+        r += 1
+
+        if not isCompact
+            table.cell(dash, 0, r, "⚖️", bgcolor=themeBgSecondary, text_color=themeTextPrimary, text_size=txtSizeLabel)
+            table.cell(dash, 1, r, "R:R Range", bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel, text_halign=text.align_left)
+            table.cell(dash, 2, r, rrDisplay, bgcolor=themeBgSecondary, text_color=rrCol, text_size=txtSizeLabel)
+            r += 1
+
+        table.cell(dash, 0, r, "🥉", bgcolor=tp1BgCol, text_color=colorTP1, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "TP1", bgcolor=tp1BgCol, text_color=tp1Col, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, tp1Display, bgcolor=tp1BgCol, text_color=tp1Col, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "🥈", bgcolor=tp2BgCol, text_color=colorTP2, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "TP2", bgcolor=tp2BgCol, text_color=tp2Col, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, tp2Display, bgcolor=tp2BgCol, text_color=tp2Col, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "🥇", bgcolor=tp3BgCol, text_color=colorTP3, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "TP3", bgcolor=tp3BgCol, text_color=tp3Col, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, tp3Display, bgcolor=tp3BgCol, text_color=tp3Col, text_size=txtSizeLabel)
+        r += 1
+
+        if godSLEnabled
+            table.cell(dash, 0, r, "🛡️", bgcolor=slBgCol, text_color=colorSL, text_size=txtSizeLabel)
+            table.cell(dash, 1, r, slLabel, bgcolor=slBgCol, text_color=slCol, text_size=txtSizeLabel, text_halign=text.align_left)
+            table.cell(dash, 2, r, slDisplay, bgcolor=slBgCol, text_color=slCol, text_size=txtSizeLabel)
+            r += 1
+        else
+            table.cell(dash, 0, r, "⚠️", bgcolor=color.new(statusWarning, 85), text_color=statusWarning, text_size=txtSizeLabel)
+            table.cell(dash, 1, r, "STOP LOSS", bgcolor=color.new(statusWarning, 85), text_color=statusWarning, text_size=txtSizeLabel, text_halign=text.align_left)
+            table.cell(dash, 2, r, "DISABLED", bgcolor=color.new(statusWarning, 85), text_color=statusWarning, text_size=txtSizeLabel)
+            r += 1
+
+    table.cell(dash, 0, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, isCompact ? "TALLY" : "━━ SESSION TALLY (not a track record) ━━", bgcolor=themeBgHeader, text_color=themeAccent, text_size=txtSizeLabel, text_halign=text.align_center)
+    table.cell(dash, 2, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "📊", bgcolor=themeBgSecondary, text_color=themeTextPrimary, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, "Signals", bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, str.tostring(totalSignals), bgcolor=themeBgSecondary, text_color=themeTextPrimary, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "🎯", bgcolor=themeBgSecondary, text_color=colorTP1, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, "TP1 | TP2 | TP3", bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, str.tostring(totalTP1Hits) + " | " + str.tostring(totalTP2Hits) + " | " + str.tostring(totalTP3Hits), bgcolor=themeBgSecondary, text_color=statusBullish, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "🛡️", bgcolor=themeBgSecondary, text_color=colorSL, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, "Stop Loss Hits", bgcolor=themeBgSecondary, text_color=themeTextSecondary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, str.tostring(totalSLHits), bgcolor=themeBgSecondary, text_color=statusBearish, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "✓", bgcolor=color.new(statusBullish, 90), text_color=statusBullish, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, "Wins", bgcolor=color.new(statusBullish, 90), text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, str.tostring(winningTrades), bgcolor=color.new(statusBullish, 90), text_color=statusBullish, text_size=txtSizeLabel)
+    r += 1
+
+    table.cell(dash, 0, r, "✗", bgcolor=color.new(statusBearish, 90), text_color=statusBearish, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, "Losses", bgcolor=color.new(statusBearish, 90), text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, str.tostring(losingTrades), bgcolor=color.new(statusBearish, 90), text_color=statusBearish, text_size=txtSizeLabel)
+    r += 1
+
+    color winRateBgCol = winRateCalc >= 60 ? color.new(statusBullish, 85) : winRateCalc >= 40 ? color.new(statusWarning, 85) : color.new(statusBearish, 85)
+    table.cell(dash, 0, r, "📈", bgcolor=winRateBgCol, text_color=winRateCol, text_size=txtSizeLabel)
+    table.cell(dash, 1, r, isCompact ? "Win Rate" : winRateBar, bgcolor=winRateBgCol, text_color=winRateCol, text_size=txtSizeLabel, text_halign=text.align_left)
+    table.cell(dash, 2, r, winRateDisplay, bgcolor=winRateBgCol, text_color=winRateCol, text_size=txtSizeLabel)
+    r += 1
+
+    if not isCompact
+        table.cell(dash, 0, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "━━━ WIN/LOSS RULES ━━━", bgcolor=themeBgHeader, text_color=themeAccent, text_size=txtSizeLabel, text_halign=text.align_center)
+        table.cell(dash, 2, r, "", bgcolor=themeBgHeader, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "🥇", bgcolor=color.new(statusBullish, 90), text_color=statusBullish, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "TP3 Hit",  bgcolor=color.new(statusBullish, 90), text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, "= WIN",    bgcolor=color.new(statusBullish, 90), text_color=statusBullish, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "🥈", bgcolor=color.new(statusBullish, 90), text_color=statusBullish, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "TP2 → SL", bgcolor=color.new(statusBullish, 90), text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, "= WIN",    bgcolor=color.new(statusBullish, 90), text_color=statusBullish, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "🥉", bgcolor=color.new(statusBearish, 90), text_color=statusBearish, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "TP1 → SL", bgcolor=color.new(statusBearish, 90), text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, "= LOSS",   bgcolor=color.new(statusBearish, 90), text_color=statusBearish, text_size=txtSizeLabel)
+        r += 1
+
+        table.cell(dash, 0, r, "⚠️", bgcolor=color.new(statusBearish, 90), text_color=statusBearish, text_size=txtSizeLabel)
+        table.cell(dash, 1, r, "No TP → SL", bgcolor=color.new(statusBearish, 90), text_color=themeTextPrimary, text_size=txtSizeLabel, text_halign=text.align_left)
+        table.cell(dash, 2, r, "= LOSS",     bgcolor=color.new(statusBearish, 90), text_color=statusBearish, text_size=txtSizeLabel)
+        r += 1
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔔 TELEGRAM-FORMATTED ALERTS
+// ═══════════════════════════════════════════════════════════════════════════
+// [v0.7.5] ENTRY signals use alert.freq_once_per_bar_close: the signal is
+//          confirmed only on the committed candle, so Telegram alerts always
+//          match the final chart with the true close-based entry price
+//          (non-repainting). The same applies to invalidation and trade-
+//          replacement alerts, which also depend on bar-close consensus.
+//          TP/SL/Trail HIT alerts remain once_per_bar — an intrabar touch of
+//          a price level is a real event and should be reported immediately.
+//
+// [v0.7.7] Each trade-relevant alert appends a hidden machine-readable tag,
+//          [[DRFX]]{...}[[/DRFX]], AFTER the version footer. The DrFX Quant
+//          server reads it to drive the live scoreboard, then strips it before
+//          posting — so the Telegram / channel text is unchanged. Terminal
+//          events (TP3, SL, trade-close) carry the indicator's own verdict so
+//          the scoreboard honors the TP2=win rule rather than re-deriving it.
+
+string VERSION_FOOTER = "⚡ GOD MODE v0.7.7"
+string _ln = "\n"
+
+// [v0.7.7] Hidden DrFX scoreboard tags — the server parses then STRIPS these;
+//          the channel message is unchanged. _drfxLvls holds the full level set
+//          sent with an entry (sl is null when the stop is disabled). godTradeId
+//          is the active trade's id; closedTradeId is the id of a trade closed
+//          by replacement / invalidation / trailing stop (set at close time).
+string _drfxLvls = "\"entry\":" + str.tostring(close) + ",\"sl\":" + (godSLEnabled ? str.tostring(godSL_Level) : "null") + ",\"tp1\":" + str.tostring(godTP1_Level) + ",\"tp2\":" + str.tostring(godTP2_Level) + ",\"tp3\":" + str.tostring(godTP3_Level) + ",\"tf\":\"" + timeframe.period + "\""
+string drfxTagEntryLong  = _ln + "[[DRFX]]{\"event\":\"entry\",\"signal_id\":\"" + godTradeId + "\",\"symbol\":\"" + syminfo.ticker + "\",\"direction\":\"long\","  + _drfxLvls + "}[[/DRFX]]"
+string drfxTagEntryShort = _ln + "[[DRFX]]{\"event\":\"entry\",\"signal_id\":\"" + godTradeId + "\",\"symbol\":\"" + syminfo.ticker + "\",\"direction\":\"short\"," + _drfxLvls + "}[[/DRFX]]"
+string drfxTagTP1   = _ln + "[[DRFX]]{\"event\":\"tp1\",\"signal_id\":\"" + godTradeId + "\"}[[/DRFX]]"
+string drfxTagTP2   = _ln + "[[DRFX]]{\"event\":\"tp2\",\"signal_id\":\"" + godTradeId + "\"}[[/DRFX]]"
+string drfxTagTP3   = _ln + "[[DRFX]]{\"event\":\"tp3\",\"signal_id\":\"" + godTradeId + "\",\"result\":\"win\"}[[/DRFX]]"
+string drfxTagSL    = _ln + "[[DRFX]]{\"event\":\"sl\",\"signal_id\":\"" + godTradeId + "\",\"result\":\"" + (godTP2_Hit ? "win" : "loss") + "\"}[[/DRFX]]"
+string drfxTagClose = _ln + "[[DRFX]]{\"event\":\"close\",\"signal_id\":\"" + closedTradeId + "\",\"result\":\"" + (closedTradeWasWin ? "win" : "loss") + "\"}[[/DRFX]]"
+
+// Pre-compute system status for LONG signal alerts
+string sysAtronoxStatus = atronoxLongInWindow  ? "✅" : atronoxShortInWindow ? "🔴" : "⬜"
+string sysRaptorStatus  = raptorLongInWindow   ? "✅" : raptorShortInWindow  ? "🔴" : "⬜"
+string sysScalperStatus = scalperLongInWindow  ? "✅" : scalperShortInWindow ? "🔴" : "⬜"
+string sysEliteStatus   = eliteLongInWindow    ? "✅" : eliteShortInWindow   ? "🔴" : "⬜"
+
+// Pre-compute system status for SHORT signal alerts
+string sysAtronoxStatusShort = atronoxShortInWindow ? "✅" : atronoxLongInWindow  ? "🔴" : "⬜"
+string sysRaptorStatusShort  = raptorShortInWindow  ? "✅" : raptorLongInWindow   ? "🔴" : "⬜"
+string sysScalperStatusShort = scalperShortInWindow ? "✅" : scalperLongInWindow  ? "🔴" : "⬜"
+string sysEliteStatusShort   = eliteShortInWindow   ? "✅" : eliteLongInWindow    ? "🔴" : "⬜"
+
+// Shared direction string for trade-close alerts (uses the cached direction
+// of the trade that was CLOSED, not the current/new one).
+string closedDirStr = closedTradeDir == 1 ? "LONG" : closedTradeDir == -1 ? "SHORT" : "—"
+
+// ─────────────────────────────────────────────
+// ♻️ TRADE CLOSED — NEW SIGNAL (replacement)
+// [v0.7.5] NEW — previously a new signal silently destroyed the open trade.
+//          Fired before the entry alert so subscribers see the closure first.
+// ─────────────────────────────────────────────
+if replacedThisBar and alertEnabled
+    string replResultStr = closedTradeWasWin ? "WIN ✅ (TP2 was reached)" : "LOSS ❌"
+    string replEmoji     = closedTradeWasWin ? "🟢" : "🔴"
+    alert(
+         "♻️ TRADE CLOSED — NEW SIGNAL"                                       + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         "📍 Closed Direction: " + closedDirStr                               + _ln +
+         "💰 Price: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         replEmoji + " Result: " + replResultStr                              + _ln +
+         "📋 A new GOD MODE signal replaces this trade"                       + _ln +
+         "⏭️ Entry details follow in the next alert"                          + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         VERSION_FOOTER + drfxTagClose,
+         alert.freq_once_per_bar_close)
+
+// ─────────────────────────────────────────────
+// ⚡ GOD MODE LONG SIGNAL
+// ─────────────────────────────────────────────
+if godModeLongSignal and alertEnabled
+    string longRR1Str = godSLEnabled and (godEntryPrice - godSL_Level) > 0 ? str.tostring((godTP1_Level - godEntryPrice) / (godEntryPrice - godSL_Level), '#.#') : "—"
+    string longRR3Str = godSLEnabled and (godEntryPrice - godSL_Level) > 0 ? str.tostring((godTP3_Level - godEntryPrice) / (godEntryPrice - godSL_Level), '#.#') : "—"
+
+    alert(
+         "⚡💎 GOD MODE LONG 💎⚡"                                            + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         _ln +
+         "🚀 DIRECTION: LONG"                                                 + _ln +
+         "💰 ENTRY: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         "🎯 TARGETS:"                                                        + _ln +
+         "├─ 🥉 TP1: " + str.tostring(godTP1_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP1_Level - godEntryPrice)) + " pips)" + _ln +
+         "├─ 🥈 TP2: " + str.tostring(godTP2_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP2_Level - godEntryPrice)) + " pips)" + _ln +
+         "└─ 🥇 TP3: " + str.tostring(godTP3_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP3_Level - godEntryPrice)) + " pips)" + _ln +
+         _ln +
+         "🛡️ STOP LOSS: " + (godSLEnabled ? str.tostring(godSL_Level, format.mintick) + "  (-" + str.tostring(toPips(godSL_Level - godEntryPrice)) + " pips)" : "DISABLED") + _ln +
+         "⚖️ R:R: 1:" + longRR1Str + " → 1:" + longRR3Str                   + _ln +
+         _ln +
+         "📡 CONSENSUS: " + str.tostring(longSystemCount) + "/4 Systems"     + _ln +
+         "💪 STRENGTH: "  + str.tostring(longSignalStrength, '#.#') + "%"    + _ln +
+         "🌊 VOLATILITY: " + str.tostring(volatilityRatio, '#.##') + "x"     + _ln +
+         _ln +
+         "🔍 SYSTEM BREAKDOWN:"                                               + _ln +
+         sysAtronoxStatus + " 🧠 AtroNox AI"                                 + _ln +
+         sysRaptorStatus  + " 🦅 RAPTOR Pro"                                 + _ln +
+         sysScalperStatus + " 🎯 Scalper X"                                  + _ln +
+         sysEliteStatus   + " 🏆 Elite Algo"                                 + _ln +
+         _ln +
+         "⚠️ DYOR | Not Financial Advice"                                    + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         VERSION_FOOTER + drfxTagEntryLong,
+         alert.freq_once_per_bar_close)
+
+// ─────────────────────────────────────────────
+// ⚡ GOD MODE SHORT SIGNAL
+// ─────────────────────────────────────────────
+if godModeShortSignal and alertEnabled
+    string shortRR1Str = godSLEnabled and (godSL_Level - godEntryPrice) > 0 ? str.tostring((godEntryPrice - godTP1_Level) / (godSL_Level - godEntryPrice), '#.#') : "—"
+    string shortRR3Str = godSLEnabled and (godSL_Level - godEntryPrice) > 0 ? str.tostring((godEntryPrice - godTP3_Level) / (godSL_Level - godEntryPrice), '#.#') : "—"
+
+    alert(
+         "⚡🏆 GOD MODE SHORT 🏆⚡"                                           + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         _ln +
+         "🐻 DIRECTION: SHORT"                                                + _ln +
+         "💰 ENTRY: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         "🎯 TARGETS:"                                                        + _ln +
+         "├─ 🥉 TP1: " + str.tostring(godTP1_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP1_Level - godEntryPrice)) + " pips)" + _ln +
+         "├─ 🥈 TP2: " + str.tostring(godTP2_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP2_Level - godEntryPrice)) + " pips)" + _ln +
+         "└─ 🥇 TP3: " + str.tostring(godTP3_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP3_Level - godEntryPrice)) + " pips)" + _ln +
+         _ln +
+         "🛡️ STOP LOSS: " + (godSLEnabled ? str.tostring(godSL_Level, format.mintick) + "  (-" + str.tostring(toPips(godSL_Level - godEntryPrice)) + " pips)" : "DISABLED") + _ln +
+         "⚖️ R:R: 1:" + shortRR1Str + " → 1:" + shortRR3Str                 + _ln +
+         _ln +
+         "📡 CONSENSUS: " + str.tostring(shortSystemCount) + "/4 Systems"    + _ln +
+         "💪 STRENGTH: "  + str.tostring(shortSignalStrength, '#.#') + "%"   + _ln +
+         "🌊 VOLATILITY: " + str.tostring(volatilityRatio, '#.##') + "x"     + _ln +
+         _ln +
+         "🔍 SYSTEM BREAKDOWN:"                                               + _ln +
+         sysAtronoxStatusShort + " 🧠 AtroNox AI"                            + _ln +
+         sysRaptorStatusShort  + " 🦅 RAPTOR Pro"                            + _ln +
+         sysScalperStatusShort + " 🎯 Scalper X"                             + _ln +
+         sysEliteStatusShort   + " 🏆 Elite Algo"                            + _ln +
+         _ln +
+         "⚠️ DYOR | Not Financial Advice"                                    + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         VERSION_FOOTER + drfxTagEntryShort,
+         alert.freq_once_per_bar_close)
+
+// ─────────────────────────────────────────────
+// ✅ TP1 HIT
+// [v0.7.3] Uses godLastDirection (cached at signal entry) instead of
+//          godDirection which may already be 0 after cleanup.
+// ─────────────────────────────────────────────
+if tp1HitThisBar and alertOnTP1 and alertEnabled
+    string dirStr = godLastDirection == 1 ? "LONG" : godLastDirection == -1 ? "SHORT" : "—"
+    alert(
+         "✅ TP1 HIT 🥉"                                                      + _ln +
+         "━━━━━━━━━━━━━━━"                                                    + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         "📍 Direction: " + dirStr                                            + _ln +
+         "💰 Price: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         "📈 First target reached"                                            + _ln +
+         "📋 Partial profits secured"                                         + _ln +
+         _ln +
+         "⏭️ Next: TP2 @ " + str.tostring(godTP2_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP2_Level - godTP1_Level)) + " pips)" + _ln +
+         "━━━━━━━━━━━━━━━"                                                    + _ln +
+         VERSION_FOOTER + drfxTagTP1,
+         alert.freq_once_per_bar)
+
+// ─────────────────────────────────────────────
+// ✅ TP2 HIT
+// ─────────────────────────────────────────────
+if tp2HitThisBar and alertOnTP2 and alertEnabled
+    string dirStr2 = godLastDirection == 1 ? "LONG" : godLastDirection == -1 ? "SHORT" : "—"
+    alert(
+         "✅ TP2 HIT 🥈"                                                      + _ln +
+         "━━━━━━━━━━━━━━━"                                                    + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         "📍 Direction: " + dirStr2                                           + _ln +
+         "💰 Price: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         "🔒 Trade is now a WIN"                                              + _ln +
+         "🛡️ Even if SL hits = WIN"                                          + _ln +
+         _ln +
+         "⏭️ Next: TP3 @ " + str.tostring(godTP3_Level, format.mintick) + "  (+" + str.tostring(toPips(godTP3_Level - godTP2_Level)) + " pips)" + _ln +
+         "━━━━━━━━━━━━━━━"                                                    + _ln +
+         VERSION_FOOTER + drfxTagTP2,
+         alert.freq_once_per_bar)
+
+// ─────────────────────────────────────────────
+// 🎯 TP3 HIT — FULL WIN
+// ─────────────────────────────────────────────
+if tp3HitThisBar and alertOnTP3 and alertEnabled
+    alert(
+         "🎯 TP3 HIT 🥇 — FULL WIN! 🏆"                                     + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         "💰 Price: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         "🏆 Maximum target reached!"                                         + _ln +
+         "✅ Trade closed with FULL profit"                                    + _ln +
+         _ln +
+         "📊 Stats: " + str.tostring(winningTrades) + "W / " + str.tostring(losingTrades) + "L" + _ln +
+         "📈 Win Rate: " + str.tostring(winRateCalc, '#.#') + "%"            + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         VERSION_FOOTER + drfxTagTP3,
+         alert.freq_once_per_bar)
+
+// ─────────────────────────────────────────────
+// ❌ STOP LOSS HIT
+// [v0.7.3] Uses godLastDirection and correctly reads godTP1/2_Hit
+//          which are still true (var bools) at this point in execution.
+// ─────────────────────────────────────────────
+if slHitThisBar and alertOnSL and alertEnabled and godSLEnabled
+    string slResult = godTP2_Hit ? "WIN ✅ (TP2 was reached)" : "LOSS ❌"
+    string slEmoji  = godTP2_Hit ? "🟢" : "🔴"
+    alert(
+         "❌ STOP LOSS HIT 🛡️"                                               + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         "💰 Price: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         slEmoji + " Result: " + slResult                                     + _ln +
+         "🥉 TP1: " + (godTP1_Hit ? "✅ Hit" : "❌ Missed")                   + _ln +
+         "🥈 TP2: " + (godTP2_Hit ? "✅ Hit" : "❌ Missed")                   + _ln +
+         _ln +
+         "📊 Stats: " + str.tostring(winningTrades) + "W / " + str.tostring(losingTrades) + "L" + _ln +
+         "📈 Win Rate: " + str.tostring(winRateCalc, '#.#') + "%"            + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         VERSION_FOOTER + drfxTagSL,
+         alert.freq_once_per_bar)
+
+// ─────────────────────────────────────────────
+// 🔒 TRAILING STOP HIT
+// [v0.7.5] NEW — previously trailing exits closed the trade and counted the
+//          result but sent nothing to the signal channel. Result and
+//          direction were cached at exit time (closedTradeWasWin/Dir).
+// ─────────────────────────────────────────────
+if trailHitThisBar and alertOnSL and alertEnabled
+    string trailResultStr = closedTradeWasWin ? "WIN ✅ (TP2 was reached)" : "LOSS ❌"
+    string trailEmoji     = closedTradeWasWin ? "🟢" : "🔴"
+    alert(
+         "🔒 TRAILING STOP HIT"                                               + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         "📍 Direction: " + closedDirStr                                      + _ln +
+         "💰 Price: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         trailEmoji + " Result: " + trailResultStr                            + _ln +
+         "🔒 Trade closed by trailing stop"                                   + _ln +
+         _ln +
+         "📊 Stats: " + str.tostring(winningTrades) + "W / " + str.tostring(losingTrades) + "L" + _ln +
+         "📈 Win Rate: " + str.tostring(winRateCalc, '#.#') + "%"            + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         VERSION_FOOTER + drfxTagClose,
+         alert.freq_once_per_bar)
+
+// ─────────────────────────────────────────────
+// ⚠️ SIGNAL INVALIDATED
+// [v0.7.5] NEW — previously invalidations closed the trade and counted the
+//          result but sent nothing to the signal channel. Fires at bar close
+//          because invalidation depends on consensus, which is only final on
+//          the committed candle (same reasoning as entry signals).
+// ─────────────────────────────────────────────
+if invalidatedThisBar and alertEnabled
+    string invResultStr = closedTradeWasWin ? "WIN ✅ (TP2 was reached)" : "LOSS ❌"
+    string invEmoji     = closedTradeWasWin ? "🟢" : "🔴"
+    alert(
+         "⚠️ SIGNAL INVALIDATED"                                              + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         _ln +
+         "📊 " + syminfo.ticker + " | " + timeframe.period                   + _ln +
+         "📍 Direction: " + closedDirStr                                      + _ln +
+         "💰 Price: " + str.tostring(close, format.mintick)                   + _ln +
+         _ln +
+         "🔄 Opposing consensus detected"                                     + _ln +
+         "📋 Position closed early"                                           + _ln +
+         invEmoji + " Result: " + invResultStr                                + _ln +
+         _ln +
+         "📊 Stats: " + str.tostring(winningTrades) + "W / " + str.tostring(losingTrades) + "L" + _ln +
+         "📈 Win Rate: " + str.tostring(winRateCalc, '#.#') + "%"            + _ln +
+         "━━━━━━━━━━━━━━━━━━━"                                                + _ln +
+         VERSION_FOOTER + drfxTagClose,
+         alert.freq_once_per_bar_close)
+
+// ─────────────────────────────────────────────
+// 📡 INDIVIDUAL SYSTEM ALERTS
+// ─────────────────────────────────────────────
+if longSignalAtronox and alertIndividualSystems and alertEnabled
+    alert("🧠 ATRONOX AI — LONG"   + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 Bollinger Band breakout detected"    + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+if shortSignalAtronox and alertIndividualSystems and alertEnabled
+    alert("🧠 ATRONOX AI — SHORT"  + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 Bollinger Band breakdown detected"   + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+if longSignalRaptor and alertIndividualSystems and alertEnabled
+    alert("🦅 RAPTOR PRO — LONG"   + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 SuperTrend bullish cross confirmed"  + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+if shortSignalRaptor and alertIndividualSystems and alertEnabled
+    alert("🦅 RAPTOR PRO — SHORT"  + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 SuperTrend bearish cross confirmed"  + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+if longSignalScalper and alertIndividualSystems and alertEnabled
+    alert("🎯 SCALPER X — LONG"    + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 Fast SuperTrend bullish signal"      + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+if shortSignalScalper and alertIndividualSystems and alertEnabled
+    alert("🎯 SCALPER X — SHORT"   + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 Fast SuperTrend bearish signal"      + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+if longSignalElite and alertIndividualSystems and alertEnabled
+    alert("🏆 ELITE ALGO — LONG"   + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 Range filter bullish confirmation"   + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+if shortSignalElite and alertIndividualSystems and alertEnabled
+    alert("🏆 ELITE ALGO — SHORT"  + _ln + "━━━━━━━━━━━━━━━" + _ln + "📊 " + syminfo.ticker + " | " + timeframe.period + _ln + "💰 Price: " + str.tostring(close, format.mintick) + _ln + "📋 Range filter bearish confirmation"   + _ln + "━━━━━━━━━━━━━━━" + _ln + VERSION_FOOTER, alert.freq_once_per_bar)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// END OF SCRIPT — GOD MODE v0.7.7
+// ═══════════════════════════════════════════════════════════════════════════
