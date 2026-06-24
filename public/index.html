@@ -467,10 +467,11 @@ function dmStatusText(){const info=S.chatInfo;if(!info||info.type!=="dm")return"
 
 function bindMsgEvents(mc){
   mc.querySelectorAll("[data-mid]").forEach(el=>{
-    let timer;const mid=parseInt(el.dataset.mid);
+    const mid=parseInt(el.dataset.mid);let lastTap=0;
+    const guard=e=>e.target&&e.target.closest&&e.target.closest("button,a,input,textarea,.dq-rx,[data-rx]");
     el.oncontextmenu=e=>{e.preventDefault();showMsgMenu(mid);};
-    el.ontouchstart=()=>{timer=setTimeout(()=>showMsgMenu(mid),100);};
-    el.ontouchmove=()=>clearTimeout(timer);el.ontouchend=()=>clearTimeout(timer);el.ontouchcancel=()=>clearTimeout(timer);
+    el.ondblclick=e=>{if(guard(e))return;showMsgMenu(mid);};
+    el.ontouchend=e=>{if(guard(e))return;const now=Date.now();if(now-lastTap<300){e.preventDefault();lastTap=0;showMsgMenu(mid);}else lastTap=now;};
   });
 }
 
