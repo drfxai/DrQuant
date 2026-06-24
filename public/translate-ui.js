@@ -144,12 +144,11 @@
     if (_shown[id]) return false;
     var msg = findMsg(id);
     if (!msg || !msg.content) return false;
-    if (S.user && msg.user_id === S.user.id) return false;
-    // NOTE: we deliberately do NOT pre-skip by script. A matching script does not
-    // prove a matching language (English/French/Spanish all share Latin; Arabic
-    // and Persian share a script). The server detects the real source language
-    // and returns { same:true } when nothing needs translating — in that case no
-    // block is shown — so same-script language pairs still work correctly.
+    // Translate regardless of who sent it. In a channel the admin's OWN posts are
+    // exactly the content that should be translated, and skipping "your own"
+    // messages is what made translation appear to do nothing when you viewed a
+    // channel you post to. The server still returns { same:true } (no block) when
+    // a message is already in the target language, so this stays cheap and correct.
     return true;
   }
   function rebuildObserver(mc) {
