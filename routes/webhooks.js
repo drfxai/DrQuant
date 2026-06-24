@@ -19,6 +19,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const router = express.Router();
+const scoreboard = require("../services/signal-scoreboard");
 
 const SECRET = process.env.TRADINGVIEW_WEBHOOK_SECRET || "";
 const SIGNAL_CHANNEL_USERNAME = process.env.SIGNAL_CHANNEL_USERNAME || "signals";
@@ -393,6 +394,14 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
     );
     await pool.query(`UPDATE webhook_logs SET signal_id=$1 WHERE id=$2`, [sig.id, logId]);
 
+    // Feed the in-memory scoreboard (best-effort; never blocks the webhook):
+    // the signal's own price is a fresh tick, and a buy/sell/long/short with an
+    // entry becomes a tracked, auto-resolving signal.
+    try {
+      if (n.price != null) scoreboard.setPrice(n.symbol, n.price);
+      scoreboard.ingestWebhook(n, { signalId: sig.id, chatId });
+    } catch (e) { /* scoreboard is non-critical */ }
+
     // Post the signal into the channel as a normal chat message so every member
     // sees it in the chat UI (raw `signal` events are not rendered by the SPA).
     if (chatId) {
@@ -411,6 +420,34 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
     await pool.query(`UPDATE webhook_logs SET status='error', reason=$2 WHERE id=$1`, [logId, e.message]).catch(() => {});
     return res.status(500).json({ error: "Processing failed" });
   }
+});
+
+// ── POST /api/webhooks/price — price-only intake for the scoreboard ──
+// Feeds live prices to the in-memory scoreboard so open detected/webhook signals
+// auto-resolve to win/loss. Posts NOTHING to any channel and writes NOTHING to
+// the database. Point a TradingView "every bar close" alert here, body e.g.:
+//   {"secret":"...","symbol":"XAUUSD","price":4013.7}
+//   {"secret":"...","prices":[{"symbol":"BTCUSDT","price":64000}]}
+router.post("/price", express.json({ limit: "32kb" }), (req, res) => {
+  const b = req.body || {};
+  let authed = false;
+  if (SECRET && typeof b.secret === "string") authed = timingSafeEqual(b.secret, SECRET);
+  if (!authed) return res.status(401).json({ error: "Unauthorized" });
+  let resolved = 0, accepted = 0;
+  try {
+    if (Array.isArray(b.prices)) {
+      for (const it of b.prices) {
+        if (it && it.symbol != null && it.price != null) { resolved += scoreboard.setPrice(it.symbol, it.price); accepted++; }
+      }
+    } else if (b.symbol != null && b.price != null) {
+      resolved += scoreboard.setPrice(b.symbol, b.price); accepted++;
+    } else {
+      return res.status(400).json({ error: "Provide {symbol,price} or {prices:[...]}" });
+    }
+  } catch (e) {
+    return res.status(500).json({ error: "Price intake failed" });
+  }
+  return res.json({ ok: true, accepted, resolved });
 });
 
 module.exports = router;

@@ -140,6 +140,20 @@
   var TP_RE = new RegExp("(?:" + altSource(TP_WORDS) + ")\\s*[:=\\-]?\\s*(" + NUM + ")", "i");
   var ENTRY_RE = new RegExp("(?:" + altSource(ENTRY_WORDS) + ")\\s*[:=@]?\\s*(" + NUM + ")", "i");
 
+  // ── Timeframe detection ──
+  // Matches "15m", "1h", "4h", "1d", "1w", MT-style "M15/H1/H4/D1/W1" (leading
+  // letter = unit, M = minute), and worded "15 min", "4 hour(s)", "daily/weekly/
+  // monthly". Canonical output: <n><unit>, unit in m|h|d|w|mo (e.g. "15m","4h",
+  // "1d","1w","1mo"). Detected so the scoreboard can group by timeframe, and so a
+  // timeframe number (the 15 in "15m") is never mistaken for an entry price.
+  var TF_RE = new RegExp(
+    "\\b(" +
+      "\\d{1,3}\\s*(?:m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|week|weeks|mo|month|months)" +
+      "|(?:m|h|d|w)\\s*\\d{1,3}" +
+      "|daily|weekly|monthly" +
+    ")\\b", "i"
+  );
+
   function toNum(str) {
     if (str == null) return null;
     // normalize Arabic-Indic digits + separators, strip thousands commas.
@@ -150,6 +164,30 @@
       .replace(/,/g, "");
     var n = parseFloat(s);
     return isFinite(n) ? n : null;
+  }
+
+  // Canonicalize a raw timeframe substring to "<n><unit>" (m|h|d|w|mo) or null.
+  function canonTF(s) {
+    var m = String(s).toLowerCase().replace(/\s+/g, "");
+    if (m === "daily") return "1d";
+    if (m === "weekly") return "1w";
+    if (m === "monthly") return "1mo";
+    var n = null, u = null, a = m.match(/^(\d{1,3})(m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days|w|wk|week|weeks|mo|month|months)$/);
+    if (a) { n = a[1]; u = a[2]; }
+    else { var b = m.match(/^(m|h|d|w)(\d{1,3})$/); if (b) { u = b[1]; n = b[2]; } }
+    if (!n || !u) return null;
+    var unit = (u.charAt(0) === "m" && (u === "mo" || u.indexOf("month") === 0)) ? "mo" : u.charAt(0);
+    return n + unit;
+  }
+
+  // Find the first timeframe mention; returns { tf, span:[start,end] } or null.
+  function detectTimeframe(text) {
+    TF_RE.lastIndex = 0;
+    var m = TF_RE.exec(text);
+    if (!m) return null;
+    var tf = canonTF(m[1]);
+    if (!tf) return null;
+    return { tf: tf, span: [m.index, m.index + m[0].length] };
   }
 
   // Tokenize keeping byte offsets so we can blank a matched symbol before the
@@ -215,6 +253,15 @@
       numText = str.slice(0, symbolSpan[0]) + " ".repeat(symbolSpan[1] - symbolSpan[0]) + str.slice(symbolSpan[1]);
     }
 
+    // Timeframe: detect on the symbol-blanked text, capture it, and blank its
+    // span too so its digits can't be picked up as an entry/SL/TP number.
+    var timeframe = null;
+    var tfInfo = detectTimeframe(numText);
+    if (tfInfo) {
+      timeframe = tfInfo.tf;
+      numText = numText.slice(0, tfInfo.span[0]) + " ".repeat(tfInfo.span[1] - tfInfo.span[0]) + numText.slice(tfInfo.span[1]);
+    }
+
     var sl = null, tp = null, entry = null;
     var slM = SL_RE.exec(numText); SL_RE.lastIndex = 0;
     var tpM = TP_RE.exec(numText); TP_RE.lastIndex = 0;
@@ -264,6 +311,7 @@
       entry: entry,
       sl: sl,
       tp: tp,
+      timeframe: timeframe,
       matched: matched
     };
   }

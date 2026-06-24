@@ -9,6 +9,8 @@ const jwt = require("jsonwebtoken");
 const { pool, initDB } = require("./database");
 const { setupQntmSchema, mountQntmEconomy } = require("./qntm-ledger/integrate");
 const { applySecurity, corsOptions, globalLimiter, makeLimiter, ALLOWED } = require("./middleware/security");
+const scoreboard = require("./services/signal-scoreboard");
+const priceBinance = require("./services/price-binance");
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -252,10 +254,28 @@ function startMessageExpiryCleaner() {
   setInterval(runMessageExpiry, 10 * 60 * 1000);    // then every 10 minutes
 }
 
+// ── Signal scoreboard (in-memory) ──
+// Rebuild the rolling detected-signal set from recent PUBLIC-channel messages on
+// boot and every few minutes, and expire stale open signals. Prices arrive live
+// via the TradingView webhook + POST /api/webhooks/price; the optional free
+// crypto poller (PRICE_FEED_BINANCE=on) adds Binance prices for tracked coins.
+function startSignalScoreboard() {
+  const run = () => scoreboard.rebuildFromMessages(pool)
+    .then((r) => { if (r && r.ingested) console.log(`\uD83C\uDFC1 Scoreboard: ingested ${r.ingested} signal(s) from ${r.scanned} message(s)`); })
+    .catch((e) => console.error("Scoreboard rebuild:", e.message));
+  setTimeout(run, 8 * 1000);                 // shortly after boot
+  setInterval(run, 5 * 60 * 1000);           // refresh every 5 minutes
+  setInterval(() => scoreboard.expireStale(), 10 * 60 * 1000);
+  if (String(process.env.PRICE_FEED_BINANCE || "").toLowerCase() === "on") {
+    try { priceBinance.start(scoreboard); } catch (e) { console.error("price-binance start:", e.message); }
+  }
+}
+
 (async () => {
   try {
     await initDB();
     startMessageExpiryCleaner();
+    startSignalScoreboard();
     await setupQntmSchema().catch((e) => console.error("[qntm] schema setup failed:", e.message));
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);

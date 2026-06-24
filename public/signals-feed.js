@@ -16,7 +16,7 @@
 (function () {
   "use strict";
 
-  var ST = { tab: "published", published: null, detected: null, loading: false };
+  var ST = { tab: "published", published: null, detected: null, scoreboard: null, sbView: "channels", loading: false };
 
   function fmtN(v) {
     if (v == null || v === "") return "";
@@ -129,6 +129,11 @@
       if (ST.published == null) { body.innerHTML = spinner(); return; }
       if (!ST.published.length) { body.innerHTML = emptyBox("No published signals yet", "Operator and TradingView signals will appear here."); return; }
       body.innerHTML = '<div style="max-width:640px;margin:0 auto">' + ST.published.map(publishedCard).join("") + '</div>';
+    } else if (ST.tab === "scoreboard") {
+      if (ST.scoreboard == null) { body.innerHTML = spinner(); return; }
+      body.innerHTML = '<div style="max-width:680px;margin:0 auto">' + scoreboardHTML(ST.scoreboard) + '</div>';
+      body.querySelectorAll(".sb-chip").forEach(function (el) { el.onclick = function () { ST.sbView = el.dataset.sb; renderBody(ov); }; });
+      return;
     } else {
       if (ST.detected == null) { body.innerHTML = spinner(); return; }
       var intro = '<div style="max-width:640px;margin:0 auto 12px;color:' + t.t4 + ';font-size:11.5px;line-height:1.5;display:flex;gap:8px;align-items:flex-start">' +
@@ -172,8 +177,76 @@
       var body = ov.querySelector("#sf-body"); if (body) body.innerHTML = failBox((e && e.error) || "Could not derive signals");
     });
   }
+  function winColor(v) { if (v == null) return t.t4; if (v >= 60) return "#34d27a"; if (v >= 40) return "#f5a623"; return "#ef4444"; }
+
+  // One leaderboard table (channels / symbols / timeframes / combos share this).
+  function sbTable(rows, nameLabel) {
+    if (!rows || !rows.length) return emptyBox("No data yet", "Rows show up here once signals are detected and priced.");
+    var head = '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:' + t.t4 + ';border-bottom:1px solid ' + t.bd + '">' +
+      '<span style="width:20px;flex-shrink:0">#</span>' +
+      '<span style="flex:1;min-width:0">' + esc(nameLabel) + '</span>' +
+      '<span style="width:58px;text-align:right">Win%</span>' +
+      '<span style="width:54px;text-align:right">W\u2013L</span>' +
+      '<span style="width:60px;text-align:right">Signals</span></div>';
+    var rowsHtml = rows.map(function (r, i) {
+      var wc = winColor(r.win_rate);
+      var wr = r.win_rate == null ? "\u2014" : (r.win_rate + "%");
+      var bar = r.win_rate == null ? 0 : Math.max(2, Math.min(100, r.win_rate));
+      var openTag = r.open ? ' <span style="color:' + t.t4 + ';font-size:10px">(' + r.open + ' open)</span>' : '';
+      return '<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid ' + t.bd + '">' +
+        '<span style="width:20px;flex-shrink:0;color:' + t.t4 + ';font-size:12px;font-weight:700">' + (i + 1) + '</span>' +
+        '<span style="flex:1;min-width:0">' +
+          '<span style="display:block;color:' + t.t1 + ';font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(r.label) + '</span>' +
+          '<span style="display:block;height:3px;margin-top:4px;border-radius:2px;background:' + t.bd + '"><span style="display:block;height:3px;border-radius:2px;width:' + bar + '%;background:' + wc + '"></span></span>' +
+        '</span>' +
+        '<span style="width:58px;text-align:right;color:' + wc + ';font-weight:800;font-size:13px">' + wr + '</span>' +
+        '<span style="width:54px;text-align:right;color:' + t.t2 + ';font-size:12px;font-family:ui-monospace,monospace">' + r.wins + '\u2013' + r.losses + '</span>' +
+        '<span style="width:60px;text-align:right;color:' + t.t3 + ';font-size:12px">' + r.total + openTag + '</span>' +
+      '</div>';
+    }).join("");
+    return '<div style="border:1px solid ' + t.bd + ';border-radius:13px;background:' + t.cd + ';overflow:hidden">' + head + rowsHtml + '</div>';
+  }
+
+  function scoreboardHTML(data) {
+    var st = data.stats || {};
+    var views = [["channels", "Channels"], ["symbols", "Symbols"], ["timeframes", "Timeframes"], ["combos", "Symbol \u00d7 TF"]];
+    var chips = views.map(function (p) {
+      var on = ST.sbView === p[0];
+      return '<button class="sb-chip" data-sb="' + p[0] + '" style="flex-shrink:0;padding:6px 13px;border-radius:11px;border:1px solid ' + (on ? t.ba : t.bd) + ';background:' + (on ? t.act : "transparent") + ';color:' + (on ? t.ac : t.t3) + ';font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">' + p[1] + '</button>';
+    }).join("");
+    var tbl, cap = "";
+    if (ST.sbView === "symbols") { tbl = sbTable(data.symbols, "Symbol"); }
+    else if (ST.sbView === "timeframes") { tbl = sbTable(data.timeframes, "Timeframe"); }
+    else if (ST.sbView === "combos") { tbl = sbTable(data.symbol_timeframe, "Symbol \u00d7 Timeframe"); cap = "Highest target / success rate first."; }
+    else { tbl = sbTable(data.channels, "Channel"); cap = "Ranked best \u2192 worst by win rate."; }
+    var statLine = '<div style="display:flex;flex-wrap:wrap;gap:10px 16px;font-size:11.5px;color:' + t.t3 + ';margin-bottom:10px">' +
+      '<span><b style="color:' + t.t1 + '">' + (st.total_signals || 0) + '</b> signals</span>' +
+      '<span style="color:#34d27a"><b>' + (st.wins || 0) + '</b> wins</span>' +
+      '<span style="color:#ef4444"><b>' + (st.losses || 0) + '</b> losses</span>' +
+      '<span><b style="color:' + t.t1 + '">' + (st.open || 0) + '</b> open</span>' +
+      '<span><b style="color:' + t.t1 + '">' + (st.symbols_priced || 0) + '</b> priced</span></div>';
+    var warn = (st.decided || 0) === 0
+      ? '<div style="font-size:11.5px;line-height:1.5;color:#f5c451;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.25);border-radius:10px;padding:9px 11px;margin-bottom:12px">No outcomes resolved yet. Win rates fill in once live prices cross a signal\u2019s TP or SL \u2014 make sure a price feed is active (a TradingView price alert pointed at /api/webhooks/price, or PRICE_FEED_BINANCE=on for crypto).</div>'
+      : '';
+    var capHtml = cap ? '<div style="font-size:11px;color:' + t.t4 + ';margin:10px 2px 8px">' + cap + '</div>' : '';
+    return statLine + warn + '<div style="display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px">' + chips + '</div>' + capHtml + tbl;
+  }
+
+  function loadScoreboard(ov, force) {
+    if (ST.scoreboard != null && !force) { renderBody(ov); return; }
+    renderBody(ov);
+    api("/signals/scoreboard").then(function (d) {
+      ST.scoreboard = d || {};
+      if (document.getElementById("sigfeed-ov")) renderBody(ov);
+    }).catch(function (e) {
+      var body = ov.querySelector("#sf-body"); if (body) body.innerHTML = failBox((e && e.error) || "Could not load scoreboard");
+    });
+  }
+
   function loadActive(ov, force) {
-    if (ST.tab === "published") loadPublished(ov, force); else loadDetected(ov, force);
+    if (ST.tab === "published") loadPublished(ov, force);
+    else if (ST.tab === "scoreboard") loadScoreboard(ov, force);
+    else loadDetected(ov, force);
   }
 
   function setTab(ov, tab) {
@@ -191,7 +264,7 @@
     var prev = document.getElementById("sigfeed-ov");
     if (prev) prev.remove();
     // fresh state each open so the feed is current
-    ST = { tab: "published", published: null, detected: null, loading: false };
+    ST = { tab: "published", published: null, detected: null, scoreboard: null, sbView: "channels", loading: false };
 
     var ov = document.createElement("div");
     ov.id = "sigfeed-ov";
@@ -211,7 +284,7 @@
         '</div>' +
         '<button id="sf-refresh" style="width:36px;height:36px;border-radius:10px;border:1px solid ' + t.bd + ';background:' + t.btn + ';color:' + t.t2 + ';cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + ic('<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>', 18) + '</button>' +
       '</div>' +
-      '<div style="display:flex;gap:8px;padding:10px 14px;background:' + t.ch + ';border-bottom:1px solid ' + t.bd + ';flex-shrink:0">' + seg("published", "Published") + seg("detected", "Auto-detected") + '</div>' +
+      '<div style="display:flex;gap:8px;padding:10px 14px;background:' + t.ch + ';border-bottom:1px solid ' + t.bd + ';flex-shrink:0">' + seg("published", "Published") + seg("detected", "Auto-detected") + seg("scoreboard", "Scoreboard") + '</div>' +
       '<div id="sf-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px"></div>';
 
     document.body.appendChild(ov);

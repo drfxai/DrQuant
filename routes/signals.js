@@ -25,6 +25,7 @@
 
 const express = require("express");
 const router = express.Router();
+const scoreboard = require("../services/signal-scoreboard");
 
 // Shared single-source-of-truth extractor (same file the browser loads for the
 // in-chat advisory cards, so server-derived and client-shown signals match).
@@ -166,6 +167,22 @@ router.get("/detected", async (req, res) => {
     console.error("[signals] detected error:", e.message);
     res.status(500).json({ error: "Could not derive signals" });
   }
+});
+
+// ── GET /api/signals/scoreboard — in-memory leaderboard tables ──
+// Channels (best→worst by win rate), symbols, timeframes, and symbol×timeframe,
+// all derived from the in-memory scoreboard (auto-resolved against the live
+// price feed). Non-persistent: reflects only what's currently in memory.
+router.get("/scoreboard", (req, res) => {
+  try { res.json(scoreboard.tables()); }
+  catch (e) { console.error("[signals] scoreboard:", e.message); res.status(500).json({ error: "Could not build scoreboard" }); }
+});
+
+// ── GET /api/signals/scoreboard/recent — recent tracked signals (detail) ──
+router.get("/scoreboard/recent", (req, res) => {
+  const limit = clampLimit(req.query.limit, 50, 200);
+  try { res.json({ signals: scoreboard.recent(limit), stats: scoreboard.stats() }); }
+  catch (e) { res.status(500).json({ error: "Could not load recent signals" }); }
 });
 
 module.exports = router;
