@@ -86,8 +86,13 @@
 //          carry the full level set + verdict-bearing terminal events (the
 //          server trusts the indicator's own TP2=win rule). Individual-system
 //          alerts are deliberately left untagged (they are not trades).
-//        - No indicator math, inputs, plots, dashboard, or alert *text* were
-//          changed in this release. Bumped shorttitle to v0.7.7.
+//        - ADDED (0.7.7 rev): An optional "Stream / Alert ID" input. When set,
+//          its value is prepended to this chart's trade IDs INSIDE the hidden
+//          tag only (channel text unchanged), so multiple alerts on the SAME
+//          symbol AND timeframe can be told apart on the scoreboard. Different
+//          symbols and timeframes are already distinguished automatically.
+//        - No indicator math, plots, dashboard, or alert *text* were changed in
+//          this release (the new input only affects the hidden tag's ID).
 //
 // v0.7.6 - Consensus & scoring honesty pass
 //        - FIXED: Signal-strength trend term was a flat +20 on nearly every
@@ -499,6 +504,21 @@ alertEnabled = input.bool(true, title='🔔 Enable Alerts', group='🔔 ALERT SE
 
 alertIndividualSystems = input.bool(false, title='Alert Individual Systems', group='🔔 ALERT SETTINGS',
      tooltip='Also send alerts for individual system signals (AtroNox, RAPTOR, Scalper, Elite).')
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🆔 DRFX SCOREBOARD (signal stream ID)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// [v0.7.7] Type a short label here and it is prepended to this chart's
+//          auto-generated trade IDs INSIDE the hidden DrFX tag only (it never
+//          shows in the channel/Telegram message). Each symbol and each
+//          timeframe already produces a unique ID on its own, and the
+//          scoreboard already counts targets/stops separately per symbol, per
+//          timeframe and per trade — so this label is only needed to tell two
+//          alerts on the SAME symbol AND timeframe apart (e.g. two presets).
+//          Blank is safe and falls back to the automatic ID.
+drfxStreamId = input.string("", title="🆔 Stream / Alert ID", group="🆔 DRFX SCOREBOARD",
+     tooltip="Prepended to this chart trade IDs inside the hidden DrFX scoreboard tag — never shown in the channel text.\n\nWhy it is usually optional: every symbol and every timeframe already gets its own unique ID automatically, and the scoreboard already counts TP/SL/targets separately per symbol, per timeframe and per trade. You only need a label here to tell apart TWO alerts on the SAME symbol AND timeframe (for example a different preset). Example: STREAM-A\n\nUse letters, numbers and dashes only.")
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🛠️ HELPER FUNCTIONS
@@ -1183,7 +1203,7 @@ if godModeLongSignal and godTargetsEnabled
     godDirection     := 1
     godLastDirection := 1  // [v0.7.3] Cache for alert use after cleanup
     godEntryBar      := bar_index  // [v0.7.5] Management starts NEXT bar
-    godTradeId       := syminfo.ticker + "-" + str.tostring(time)  // [v0.7.7] unique trade id
+    godTradeId       := (drfxStreamId != "" ? drfxStreamId + ":" : "") + syminfo.ticker + "-" + str.tostring(time)  // [v0.7.7] unique trade id (+ optional stream label)
 
     godTP1_Level := godEntryPrice + (godATR * godTP1_Multiplier)
     godTP2_Level := godEntryPrice + (godATR * godTP2_Multiplier)
@@ -1249,7 +1269,7 @@ if godModeShortSignal and godTargetsEnabled
     godDirection     := -1
     godLastDirection := -1  // [v0.7.3] Cache for alert use after cleanup
     godEntryBar      := bar_index  // [v0.7.5] Management starts NEXT bar
-    godTradeId       := syminfo.ticker + "-" + str.tostring(time)  // [v0.7.7] unique trade id
+    godTradeId       := (drfxStreamId != "" ? drfxStreamId + ":" : "") + syminfo.ticker + "-" + str.tostring(time)  // [v0.7.7] unique trade id (+ optional stream label)
 
     godTP1_Level := godEntryPrice - (godATR * godTP1_Multiplier)
     godTP2_Level := godEntryPrice - (godATR * godTP2_Multiplier)
