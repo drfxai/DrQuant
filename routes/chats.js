@@ -198,12 +198,18 @@ router.put("/:id", async (req, res) => {
     const chatId = parseInt(req.params.id);
     const { rows: [mem] } = await pool.query("SELECT role FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
     if (!mem || (mem.role !== "admin" && req.user.role !== "admin")) return res.status(403).json({ error: "Admin required" });
-    const { name, bio, avatar, visibility, username } = req.body;
+    const { name, bio, avatar, visibility, username, expire_hours } = req.body;
     const u = [], v = []; let i = 1;
     if (name !== undefined) { u.push(`name=$${i++}`); v.push(String(name).slice(0, 100)); }
     if (bio !== undefined) { u.push(`bio=$${i++}`); v.push(String(bio).slice(0, 500)); }
     if (avatar !== undefined) { if (badAvatar(avatar)) return res.status(400).json({ error: "Invalid avatar" }); u.push(`avatar=$${i++}`); v.push(String(avatar).slice(0, 500)); }
     if (visibility !== undefined) { u.push(`visibility=$${i++}`); v.push(visibility === "private" ? "private" : "public"); }
+    if (expire_hours !== undefined) {
+      // 0 / null / "" = keep messages forever; otherwise 1..168 hours (cap 7 days).
+      let eh = (expire_hours === null || expire_hours === "" || expire_hours === 0 || expire_hours === "0") ? null : parseInt(expire_hours, 10);
+      if (eh !== null && (isNaN(eh) || eh < 1 || eh > 168)) return res.status(400).json({ error: "expire_hours must be 1–168, or 0 to keep forever" });
+      u.push(`expire_hours=$${i++}`); v.push(eh);
+    }
     if (username !== undefined) {
       const un = String(username).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 30);
       if (un.length < 3) return res.status(400).json({ error: "Username 3+ chars" });
@@ -628,6 +634,32 @@ router.put("/:id/pin-rank", async (req, res) => {
     if (!c) return res.status(404).json({ error: "Chat not found" });
     res.json({ ok: true, id: c.id, pin_rank: c.pin_rank });
   } catch (err) { console.error("Pin rank:", err); res.status(500).json({ error: "Server error" }); }
+});
+
+// ── Clear chat history / delete a conversation ──
+// Permanently removes ALL messages in a chat. For groups & channels this is
+// admin-only (chat admin or a global admin). For a DM, either participant may
+// clear it after a conversation. The chat itself stays; only messages go.
+router.delete("/:id/messages", async (req, res) => {
+  const pool = req.app.get("pool"), io = req.app.get("io");
+  try {
+    const chatId = parseInt(req.params.id);
+    const { rows: [chat] } = await pool.query("SELECT type FROM chats WHERE id=$1", [chatId]);
+    if (!chat) return res.status(404).json({ error: "Chat not found" });
+    const { rows: [mem] } = await pool.query("SELECT role FROM chat_members WHERE chat_id=$1 AND user_id=$2", [chatId, req.user.id]);
+    if (!mem) return res.status(403).json({ error: "Not a member" });
+    // DM: either participant may clear. Group/channel: admins only.
+    if (chat.type !== "dm") {
+      const isAdmin = mem.role === "admin" || ["admin", "manager", "superadmin"].includes(req.user.role);
+      if (!isAdmin) return res.status(403).json({ error: "Only admins can clear history here" });
+    }
+    const { rowCount } = await pool.query("DELETE FROM messages WHERE chat_id=$1", [chatId]);
+    // Reset everyone's read pointer so unread counts don't reference gone rows.
+    await pool.query("UPDATE chat_members SET last_read_id=0 WHERE chat_id=$1", [chatId]);
+    const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
+    members.forEach(m => io.to(`user_${m.user_id}`).emit("chat_cleared", { chat_id: chatId }));
+    res.json({ ok: true, deleted: rowCount });
+  } catch (err) { console.error("Clear history:", err); res.status(500).json({ error: "Server error" }); }
 });
 
 module.exports = router;

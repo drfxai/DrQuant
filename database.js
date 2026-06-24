@@ -107,6 +107,7 @@ async function initDB() {
       ["chats", "webhook_token", "TEXT"],
       ["chats", "pro_only", "BOOLEAN DEFAULT FALSE"],
       ["chats", "pin_rank", "INTEGER"],
+      ["chats", "expire_hours", "INTEGER"],
       ["messages", "edited_at", "TIMESTAMPTZ"],
       ["messages", "reply_to", "INTEGER REFERENCES messages(id) ON DELETE SET NULL"],
       ["messages", "pinned", "BOOLEAN DEFAULT FALSE"],
@@ -235,6 +236,15 @@ async function initDB() {
         if (cid) await client.query("UPDATE chats SET pin_rank=$1 WHERE id=$2 AND pin_rank IS NULL", [rank, cid]).catch(() => {});
       }
       console.log("✅ Fixed channel order set (VIP Signals → Algo → Strategies → Dr Signal → DrFX)");
+
+      // Default message auto-expiry: VIP channels + Dr Signal purge messages older
+      // than 48h to save space. Seeded only when NULL so an admin's later change in
+      // the Edit screen persists across reboots. DrFX keeps full history (untouched).
+      const expirySeed = [vipSigId, vipAlgoId, vipStratId, drsignalId];
+      for (const cid of expirySeed) {
+        if (cid) await client.query("UPDATE chats SET expire_hours=48 WHERE id=$1 AND expire_hours IS NULL", [cid]).catch(() => {});
+      }
+      console.log("✅ Default 48h message expiry set (VIP channels + Dr Signal)");
     }
 
     // ── Market section: Explore feed, creators/companies, products ────────

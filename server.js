@@ -218,9 +218,41 @@ io.on("connection", (socket) => {
 
 app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
 
+// ── Message auto-expiry cleaner ──
+// Per-channel retention: any chat with expire_hours > 0 has messages older than
+// that window permanently deleted (reactions cascade). Runs every 10 minutes and
+// once shortly after boot. Keeps the DB small for high-volume signal channels.
+// Each deleted batch notifies open clients so their view stays in sync.
+async function runMessageExpiry() {
+  try {
+    const { rows: chats } = await pool.query("SELECT id, expire_hours FROM chats WHERE expire_hours IS NOT NULL AND expire_hours > 0");
+    for (const c of chats) {
+      const hrs = parseInt(c.expire_hours, 10);
+      if (!hrs || hrs < 1) continue;
+      const { rows: gone } = await pool.query(
+        "DELETE FROM messages WHERE chat_id=$1 AND created_at < NOW() - ($2 * INTERVAL '1 hour') RETURNING id",
+        [c.id, hrs]
+      );
+      if (gone.length) {
+        const ids = gone.map((g) => g.id);
+        try {
+          const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [c.id]);
+          members.forEach((m) => io.to(`user_${m.user_id}`).emit("messages_expired", { chat_id: c.id, ids }));
+        } catch (e) {}
+        console.log(`\uD83E\uDDF9 Expiry: removed ${gone.length} message(s) older than ${hrs}h from chat ${c.id}`);
+      }
+    }
+  } catch (e) { console.error("Message expiry sweep:", e.message); }
+}
+function startMessageExpiryCleaner() {
+  setTimeout(runMessageExpiry, 30 * 1000);          // shortly after boot
+  setInterval(runMessageExpiry, 10 * 60 * 1000);    // then every 10 minutes
+}
+
 (async () => {
   try {
     await initDB();
+    startMessageExpiryCleaner();
     await setupQntmSchema().catch((e) => console.error("[qntm] schema setup failed:", e.message));
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);
