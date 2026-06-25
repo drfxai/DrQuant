@@ -18,7 +18,7 @@
 // driven on crypto symbols only; a house with no crypto product is skipped.
 //
 // OFF by default. Turn on with EASYTRADE_AUTOPILOT=on. Tunables (all optional):
-//   EASYTRADE_AUTOPILOT_HOUSES=apex,godmode      (default: "apex")
+//   EASYTRADE_AUTOPILOT_HOUSES=all   (default; or a comma list like godmode,apex,titan)
 //   EASYTRADE_AUTOPILOT_INTERVAL_SEC=20
 //   EASYTRADE_AUTOPILOT_SL_PCT=0.5   TP1=0.3  TP2=0.45  TP3=0.6   (% of entry)
 //   EASYTRADE_AUTOPILOT_MAX_AGE_MIN=25           (force-settle a stuck round)
@@ -43,9 +43,11 @@ const ACTIVE = new Map(); // houseId -> { signalId, symbol, dir, entry, sl, tp1,
 function num(v, d) { const n = Number(v); return Number.isFinite(n) ? n : d; }
 
 function readConfig() {
-  const houses = String(process.env.EASYTRADE_AUTOPILOT_HOUSES || "apex")
-    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const raw = String(process.env.EASYTRADE_AUTOPILOT_HOUSES || "all").trim().toLowerCase();
+  const managedAll = raw === "all" || raw === "*";
+  const houses = managedAll ? [] : raw.split(",").map((s) => s.trim()).filter(Boolean);
   return {
+    managedAll,
     managed: new Set(houses),
     intervalMs: Math.max(5, num(process.env.EASYTRADE_AUTOPILOT_INTERVAL_SEC, 8)) * 1000,
     sl: num(process.env.EASYTRADE_AUTOPILOT_SL_PCT, 0.5) / 100,
@@ -153,7 +155,7 @@ async function tick() {
   if (!cfg) return;
   let houses;
   try { houses = await easytrade.listHouses(); } catch (e) { return; }
-  const managed = houses.filter((h) => cfg.managed.has(h.id));
+  const managed = houses.filter((h) => cfg.managedAll || cfg.managed.has(h.id));
   if (!managed.length) return;
 
   // decide the target symbol for each house (active round's symbol, or a fresh pick)
@@ -190,7 +192,7 @@ async function rehydrate() {
   try {
     const rounds = await easytrade.listOpenRounds();
     for (const r of rounds) {
-      if (!cfg.managed.has(r.house_id)) continue;
+      if (!(cfg.managedAll || cfg.managed.has(r.house_id))) continue;
       if (!symbolPriceable(r.symbol)) continue; // resume only rounds we can price (crypto always; others when synth is on)
       const entry = Number(r.entry_price), sl = Number(r.sl_price), tp3 = Number(r.tp3_price);
       if (!Number.isFinite(entry) || !Number.isFinite(sl) || !Number.isFinite(tp3)) continue;
@@ -215,7 +217,7 @@ function start() {
   timer = setInterval(() => { tick().catch(() => {}); }, cfg.intervalMs);
   if (timer.unref) timer.unref();
   setTimeout(() => { tick().catch(() => {}); }, 6000);
-  console.log(`[easytrade-autopilot] ON — houses=[${Array.from(cfg.managed).join(",")}] every ${Math.round(cfg.intervalMs / 1000)}s`);
+  console.log(`[easytrade-autopilot] ON — houses=[${cfg.managedAll ? "ALL" : Array.from(cfg.managed).join(",")}] every ${Math.round(cfg.intervalMs / 1000)}s`);
   return { enabled: true };
 }
 
