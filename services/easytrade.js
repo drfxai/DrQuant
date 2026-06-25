@@ -37,7 +37,7 @@ const MIN_STAKE = 10;
 const MAX_STAKE = 1000000;
 const PAYOUT_MULT = 2;                 // fixed-2× house mode (see COMPLIANCE notes)
 const UNBOUND_TTL_MIN = 120;           // refund a still-unbound ticket after this
-const POOL_OWNER = ["platform", "easytrade", "pool"]; // owner_type, owner_id, wallet_type
+const POOL_OWNER = ["platform", "easytrade", "reward_pool"]; // owner_type, owner_id, wallet_type — a DEDICATED platform-owned reward_pool wallet, distinct from the singleton reward_pool (owner_id NULL). 'pool' is not a valid wallet_type enum value.
 
 // ── seed houses (signal providers). A house's signals arrive on the dedicated
 //    webhook at /api/webhooks/easytrade/<house id>. Edit/extend freely; rows are
@@ -217,7 +217,7 @@ async function placeBet(userId, houseId, stakeInput, pick) {
     // debit the user, credit the pool — overdraw throws InsufficientFunds and
     // rolls the whole bet back (ticket insert included).
     const txn = await postTransaction({
-      type: "easytrade_stake", amount: stake,
+      type: "tournament_entry", amount: stake,  // enum-compatible type; Easy Trade stake (user → pool)
       movements: [
         { walletId: uwId, direction: "debit", amount: stake, description: "Easy Trade stake" },
         { walletId: _poolWalletId, direction: "credit", amount: stake, description: "Easy Trade stake" },
@@ -225,7 +225,7 @@ async function placeBet(userId, houseId, stakeInput, pick) {
       initiatorUserId: String(userId),
       reference: { type: "easytrade_ticket", id: ticket.id },
       idempotencyKey: "et:stake:" + ticket.id,
-      metadata: { houseId, pick },
+      metadata: { app: "easytrade", kind: "stake", houseId, pick },
     }, cx);
     await cx.query(`UPDATE easytrade_tickets SET stake_txn=$2 WHERE id=$1`, [ticket.id, txn.public_id]);
     return ticketView({ ...ticket, stake_txn: txn.public_id }, null);
@@ -350,7 +350,7 @@ async function settleRound(roundId, outcome, lastPrice) {
       if (t.pick === outcome) {
         const payout = x2(t.stake);
         await postTransaction({
-          type: "easytrade_payout", amount: payout,
+          type: "tournament_prize", amount: payout,  // enum-compatible type; Easy Trade win (pool → user, 2×)
           movements: [
             { walletId: _poolWalletId, direction: "debit", amount: payout, description: "Easy Trade win" },
             { walletId: await userWalletId(t.user_id, cx), direction: "credit", amount: payout, description: "Easy Trade win" },
@@ -358,7 +358,7 @@ async function settleRound(roundId, outcome, lastPrice) {
           initiatorUserId: t.user_id,
           reference: { type: "easytrade_ticket", id: t.id },
           idempotencyKey: "et:payout:" + t.id,
-          metadata: { roundId, outcome },
+          metadata: { app: "easytrade", kind: "payout", roundId, outcome },
         }, cx);
         await cx.query(`UPDATE easytrade_tickets SET status='won', payout=$2, payout_txn=(SELECT public_id FROM transactions WHERE idempotency_key=$3), settled_at=now() WHERE id=$1`,
           [t.id, payout, "et:payout:" + t.id]);
@@ -375,7 +375,7 @@ async function settleRound(roundId, outcome, lastPrice) {
 // ── refund (used by cancel + the stale sweeper) ─────────────────────────────
 async function refundTicket(cx, t) {
   await postTransaction({
-    type: "easytrade_refund", amount: t.stake,
+    type: "refund", amount: t.stake,  // Easy Trade refund (pool → user)
     movements: [
       { walletId: _poolWalletId, direction: "debit", amount: t.stake, description: "Easy Trade refund" },
       { walletId: await userWalletId(t.user_id, cx), direction: "credit", amount: t.stake, description: "Easy Trade refund" },
@@ -383,7 +383,7 @@ async function refundTicket(cx, t) {
     initiatorUserId: t.user_id,
     reference: { type: "easytrade_ticket", id: t.id },
     idempotencyKey: "et:refund:" + t.id,
-    metadata: { reason: "refund" },
+    metadata: { app: "easytrade", kind: "refund" },
   }, cx);
   await cx.query(`UPDATE easytrade_tickets SET status='refunded', settled_at=now() WHERE id=$1`, [t.id]);
 }
@@ -409,7 +409,7 @@ async function fundPool(amount, actorId) {
   if (!decimal.isPositive(String(amount))) { const e = new Error("amount must be positive"); e.code = "bad_amount"; throw e; }
   const treasuryId = await wallets.systemWalletId("treasury", "QNTM");
   const txn = await postTransaction({
-    type: "easytrade_pool_fund", amount: String(amount),
+    type: "transfer", amount: String(amount),  // enum-compatible type; treasury → Easy Trade pool
     movements: [
       { walletId: treasuryId, direction: "debit", amount: String(amount), description: "fund Easy Trade pool" },
       { walletId: _poolWalletId, direction: "credit", amount: String(amount), description: "Easy Trade pool top-up" },
