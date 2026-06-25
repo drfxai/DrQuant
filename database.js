@@ -134,6 +134,11 @@ async function initDB() {
       console.log("✅ AI Bot created");
     }
 
+    // Keep the AI bot's display name in sync with the code on every boot, so an
+    // older install that seeded a different name (e.g. "DrPouria") is corrected
+    // automatically with no manual SQL.
+    await client.query("UPDATE users SET name='DrFX AI' WHERE role='bot' AND name IS DISTINCT FROM 'DrFX AI'").catch(() => {});
+
     // Admin
     const adminEmail = (process.env.ADMIN_EMAIL || "admin@drfx.com").toLowerCase().trim();
     const adminPass = process.env.ADMIN_PASSWORD || "admin123";
