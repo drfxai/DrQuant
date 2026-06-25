@@ -76,10 +76,10 @@
     var css =
       '#et-ov{position:fixed;inset:0;z-index:5200;background:' + t.bg + ';display:flex;flex-direction:column;animation:etFade .22s ease;padding-top:var(--sat);padding-bottom:var(--sab);padding-left:var(--sal);padding-right:var(--sar);font-family:Outfit,sans-serif}' +
       '#et-ov *{box-sizing:border-box}' +
-      '.et-hd{display:flex;align-items:center;gap:11px;padding:11px 14px;background:' + t.ch + ';-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border-bottom:1px solid ' + t.bd + ';flex-shrink:0}' +
+      '.et-hd{display:flex;align-items:center;gap:11px;padding:11px 14px;background:' + t.ch + ';-webkit-backdrop-filter:blur(22px) saturate(160%);backdrop-filter:blur(22px) saturate(160%);border-bottom:1px solid ' + t.bd + ';flex-shrink:0;width:100%;max-width:620px;margin-left:auto;margin-right:auto}' +
       '.et-ibtn{width:36px;height:36px;border-radius:10px;border:1px solid ' + t.bd + ';background:' + t.btn + ';color:' + t.t1 + ';cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .12s}' +
       '.et-ibtn:active{transform:scale(.92)}' +
-      '.et-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px 26px}' +
+      '.et-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 14px 26px;width:100%;max-width:620px;margin-left:auto;margin-right:auto}' +
       '.et-amb{position:fixed;border-radius:50%;filter:blur(58px);pointer-events:none;opacity:.42;z-index:0}' +
       '.et-stats{display:flex;gap:11px;margin-bottom:16px;position:relative;z-index:1}' +
       '.et-stat{flex:1;border-radius:16px;padding:13px 14px;background:' + t.cd + ';border:1px solid ' + t.bd + ';position:relative;overflow:hidden;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}' +
@@ -130,7 +130,13 @@
       '@keyframes etMsIn{0%{transform:translateX(-50%) translateY(-26px);opacity:0}100%{transform:translateX(-50%) translateY(0);opacity:1}}' +
       '@keyframes etMsBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}' +
       '@keyframes etConf{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(112vh) rotate(680deg);opacity:.15}}' +
-      '@keyframes etPop{0%{transform:scale(.6);opacity:0}55%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}';
+      '@keyframes etPop{0%{transform:scale(.6);opacity:0}55%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}' +
+      '.et-bolt{display:inline-flex;line-height:0}' +
+      '.et-bolt .et-bolt-glyph{fill-opacity:.14;transition:fill-opacity .3s ease}' +
+      '.et-bolt.et-bolt-live .et-bolt-glyph{animation:etBulb 1.5s ease-in-out infinite}' +
+      '.et-bolt.et-bolt-live{animation:etBulbGlow 1.5s ease-in-out infinite}' +
+      '@keyframes etBulb{0%,100%{fill-opacity:.1}50%{fill-opacity:1}}' +
+      '@keyframes etBulbGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 7px ' + hexA(t.pr, .75) + ')}}';
     var el = document.createElement("style"); el.id = "et-css"; el.textContent = css; document.head.appendChild(el);
   }
 
@@ -153,9 +159,74 @@
     }).catch(function () { ET.houses = FALLBACK_HOUSES; });
   }
 
+  // toggle the header bolt's "light bulb" pulse while a prediction is live
+  function setBoltLive(on) { var b = document.getElementById("et-bolt"); if (b) b.classList.toggle("et-bolt-live", !!on); setNavBoltLive(on); }
+
+  // ── bottom-nav "Easy Trade" tab bolt: pulse it app-wide while a forecast is live ──
+  // Self-contained + defensive: finds the nav item by its exact label, drives a CSS
+  // pulse on its icon, and (since the overlay's own poll stops once it's closed) runs
+  // a small bounded check so the tab turns itself off when the round settles.
+  var _navBoltEl = null, _navWatch = null;
+  function ensureNavCss() {
+    try {
+      if (document.getElementById("et-navbolt-css")) return;
+      var th = TT();
+      var css =
+        '.et-navbolt.et-navbolt-live{animation:etNavGlow 1.5s ease-in-out infinite}' +
+        '.et-navbolt.et-navbolt-live path{animation:etNavFill 1.5s ease-in-out infinite}' +
+        '@keyframes etNavFill{0%,100%{fill-opacity:0}50%{fill:currentColor;fill-opacity:.92}}' +
+        '@keyframes etNavGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 6px ' + hexA(th.pr, .8) + ')}}';
+      var el = document.createElement("style"); el.id = "et-navbolt-css"; el.textContent = css; document.head.appendChild(el);
+    } catch (e) {}
+  }
+  function findNavBolt() {
+    try {
+      if (_navBoltEl && document.body.contains(_navBoltEl)) return _navBoltEl;
+      _navBoltEl = null;
+      var all = document.body.getElementsByTagName("*"), best = null, bestArea = Infinity;
+      for (var i = 0; i < all.length; i++) {
+        var el = all[i];
+        if (!el.getElementsByTagName || !el.getElementsByTagName("svg").length) continue;
+        var txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+        if (txt !== "easy trade") continue;
+        var r = el.getBoundingClientRect(), area = r.width * r.height;
+        if (area > 0 && area < bestArea) { bestArea = area; best = el; }
+      }
+      if (best) { var svg = best.getElementsByTagName("svg")[0]; if (svg) _navBoltEl = svg; }
+    } catch (e) { _navBoltEl = null; }
+    return _navBoltEl;
+  }
+  function setNavBoltLive(on) {
+    try {
+      ensureNavCss();
+      var svg = findNavBolt(); if (!svg) return;
+      svg.classList.add("et-navbolt");
+      svg.classList.toggle("et-navbolt-live", !!on);
+    } catch (e) {}
+  }
+  function stopNavWatch() { if (_navWatch) { clearInterval(_navWatch); _navWatch = null; } }
+  function startNavWatch() {
+    if (_navWatch) return;
+    _navWatch = setInterval(function () {
+      if (document.getElementById("et-ov")) return; // overlay open → its own poll drives the bolt
+      syncNavBolt();
+    }, 15000);
+    if (_navWatch.unref) _navWatch.unref();
+  }
+  function syncNavBolt() {
+    return API("/easytrade/me").then(function (r) {
+      var live = !!(r && r.openTicketId);
+      ET.openTicketId = (r && r.openTicketId) || null;
+      setNavBoltLive(live);
+      if (live) startNavWatch(); else stopNavWatch();
+      return live;
+    }).catch(function () {});
+  }
+
   // ── HOME (stats + house grid) ──────────────────────────────────────────────
   function renderHome(ov) {
     ET.view = "home";
+    setBoltLive(!!ET.openTicketId);
     var t = TT();
     var body = ov.querySelector("#et-body"); if (!body) return;
     var liveBanner = ET.openTicketId ? (
@@ -333,6 +404,7 @@
   // ── waiting / live ticket view (with chart once a round exists) ─────────────
   function renderTicket(ov) {
     ET.view = "ticket";
+    setBoltLive(true);
     var t = TT(); var tk = ET.ticket; if (!tk) { renderHome(ov); return; }
     var body = ov.querySelector("#et-body"); if (!body) return;
     var house = houseById(tk.houseId);
@@ -386,6 +458,7 @@
   // ── result view ────────────────────────────────────────────────────────────
   function renderResult(ov, tk) {
     ET.view = "result";
+    setBoltLive(false);
     var t = TT(); var body = ov.querySelector("#et-body"); if (!body) return;
     var house = houseById(tk.houseId);
     var round = tk.round || {};
@@ -468,6 +541,7 @@
   }
   function renderHistory(ov) {
     ET.view = "history";
+    setBoltLive(!!ET.openTicketId);
     var t = TT();
     var body = ov.querySelector("#et-body"); if (!body) return;
     body.innerHTML = '<div style="display:flex;justify-content:center;padding:50px 0"><div style="width:24px;height:24px;border:3px solid ' + t.bd + ';border-top-color:' + t.pr + ';border-radius:50%;animation:etSpin .8s linear infinite"></div></div>';
@@ -633,7 +707,7 @@
     var n = Math.max(prices.length, 1);
     var xFor = function (i) { return padL + (n === 1 ? 0.5 : i / (n - 1)) * (W - padL - padR); };
 
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block">';
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;width:100%;height:auto;max-width:100%">';
     // level lines + labels
     lv.forEach(function (x) {
       var y = yFor(x.v).toFixed(1);
@@ -711,7 +785,7 @@
       '<div class="et-hd">' +
         '<button class="et-ibtn" id="et-back" type="button">' + ICO('<polyline points="15 18 9 12 15 6"/>', 18) + '</button>' +
         '<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0">' +
-          '<span style="display:inline-flex;color:' + t.pr + '">' + ICO('<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>', 21) + '</span>' +
+          '<span class="et-bolt" id="et-bolt" style="color:' + t.pr + '"><svg width="21" height="21" viewBox="0 0 24 24" style="display:block"><path class="et-bolt-glyph" d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg></span>' +
           '<div style="min-width:0"><div style="color:' + t.t1 + ';font-weight:800;font-size:17px;line-height:1">Easy Trade</div><div style="color:' + t.t4 + ';font-size:10px;font-weight:600;letter-spacing:.4px">BABY TRADER</div></div>' +
         '</div>' +
         '<button class="et-ibtn" id="et-hist" type="button" title="My predictions">' + ICO('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>', 18) + '</button>' +
@@ -723,6 +797,7 @@
     ov.querySelector("#et-back").onclick = function () {
       if (ET.view === "history") { closeSheet(); renderHome(ov); return; }
       stopPolling(); closeSheet(); ov.remove();
+      if (ET.openTicketId) startNavWatch();  // keep the nav tab honest while the screen is closed
     };
     ov.querySelector("#et-info").onclick = openRules;
     ov.querySelector("#et-hist").onclick = function () { renderHistory(ov); };
@@ -745,5 +820,10 @@
     boot();
   }
 
-  if (typeof window !== "undefined") window.openEasyTrade = open;
+  // expose + wake the nav-tab bolt on load: light it if a forecast is already live.
+  if (typeof window !== "undefined") {
+    window.openEasyTrade = open;
+    try { ensureNavCss(); } catch (e) {}
+    setTimeout(function () { try { syncNavBolt(); } catch (e) {} }, 2500);
+  }
 })();
