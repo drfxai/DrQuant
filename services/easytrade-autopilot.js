@@ -152,7 +152,13 @@ async function tick() {
   const prices = await fetchPrices(Array.from(new Set(plan.map((p) => p.symbol))));
   for (const p of plan) {
     const price = prices[p.symbol];
-    if (price == null) continue;
+    if (price == null) {
+      // Couldn't price this symbol. If it's an inherited non-crypto round, drop
+      // it from management so a fresh crypto round opens next tick (openRound
+      // then supersedes the stale one and refunds any bound tickets).
+      if (p.active) ACTIVE.delete(p.house.id);
+      continue;
+    }
     try {
       if (p.active) await manageActive(p.house, p.active, price);
       else await openNew(p.house, p.symbol, price);
@@ -166,6 +172,7 @@ async function rehydrate() {
     const rounds = await easytrade.listOpenRounds();
     for (const r of rounds) {
       if (!cfg.managed.has(r.house_id)) continue;
+      if (!BINANCE_OK.has(String(r.symbol || "").toUpperCase())) continue; // can only price crypto rounds; leave non-crypto ones to be superseded by a fresh round
       const entry = Number(r.entry_price), sl = Number(r.sl_price), tp3 = Number(r.tp3_price);
       if (!Number.isFinite(entry) || !Number.isFinite(sl) || !Number.isFinite(tp3)) continue;
       ACTIVE.set(r.house_id, {
