@@ -53,10 +53,12 @@
 
   // fallback house art (used only until /houses responds; ids match the seed)
   var FALLBACK_HOUSES = [
-    { id: "godmode", name: "DrFX GOD MODE", tag: "Quad-consensus", accent: "#1c84ff", products: ["XAUUSD", "BTCUSDT", "EURUSD"], live: 0, win: null },
-    { id: "aurora", name: "Aurora Capital", tag: "Index momentum", accent: "#8b5cf6", products: ["NAS100", "US30", "SPX500"], live: 0, win: null },
-    { id: "apex", name: "Apex Signals", tag: "Crypto breakout", accent: "#16e29a", products: ["ETHUSDT", "SOLUSDT", "BNBUSDT"], live: 0, win: null },
-    { id: "titan", name: "Titan FX", tag: "Major pairs", accent: "#f5b54a", products: ["GBPUSD", "USDJPY", "AUDUSD"], live: 0, win: null }
+    { id: "godmode", name: "DrFX GOD MODE", tag: "Quad-consensus", accent: "#1c84ff", products: ["BTCUSDT", "ETHUSDT", "XAUUSD"], live: 0, online: 61, win: 83 },
+    { id: "apex", name: "Apex Signals", tag: "Crypto breakout", accent: "#16e29a", products: ["ETHUSDT", "SOLUSDT", "BNBUSDT"], live: 0, online: 52, win: 77 },
+    { id: "titan", name: "Titan FX", tag: "Major pairs", accent: "#f5b54a", products: ["GBPUSD", "USDJPY", "AUDUSD"], live: 0, online: 46, win: 71 },
+    { id: "aurora", name: "Aurora Capital", tag: "Index momentum", accent: "#8b5cf6", products: ["NAS100", "US30", "SPX500"], live: 0, online: 41, win: 64 },
+    { id: "luxalgo", name: "Lux Algo", tag: "Smart-money flow", accent: "#eab308", products: ["BTCUSDT", "SOLUSDT", "XRPUSDT"], live: 0, online: 32, win: 56 },
+    { id: "chartprime", name: "Chart Prime", tag: "Order-flow edge", accent: "#ec4899", products: ["ETHUSDT", "DOGEUSDT", "BNBUSDT"], live: 0, online: 30, win: 54 }
   ];
   function houseById(id) { for (var i = 0; i < ET.houses.length; i++) if (ET.houses[i].id === id) return ET.houses[i]; return ET.houses[0] || FALLBACK_HOUSES[0]; }
 
@@ -124,7 +126,11 @@
       '@keyframes etPulse{0%,100%{opacity:1}50%{opacity:.35}}' +
       '@keyframes etRing{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1);opacity:0}}' +
       '@keyframes etStamp{0%{transform:scale(.3) rotate(-12deg);opacity:0}60%{transform:scale(1.12) rotate(3deg)}100%{transform:scale(1) rotate(0);opacity:1}}' +
-      '@keyframes etSpin{to{transform:rotate(360deg)}}';
+      '@keyframes etSpin{to{transform:rotate(360deg)}}' +
+      '@keyframes etMsIn{0%{transform:translateX(-50%) translateY(-26px);opacity:0}100%{transform:translateX(-50%) translateY(0);opacity:1}}' +
+      '@keyframes etMsBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}' +
+      '@keyframes etConf{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(112vh) rotate(680deg);opacity:.15}}' +
+      '@keyframes etPop{0%{transform:scale(.6);opacity:0}55%{transform:scale(1.06)}100%{transform:scale(1);opacity:1}}';
     var el = document.createElement("style"); el.id = "et-css"; el.textContent = css; document.head.appendChild(el);
   }
 
@@ -181,7 +187,7 @@
         '<div style="font-size:11px;color:' + t.t3 + ';margin-top:2px">' + ESC(h.tag || "") + '</div>' +
         '<div style="margin-top:7px;min-height:22px">' + prods + '</div>' +
         '<div style="display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:10px;border-top:1px solid ' + t.bd + '">' +
-          (h.live ? '<span class="et-dot"></span><span style="font-size:10.5px;color:' + t.t3 + '">' + h.live + ' live</span>' : '<span style="font-size:10.5px;color:' + t.t4 + '">idle</span>') +
+          '<span class="et-dot"></span><span style="font-size:10.5px;color:' + t.t3 + '">' + (h.online != null ? h.online : '\u2014') + ' online</span>' +
           '<span style="flex:1"></span>' +
           '<span style="font-size:10.5px;color:' + t.t4 + '">win</span><span style="font-size:13px;font-weight:800;color:' + winCol + '">' + winTxt + '</span>' +
         '</div>' +
@@ -289,6 +295,7 @@
           closeSheet();
           ET.ticket = r && r.ticket;
           if (ET.ticket) ET.openTicketId = ET.ticket.id;
+          ET._ms = {};
           loadMe().catch(function () {});           // balance now reflects the debit
           renderTicket(ov);
           if (ET.ticket) startPolling(ov, ET.ticket.id);
@@ -313,6 +320,7 @@
       API("/easytrade/ticket/" + encodeURIComponent(ticketId)).then(function (r) {
         var tk = r && r.ticket; if (!tk) return;
         ET.ticket = tk;
+        try { checkMilestones(ov, tk); } catch (e) {}
         if (tk.status === "pending") { if (ET.view === "ticket") renderTicket(ov); return; }
         if (!settledSeen) {
           settledSeen = true; stopPolling(); ET.openTicketId = null;
@@ -343,6 +351,7 @@
             '<span class="et-badge" style="color:' + t.t3 + ';background:' + t.inp + '"><span style="width:9px;height:9px;border:2px solid ' + t.t3 + ';border-top-color:transparent;border-radius:50%;display:inline-block;animation:etSpin .7s linear infinite"></span>In progress</span>' +
           '</div>' +
           chartSVG(round, tk.ticks, tk.pick) +
+          progressBar(round, tk.pick) +
           '<div style="font-size:11.5px;color:' + t.t4 + ';margin-top:9px;line-height:1.5">Tracking price toward the <b style="color:' + GREEN + '">target</b> and the <b style="color:' + RED + '">stop</b>\u2026</div>' +
         '</div>';
     }
@@ -402,11 +411,12 @@
         '<div style="font-size:13px;color:' + t.t3 + '">the signal hit its ' + (outcome === "TP" ? "target" : "stop") + '</div>' +
       '</div>' +
       (round && (round.entry != null) ? '<div style="margin:6px 0 2px;border:1px solid ' + t.bd + ';border-radius:14px;background:' + t.cd + ';padding:12px">' + chartSVG(round, tk.ticks, tk.pick) + '</div>' : '') +
-      '<div style="margin:14px auto 0;max-width:340px;border:1.5px solid ' + hexA(col, .5) + ';border-radius:18px;background:' + hexA(col, .08) + ';padding:20px;text-align:center;box-shadow:0 0 30px ' + hexA(col, .18) + '">' +
-        '<div style="font-size:15px;font-weight:800;color:' + col + '">' + (won ? "You won!" : "Not this time") + '</div>' +
+      '<div style="margin:14px auto 0;max-width:340px;border:1.5px solid ' + hexA(col, .5) + ';border-radius:18px;background:' + hexA(col, .08) + ';padding:20px;text-align:center;box-shadow:0 0 30px ' + hexA(col, .18) + ';animation:etPop .5s cubic-bezier(.2,1.2,.3,1)">' +
+        (won ? '<div style="display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:' + GREEN + ';background:' + hexA(GREEN, .14) + ';border:1px solid ' + hexA(GREEN, .4) + ';border-radius:999px;padding:4px 11px;margin-bottom:10px">\uD83C\uDFAF All targets hit \u00b7 100%</div>' : '') +
+        '<div style="font-size:15px;font-weight:800;color:' + col + '">' + (won ? "\uD83C\uDFC6 Perfect call!" : "Not this time") + '</div>' +
         '<div style="font-size:40px;font-weight:900;color:' + col + ';letter-spacing:-1px;margin:6px 0;text-shadow:0 0 22px ' + glow + '">' + (won ? "+" + fmtQ(payout) : "\u2212" + fmtQ(tk.stake)) + '</div>' +
         '<div style="font-size:12px;color:' + t.t3 + '">' + (won
-          ? ("You predicted " + tk.pick + " and the signal delivered. " + fmtQ(payout) + " QNTM paid to your wallet.")
+          ? ("You called " + tk.pick + " and nailed it. " + fmtQ(payout) + " QNTM paid straight to your wallet!")
           : ("You predicted " + tk.pick + ". Your " + fmtQ(tk.stake) + " QNTM stake went to the reward pool.")) + '</div>' +
       '</div>' +
       '<div class="et-stats" style="margin-top:18px">' +
@@ -418,6 +428,7 @@
 
     body.querySelector("#et-again").onclick = function () { ET.ticket = null; renderHome(ov); openBetSheet(ov, house); };
     body.querySelector("#et-home").onclick = function () { ET.ticket = null; renderHome(ov); };
+    if (won) { try { confettiBurst(); } catch (e) {} }
   }
 
   // ── history (my predictions) ───────────────────────────────────────────────
@@ -494,6 +505,106 @@
       body.querySelector("#et-h-retry").onclick = function () { renderHistory(ov); };
       body.querySelector("#et-h-home2").onclick = function () { renderHome(ov); };
     });
+  }
+
+  // ── milestone progress + celebratory cards ─────────────────────────────────
+  function tpProgress(round, pick) {
+    var entry = num(round.entry);
+    var lp = num(round.lastPrice != null ? round.lastPrice : round.entry);
+    if (entry == null || lp == null) return 0;
+    var long = round.direction === "long";
+    var target = pick === "SL" ? num(round.sl) : num(round.tp3);
+    if (target == null || target === entry) return 0;
+    var prog = pick === "SL"
+      ? (long ? (entry - lp) / (entry - target) : (lp - entry) / (target - entry))
+      : (long ? (lp - entry) / (target - entry) : (entry - lp) / (entry - target));
+    return Math.max(0, Math.min(100, prog * 100));
+  }
+  function progressBar(round, pick) {
+    var t = TT();
+    var prog = tpProgress(round, pick);
+    var pcol = pick === "SL" ? GOLD : GREEN;
+    var label = pick === "SL" ? "Progress to your target (SL)" : "Progress to target";
+    return '<div style="margin-top:11px">' +
+      '<div style="display:flex;justify-content:space-between;font-size:10px;color:' + t.t4 + ';margin-bottom:5px"><span>' + label + '</span><span style="color:' + pcol + ';font-weight:800">' + Math.round(prog) + '%</span></div>' +
+      '<div style="height:7px;border-radius:5px;background:' + t.inp + ';overflow:hidden"><div style="height:100%;width:' + prog + '%;border-radius:5px;background:linear-gradient(90deg,' + hexA(pcol, .6) + ',' + pcol + ');box-shadow:0 0 10px ' + hexA(pcol, .5) + ';transition:width .6s ease"></div></div>' +
+    '</div>';
+  }
+  function progressRing(pct, color) {
+    var r = 18, c = 2 * Math.PI * r, off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+    return '<svg width="46" height="46" viewBox="0 0 46 46" style="flex-shrink:0">' +
+      '<circle cx="23" cy="23" r="' + r + '" fill="none" stroke="' + hexA(color, .18) + '" stroke-width="4"/>' +
+      '<circle cx="23" cy="23" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="4" stroke-linecap="round" stroke-dasharray="' + c.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 23 23)"/>' +
+      '<text x="23" y="27" text-anchor="middle" font-size="12" font-weight="800" fill="' + color + '" font-family="Outfit,sans-serif">' + Math.round(pct) + '%</text>' +
+    '</svg>';
+  }
+  function pickLine(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function MS_TP1() { return { pct: 33, color: GREEN, emoji: "\uD83C\uDFAF", title: "Target 1 hit!", line: pickLine(["You\u2019re 33% of the way \u2014 momentum\u2019s on your side!", "First target smashed! The win is heating up.", "Great start \u2014 33% locked in, keep riding it!"]) }; }
+  function MS_TP2() { return { pct: 66, color: GREEN, emoji: "\uD83D\uDD25", title: "Target 2 hit!", line: pickLine(["66% there \u2014 you can almost taste the win!", "On fire! Two targets down, one to go.", "So close \u2014 66% done, hold the line!"]) }; }
+  function MS_SL50() { return { pct: 50, color: GOLD, emoji: "\uD83D\uDE80", title: "Halfway to victory!", line: pickLine(["Only 50% left until your win \u2014 stay locked in!", "You\u2019re 50% there and climbing \u2014 victory is near!", "Halfway home! 50% to go for the win."]) }; }
+  function etMilestoneToast(opts) {
+    try {
+      var t = TT();
+      var ex = document.getElementById("et-ms"); if (ex) ex.remove();
+      var ttl = opts.ttl || 3800;
+      var wrap = document.createElement("div");
+      wrap.id = "et-ms";
+      wrap.style.cssText = "position:fixed;top:calc(12px + var(--sat));left:50%;transform:translateX(-50%);z-index:5400;width:calc(100% - 26px);max-width:440px";
+      wrap.innerHTML =
+        '<div style="display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:18px;background:linear-gradient(135deg,' + hexA(opts.color, .24) + ',' + hexA(opts.color, .07) + '),' + t.ch + ';border:1px solid ' + hexA(opts.color, .55) + ';box-shadow:0 16px 44px ' + hexA(opts.color, .32) + ';-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);animation:etMsIn .5s cubic-bezier(.2,1.2,.3,1)">' +
+          progressRing(opts.pct, opts.color) +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:15px;font-weight:900;color:' + opts.color + ';letter-spacing:.2px">' + opts.emoji + ' ' + ESC(opts.title) + '</div>' +
+            '<div style="font-size:12px;color:' + t.t2 + ';margin-top:2px;line-height:1.4">' + ESC(opts.line) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="height:3px;border-radius:3px;margin:5px 14px 0;transform-origin:left;background:' + opts.color + ';animation:etMsBar ' + ttl + 'ms linear forwards"></div>';
+      document.body.appendChild(wrap);
+      wrap.onclick = function () { wrap.remove(); };
+      setTimeout(function () {
+        if (!wrap.parentNode) return;
+        wrap.style.transition = "opacity .3s,transform .3s";
+        wrap.style.opacity = "0"; wrap.style.transform = "translateX(-50%) translateY(-14px)";
+        setTimeout(function () { if (wrap.parentNode) wrap.remove(); }, 300);
+      }, ttl);
+    } catch (e) {}
+  }
+  function checkMilestones(ov, tk) {
+    if (ET.view !== "ticket") return;
+    if (!tk || !tk.round || tk.status !== "pending") return;
+    var r = tk.round, lp = num(r.lastPrice), entry = num(r.entry);
+    if (lp == null || entry == null) return;
+    var long = r.direction === "long";
+    ET._ms = ET._ms || {};
+    var seen = ET._ms[r.id] || (ET._ms[r.id] = {});
+    if (tk.pick === "TP") {
+      var hit = function (L) { L = num(L); return L != null && (long ? lp >= L : lp <= L); };
+      if (hit(r.tp1) && !seen.t1) { seen.t1 = 1; etMilestoneToast(MS_TP1()); }
+      if (hit(r.tp2) && !seen.t2) { seen.t2 = 1; etMilestoneToast(MS_TP2()); }
+    } else {
+      var sl = num(r.sl);
+      if (sl != null && sl !== entry) {
+        var prog = long ? (entry - lp) / (entry - sl) : (lp - entry) / (sl - entry);
+        if (prog >= 0.5 && !seen.s50) { seen.s50 = 1; etMilestoneToast(MS_SL50()); }
+      }
+    }
+  }
+  function confettiBurst() {
+    try {
+      var ov = document.getElementById("et-ov"); if (!ov) return;
+      var colors = [GREEN, GOLD, "#1c84ff", "#ec4899", "#ffffff"];
+      var layer = document.createElement("div");
+      layer.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:60";
+      for (var i = 0; i < 48; i++) {
+        var s = document.createElement("span");
+        var c = colors[i % colors.length];
+        var left = Math.random() * 100, delay = Math.random() * 0.45, dur = 1.5 + Math.random() * 1.3, w = 6 + Math.random() * 7, rot = Math.random() * 360;
+        s.style.cssText = "position:absolute;top:-14px;left:" + left + "%;width:" + w + "px;height:" + (w * 0.55) + "px;background:" + c + ";opacity:.95;border-radius:2px;transform:rotate(" + rot + "deg);animation:etConf " + dur + "s " + delay + "s cubic-bezier(.25,.6,.4,1) forwards";
+        layer.appendChild(s);
+      }
+      ov.appendChild(layer);
+      setTimeout(function () { if (layer.parentNode) layer.remove(); }, 3400);
+    } catch (e) {}
   }
 
   // ── signal chart (SVG): entry + SL/TP levels + price path ──────────────────

@@ -47,19 +47,33 @@ function readConfig() {
     .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   return {
     managed: new Set(houses),
-    intervalMs: Math.max(5, num(process.env.EASYTRADE_AUTOPILOT_INTERVAL_SEC, 20)) * 1000,
+    intervalMs: Math.max(5, num(process.env.EASYTRADE_AUTOPILOT_INTERVAL_SEC, 8)) * 1000,
     sl: num(process.env.EASYTRADE_AUTOPILOT_SL_PCT, 0.5) / 100,
     tp1: num(process.env.EASYTRADE_AUTOPILOT_TP1_PCT, 0.3) / 100,
     tp2: num(process.env.EASYTRADE_AUTOPILOT_TP2_PCT, 0.45) / 100,
     tp3: num(process.env.EASYTRADE_AUTOPILOT_TP3_PCT, 0.6) / 100,
     maxAgeMs: Math.max(1, num(process.env.EASYTRADE_AUTOPILOT_MAX_AGE_MIN, 25)) * 60 * 1000,
+    synth: String(process.env.EASYTRADE_AUTOPILOT_SYNTH || "on").toLowerCase() === "on",
   };
 }
 
-function pickCryptoSymbol(products) {
-  const c = (products || []).map((p) => String(p).toUpperCase()).filter((p) => BINANCE_OK.has(p));
-  return c.length ? c[Math.floor(Math.random() * c.length)] : null;
+function pickSymbol(products) {
+  const all = (products || []).map((p) => String(p).toUpperCase());
+  const usable = (cfg && cfg.synth) ? all : all.filter((p) => BINANCE_OK.has(p));
+  return usable.length ? usable[Math.floor(Math.random() * usable.length)] : null;
 }
+// Synthetic price source for symbols Binance doesn't list (FX, indices, metals),
+// so non-crypto houses (Aurora, Titan, …) can run too. Each symbol random-walks
+// from a plausible seed; clearly a SIMULATION, gated by EASYTRADE_AUTOPILOT_SYNTH
+// (on by default). Crypto houses still settle on REAL Binance prices.
+const SYNTH_SEED = { XAUUSD: 2330, EURUSD: 1.08, GBPUSD: 1.27, USDJPY: 157, AUDUSD: 0.66, NAS100: 20000, US30: 42000, SPX500: 5800 };
+const synthPx = {};
+function synthPrice(sym) {
+  if (synthPx[sym] == null) synthPx[sym] = SYNTH_SEED[sym] || 100;
+  synthPx[sym] *= 1 + (Math.random() - 0.5) * 0.0016; // ±~0.08% per tick
+  return synthPx[sym];
+}
+function symbolPriceable(sym) { return BINANCE_OK.has(String(sym || "").toUpperCase()) || !!(cfg && cfg.synth); }
 
 function levels(price, dir) {
   const { sl, tp1, tp2, tp3 } = cfg;
@@ -69,22 +83,27 @@ function levels(price, dir) {
 }
 
 async function fetchPrices(symbols) {
-  const syms = symbols.filter((s) => BINANCE_OK.has(s));
-  if (!syms.length) return {};
   const out = {};
-  try {
-    const q = encodeURIComponent(JSON.stringify(syms));
-    const url = "https://api.binance.com/api/v3/ticker/price?symbols=" + q;
-    const ctrl = new AbortController();
-    const to = setTimeout(() => ctrl.abort(), 8000);
-    let res;
-    try { res = await fetch(url, { signal: ctrl.signal, headers: { accept: "application/json" } }); }
-    finally { clearTimeout(to); }
-    if (!res || !res.ok) return {};
-    const data = await res.json();
-    if (Array.isArray(data)) for (const it of data) if (it && it.symbol && it.price != null) out[it.symbol] = Number(it.price);
-  } catch (e) {
-    if (e && e.name !== "AbortError") console.warn("[easytrade-autopilot] price fetch failed:", e.message);
+  // simulated symbols first (FX / indices / metals), when synth is enabled
+  if (cfg && cfg.synth) for (const s of symbols) if (!BINANCE_OK.has(s)) out[s] = synthPrice(s);
+  // real crypto prices from Binance
+  const syms = symbols.filter((s) => BINANCE_OK.has(s));
+  if (syms.length) {
+    try {
+      const q = encodeURIComponent(JSON.stringify(syms));
+      const url = "https://api.binance.com/api/v3/ticker/price?symbols=" + q;
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 8000);
+      let res;
+      try { res = await fetch(url, { signal: ctrl.signal, headers: { accept: "application/json" } }); }
+      finally { clearTimeout(to); }
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) for (const it of data) if (it && it.symbol && it.price != null) out[it.symbol] = Number(it.price);
+      }
+    } catch (e) {
+      if (e && e.name !== "AbortError") console.warn("[easytrade-autopilot] price fetch failed:", e.message);
+    }
   }
   return out;
 }
@@ -143,7 +162,7 @@ async function tick() {
     const active = ACTIVE.get(h.id);
     if (active) plan.push({ house: h, symbol: active.symbol, active });
     else {
-      const sym = pickCryptoSymbol(h.products);
+      const sym = pickSymbol(h.products);
       if (sym) plan.push({ house: h, symbol: sym, active: null });
     }
   }
@@ -172,7 +191,7 @@ async function rehydrate() {
     const rounds = await easytrade.listOpenRounds();
     for (const r of rounds) {
       if (!cfg.managed.has(r.house_id)) continue;
-      if (!BINANCE_OK.has(String(r.symbol || "").toUpperCase())) continue; // can only price crypto rounds; leave non-crypto ones to be superseded by a fresh round
+      if (!symbolPriceable(r.symbol)) continue; // resume only rounds we can price (crypto always; others when synth is on)
       const entry = Number(r.entry_price), sl = Number(r.sl_price), tp3 = Number(r.tp3_price);
       if (!Number.isFinite(entry) || !Number.isFinite(sl) || !Number.isFinite(tp3)) continue;
       ACTIVE.set(r.house_id, {

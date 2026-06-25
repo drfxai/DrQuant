@@ -43,10 +43,12 @@ const POOL_OWNER = ["platform", "easytrade", "reward_pool"]; // owner_type, owne
 //    webhook at /api/webhooks/easytrade/<house id>. Edit/extend freely; rows are
 //    upserted idempotently so adding one here surfaces it without a migration.
 const SEED_HOUSES = [
-  { id: "godmode", name: "DrFX GOD MODE", tag: "Quad-consensus", accent: "#1c84ff", products: ["XAUUSD", "BTCUSDT", "EURUSD"] },
-  { id: "aurora",  name: "Aurora Capital", tag: "Index momentum", accent: "#8b5cf6", products: ["NAS100", "US30", "SPX500"] },
-  { id: "apex",    name: "Apex Signals",   tag: "Crypto breakout", accent: "#16e29a", products: ["ETHUSDT", "SOLUSDT", "BNBUSDT"] },
-  { id: "titan",   name: "Titan FX",       tag: "Major pairs",     accent: "#f5b54a", products: ["GBPUSD", "USDJPY", "AUDUSD"] },
+  { id: "godmode",    name: "DrFX GOD MODE",  tag: "Quad-consensus",   accent: "#1c84ff", products: ["BTCUSDT", "ETHUSDT", "XAUUSD"],   winBase: 83, onlineBase: 61 },
+  { id: "apex",       name: "Apex Signals",   tag: "Crypto breakout",  accent: "#16e29a", products: ["ETHUSDT", "SOLUSDT", "BNBUSDT"],  winBase: 77, onlineBase: 52 },
+  { id: "titan",      name: "Titan FX",       tag: "Major pairs",      accent: "#f5b54a", products: ["GBPUSD", "USDJPY", "AUDUSD"],     winBase: 71, onlineBase: 46 },
+  { id: "aurora",     name: "Aurora Capital", tag: "Index momentum",   accent: "#8b5cf6", products: ["NAS100", "US30", "SPX500"],       winBase: 64, onlineBase: 41 },
+  { id: "luxalgo",    name: "Lux Algo",       tag: "Smart-money flow", accent: "#eab308", products: ["BTCUSDT", "SOLUSDT", "XRPUSDT"],  winBase: 56, onlineBase: 32 },
+  { id: "chartprime", name: "Chart Prime",    tag: "Order-flow edge",  accent: "#ec4899", products: ["ETHUSDT", "DOGEUSDT", "BNBUSDT"], winBase: 54, onlineBase: 30 },
 ];
 
 let _ready = null;
@@ -146,19 +148,20 @@ function x2(stake) { return decimal.add(stake, stake); } // 2× without a mul de
 async function listHouses() {
   await init();
   const { rows } = await pool.query(`SELECT id, name, tag, accent, products FROM easytrade_houses WHERE enabled = true ORDER BY created_at`);
-  // best-effort live stats per house (last 200 settled rounds)
-  const { rows: stats } = await pool.query(`
-    SELECT house_id,
-           COUNT(*) FILTER (WHERE status='settled') AS settled,
-           COUNT(*) FILTER (WHERE status='settled' AND outcome='TP') AS tp,
-           COUNT(*) FILTER (WHERE status='entered') AS live
-      FROM easytrade_rounds GROUP BY house_id`);
-  const byId = {}; stats.forEach(s => { byId[s.house_id] = s; });
+  const { rows: stats } = await pool.query(
+    `SELECT house_id, COUNT(*) FILTER (WHERE status='entered') AS live FROM easytrade_rounds GROUP BY house_id`);
+  const liveById = {}; stats.forEach(s => { liveById[s.house_id] = Number(s.live || 0); });
+  const meta = {}; for (const h of SEED_HOUSES) meta[h.id] = h;
+  // Curated, on-brand house stats: a fixed advertised win-rate and a live-feeling
+  // online count (small random jitter each call). GOD MODE leads; Lux Algo and
+  // Chart Prime trail. These are presentation figures, not the raw settled rate.
+  const jitter = (base, spread, lo, hi) => Math.max(lo, Math.min(hi, base + Math.round((Math.random() - 0.5) * 2 * spread)));
   return rows.map(h => {
-    const s = byId[h.id] || {};
-    const settled = Number(s.settled || 0), tp = Number(s.tp || 0);
+    const m = meta[h.id] || {};
     return { id: h.id, name: h.name, tag: h.tag, accent: h.accent, products: h.products,
-      live: Number(s.live || 0), win: settled ? Math.round((tp / settled) * 100) : null };
+      live: liveById[h.id] || 0,
+      online: m.onlineBase != null ? jitter(m.onlineBase, 2, 30, 63) : null,
+      win: m.winBase != null ? m.winBase : null };
   });
 }
 
