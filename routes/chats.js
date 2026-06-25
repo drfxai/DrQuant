@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "anthropic/claude-sonnet-4";
 const FREE_DAILY_LIMIT = 5;
 const AI_SYSTEM = `You are DrFX Quant AI, a professional trading assistant by Dr. Pouria. Help with technical analysis, trading strategies, risk management, Forex/Crypto/Stocks/Gold, and Pine Script. Be concise and actionable. Remind users trading involves risk.`;
 
@@ -367,8 +368,24 @@ router.post("/:id/messages", async (req, res) => {
           try {
             let aiText = "⚠️ AI not configured. Set OPENROUTER_API_KEY in .env";
             if (OPENROUTER_KEY && OPENROUTER_KEY !== "your_openrouter_api_key_here") {
-              const r = await fetch("https://openrouter.ai/api/v1/chat/completions", { method: "POST", headers: { Authorization: `Bearer ${OPENROUTER_KEY}`, "Content-Type": "application/json" }, body: JSON.stringify({ model: "anthropic/claude-sonnet-4-20250514", messages: aiMsgs, max_tokens: 2000 }) });
-              const d = await r.json(); aiText = d?.choices?.[0]?.message?.content || "No AI response.";
+              const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${OPENROUTER_KEY}`,
+                  "Content-Type": "application/json",
+                  "HTTP-Referer": process.env.PUBLIC_URL || "https://drfx.io",
+                  "X-Title": "DrFX Quant",
+                },
+                body: JSON.stringify({ model: OPENROUTER_MODEL, messages: aiMsgs, max_tokens: 2000 }),
+              });
+              const d = await r.json().catch(() => null);
+              if (!r.ok) {
+                const em = (d && d.error && (d.error.message || d.error)) || ("HTTP " + r.status);
+                console.error("[AI] OpenRouter", r.status, JSON.stringify((d && d.error) || d || {}));
+                aiText = "\u26A0\uFE0F AI error: " + em;
+              } else {
+                aiText = (d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || "No AI response.";
+              }
             }
             const { rows: [am] } = await pool.query("INSERT INTO messages (chat_id,user_id,content) VALUES ($1,$2,$3) RETURNING *", [chatId, botMem.id, aiText]);
             members.forEach(m => io.to(`user_${m.user_id}`).emit("chat_message", { ...am, sender_name: "DrFX AI", sender_avatar: "🤖", sender_role: "bot" }));
