@@ -12,6 +12,7 @@ const { applySecurity, corsOptions, globalLimiter, makeLimiter, ALLOWED } = requ
 const scoreboard = require("./services/signal-scoreboard");
 const priceBinance = require("./services/price-binance");
 const easytrade = require("./services/easytrade");
+const easytradeAutopilot = require("./services/easytrade-autopilot");
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -45,6 +46,10 @@ app.use(cors(corsOptions));
 // raw body for signature verification. It self-protects (token + dedupe + flood
 // cap), so it sits ahead of the global API rate limiter.
 app.use("/api/webhooks", require("./routes/webhooks"));
+// Easy Trade dedicated webhook — also BEFORE express.json() so it can capture
+// its own raw body (TradingView's Content-Type is inconsistent; a text alert
+// labelled application/json would otherwise make the global parser 400).
+app.use("/api/easytrade/webhook", require("./routes/easytrade-webhook"));
 
 app.use(express.json({ limit: "12mb" }));
 // Uploaded files are user-controlled: force the browser to honor the declared
@@ -280,7 +285,12 @@ function startSignalScoreboard() {
     startSignalScoreboard();
     await setupQntmSchema().catch((e) => console.error("[qntm] schema setup failed:", e.message));
     easytrade.init()
-      .then(() => setInterval(() => easytrade.sweepStale().catch(() => {}), 5 * 60 * 1000))
+      .then(() => {
+        setInterval(() => easytrade.sweepStale().catch(() => {}), 5 * 60 * 1000);
+        if (String(process.env.EASYTRADE_AUTOPILOT || "").toLowerCase() === "on") {
+          try { easytradeAutopilot.start(); } catch (e) { console.error("[easytrade-autopilot] start:", e.message); }
+        }
+      })
       .catch((e) => console.error("[easytrade] init failed:", e.message));
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);

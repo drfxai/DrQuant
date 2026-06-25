@@ -178,6 +178,8 @@
     <button data-view="adminwallet"><span class="k">06</span> Admin wallet</button>
     <div class="navlbl">Economy</div>
     <button data-view="economy"><span class="k">07</span> Economy Console</button>
+    <div class="navlbl">Game</div>
+    <button data-view="easytrade"><span class="k">08</span> Easy Trade pool</button>
   </nav>
 
   <main>
@@ -335,6 +337,23 @@
         </div>
       </div></div>
       <div class="panel" style="margin-top:14px"><div class="tablewrap" id="ecLxResults"></div></div>
+    </section>
+
+    <!-- EASY TRADE POOL -->
+    <section class="view" id="view-easytrade">
+      <h1>Easy Trade pool</h1>
+      <p class="sub">The reward pool that backs Baby Trader. Fund it from treasury; watch exposure and headroom.</p>
+      <div id="etCards" class="grid cards"></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr;gap:14px;margin-top:6px">
+        <div class="panel"><div class="ph"><h3>Fund pool</h3><span class="ro-badge">high-risk</span></div><div class="pb">
+          <p class="muted" style="margin-top:0;font-size:12.5px">Moves QNTM from treasury into the Easy Trade pool. The pool pays winning predictions (2×) and must stay above its open exposure.</p>
+          <label class="f"><span>Amount (QNTM)</span><input id="etFundAmt" class="mono" placeholder="e.g. 100000"></label>
+          <button class="btn primary" id="etFundBtn">Fund pool</button>
+        </div></div>
+        <div class="panel"><div class="ph"><h3>Open rounds</h3><button class="btn sm ghost" id="etRefresh">Refresh</button></div>
+          <div class="tablewrap" id="etRounds"></div></div>
+      </div>
+      <div class="note">The pool can never be overdrawn (the ledger guarantees it), and bets are refused if the pool can’t cover the 2× payout of all open predictions. Keep <b>headroom</b> positive.</div>
     </section>
   </main>
 </div>
@@ -532,7 +551,8 @@
     },
     orders: function(){ runOrders(); },
     adminwallet: function(){ loadAdminWallet(); },
-    economy: function(){ loadEconomy(); }
+    economy: function(){ loadEconomy(); },
+    easytrade: function(){ loadEasyTrade(); }
   };
   function load(view){ if(loaders[view]) loaders[view](); }
   function apiErr(err){ setConn(false); if(err.status===401||err.status===403){ toast("Not authorized","Set a valid admin token in Connection.","err"); } else { toast("Request failed", err.message, "err"); } }
@@ -785,6 +805,50 @@
       run:function(){ return api("/api/qntm/admin/economy/transfer-pool",{method:"POST",body:{fromPool:f,toPool:t,amount:a,reason:r||"pool rebalance"},idempotencyKey:ecKey("ec-xfer")})
         .then(function(){ $("#ecXAmt").value=""; loadEconomy(); return {toast:{t:"Transferred",m:a+" QNTM "+f+" -> "+t}}; }); } });
   });
+
+  // ---- easy trade pool ----
+  function etRoundsTable(rows){
+    if(!rows||!rows.length) return el("div",{class:"empty"},"No open rounds.");
+    var tbl=el("table"), th=el("thead");
+    th.innerHTML="<tr><th>Round</th><th>House</th><th>Symbol</th><th>Dir</th><th>Entry</th><th>Opened</th></tr>"; tbl.appendChild(th);
+    var tb=el("tbody");
+    rows.forEach(function(r){
+      var tr=el("tr");
+      tr.innerHTML="<td class='mono'>#"+esc(r.id)+"</td><td>"+esc(r.house_id)+"</td><td class='mono'>"+esc(r.symbol||"-")+"</td>"+
+        "<td><span class='pill'>"+esc(r.direction||"-")+"</span></td><td class='num'>"+esc(fmt(r.entry_price))+"</td>"+
+        "<td class='muted'>"+esc(when(r.entered_at))+"</td>";
+      tb.appendChild(tr);
+    });
+    tbl.appendChild(tb); return tbl;
+  }
+  function loadEasyTrade(){
+    api("/api/easytrade/admin/pool").then(function(d){
+      setConn(true);
+      var c=$("#etCards"); c.innerHTML="";
+      c.appendChild(card("Pool balance", d.pool, "QNTM", true));
+      c.appendChild(card("Open exposure", d.exposure, "QNTM"));
+      var hr=el("div",{class:"readout"});
+      hr.appendChild(el("div",{class:"lbl"},"Headroom"));
+      var neg=Number(d.headroom)<0;
+      var hv=el("div",{class:"val"}); hv.style.color=neg?"var(--bad)":"var(--good)";
+      hv.appendChild(document.createTextNode(fmt(d.headroom))); hv.appendChild(el("span",{class:"unit"},"QNTM"));
+      hr.appendChild(hv); c.appendChild(hr);
+      c.appendChild(card("Open tickets", d.openTickets));
+      c.appendChild(card("Open rounds", d.openRounds));
+      c.appendChild(card("Wins paid", d.wins));
+    }).catch(apiErr);
+    var host=$("#etRounds"); if(host){ emptyRow(host,"Loading...");
+      api("/api/easytrade/admin/rounds").then(function(d){ host.innerHTML=""; host.appendChild(etRoundsTable(d.rounds)); })
+        .catch(function(){ emptyRow(host,"\u2014"); }); }
+  }
+  $("#etFundBtn").addEventListener("click",function(){
+    var amt=$("#etFundAmt").value.trim();
+    if(!amt){ toast("Enter an amount"); return; }
+    confirmAction({ title:"Fund Easy Trade pool "+amt+" QNTM", effects:[{k:"From",v:"treasury"},{k:"To",v:"Easy Trade pool"},{k:"Amount",v:amt+" QNTM"}],
+      run:function(){ return api("/api/easytrade/admin/fund",{method:"POST",body:{amount:amt}})
+        .then(function(r){ $("#etFundAmt").value=""; loadEasyTrade(); return {toast:{t:"Funded",m:amt+" QNTM into the pool"}}; }); } });
+  });
+  if($("#etRefresh")) $("#etRefresh").addEventListener("click",loadEasyTrade);
 
   // ---------- boot ----------
   // When opened from (or embedded in) the main app, reuse the admin's existing

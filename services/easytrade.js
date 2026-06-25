@@ -458,7 +458,27 @@ async function findRound(houseId, extId) {
   return r2.rows[0] || null;
 }
 
+// ── admin / autopilot read helpers ──────────────────────────────────────────
+async function poolStats() {
+  await init();
+  const poolBal = await poolBalance();
+  const { rows } = await pool.query(`SELECT COALESCE(SUM(stake),0) AS s, COUNT(*)::int AS n FROM easytrade_tickets WHERE status='pending'`);
+  const exposure = rows[0].s; const openTickets = rows[0].n;
+  const headroom = decimal.sub(poolBal, decimal.add(exposure, exposure)); // pool - 2*exposure
+  const { rows: hc } = await pool.query(`SELECT COUNT(*)::int AS n FROM easytrade_houses WHERE enabled=true`);
+  const { rows: rc } = await pool.query(`SELECT COUNT(*)::int AS n FROM easytrade_rounds WHERE status='entered'`);
+  const { rows: won } = await pool.query(`SELECT COUNT(*)::int AS n, COALESCE(SUM(payout),0) AS paid FROM easytrade_tickets WHERE status='won'`);
+  return { pool: poolBal, exposure, openTickets, headroom, houses: hc[0].n, openRounds: rc[0].n,
+    wins: won[0].n, totalPaid: won[0].paid, payoutMult: PAYOUT_MULT, min: MIN_STAKE, max: MAX_STAKE };
+}
+async function listOpenRounds() {
+  await init();
+  const { rows } = await pool.query(`SELECT * FROM easytrade_rounds WHERE status='entered' ORDER BY id`);
+  return rows;
+}
+
 module.exports = {
   init, listHouses, me, placeBet, getTicket, cancelTicket, ingestEvent, fundPool, sweepStale,
+  poolStats, listOpenRounds,
   MIN_STAKE, MAX_STAKE, PAYOUT_MULT,
 };
