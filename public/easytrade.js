@@ -136,7 +136,7 @@
       '.et-bolt.et-bolt-live .et-bolt-glyph{animation:etBulb 1.5s ease-in-out infinite}' +
       '.et-bolt.et-bolt-live{animation:etBulbGlow 1.5s ease-in-out infinite}' +
       '@keyframes etBulb{0%,100%{fill-opacity:.1}50%{fill-opacity:1}}' +
-      '@keyframes etBulbGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 7px ' + hexA(t.pr, .75) + ')}}';
+      '@keyframes etBulbGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 7px ' + hexA(GOLD, .8) + ')}}';
     var el = document.createElement("style"); el.id = "et-css"; el.textContent = css; document.head.appendChild(el);
   }
 
@@ -174,8 +174,8 @@
       var css =
         '.et-navbolt.et-navbolt-live{animation:etNavGlow 1.5s ease-in-out infinite}' +
         '.et-navbolt.et-navbolt-live path{animation:etNavFill 1.5s ease-in-out infinite}' +
-        '@keyframes etNavFill{0%,100%{fill-opacity:0}50%{fill:currentColor;fill-opacity:.92}}' +
-        '@keyframes etNavGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 6px ' + hexA(th.pr, .8) + ')}}';
+        '@keyframes etNavFill{0%,100%{fill-opacity:0}50%{fill:' + GOLD + ';fill-opacity:.92}}' +
+        '@keyframes etNavGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}50%{filter:drop-shadow(0 0 6px ' + hexA(GOLD, .8) + ')}}';
       var el = document.createElement("style"); el.id = "et-navbolt-css"; el.textContent = css; document.head.appendChild(el);
     } catch (e) {}
   }
@@ -785,7 +785,7 @@
       '<div class="et-hd">' +
         '<button class="et-ibtn" id="et-back" type="button">' + ICO('<polyline points="15 18 9 12 15 6"/>', 18) + '</button>' +
         '<div style="display:flex;align-items:center;gap:9px;flex:1;min-width:0">' +
-          '<span class="et-bolt" id="et-bolt" style="color:' + t.pr + '"><svg width="21" height="21" viewBox="0 0 24 24" style="display:block"><path class="et-bolt-glyph" d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg></span>' +
+          '<span class="et-bolt" id="et-bolt" style="color:' + GOLD + '"><svg width="21" height="21" viewBox="0 0 24 24" style="display:block"><path class="et-bolt-glyph" d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round"/></svg></span>' +
           '<div style="min-width:0"><div style="color:' + t.t1 + ';font-weight:800;font-size:17px;line-height:1">Easy Trade</div><div style="color:' + t.t4 + ';font-size:10px;font-weight:600;letter-spacing:.4px">BABY TRADER</div></div>' +
         '</div>' +
         '<button class="et-ibtn" id="et-hist" type="button" title="My predictions">' + ICO('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>', 18) + '</button>' +
