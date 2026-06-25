@@ -11,6 +11,7 @@ const { setupQntmSchema, mountQntmEconomy } = require("./qntm-ledger/integrate")
 const { applySecurity, corsOptions, globalLimiter, makeLimiter, ALLOWED } = require("./middleware/security");
 const scoreboard = require("./services/signal-scoreboard");
 const priceBinance = require("./services/price-binance");
+const easytrade = require("./services/easytrade");
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -112,6 +113,7 @@ app.use("/api/manage", require("./routes/manage")); // admin/manager console (RB
 app.use("/api/live", require("./routes/live"));   // live-trading sessions + ICE/TURN credentials
 app.use("/api/market", require("./routes/market")); // Market: Explore feed, creators/companies, products, follows/likes
 app.use("/api/signals", require("./routes/signals")); // read-only signals feed (published table + derived auto-detected)
+app.use("/api/easytrade", require("./routes/easytrade")); // Easy Trade (Baby Trader): wallet-connected prediction game + dedicated webhook
 app.use("/api/translate", require("./routes/translate")); // chat translation (provider-agnostic; degrades to no-op if unconfigured)
 app.use("/api/wizard", require("./routes/wizard")); // wizard ("guard") panel: scoped moderation over regular users only
 
@@ -277,6 +279,9 @@ function startSignalScoreboard() {
     startMessageExpiryCleaner();
     startSignalScoreboard();
     await setupQntmSchema().catch((e) => console.error("[qntm] schema setup failed:", e.message));
+    easytrade.init()
+      .then(() => setInterval(() => easytrade.sweepStale().catch(() => {}), 5 * 60 * 1000))
+      .catch((e) => console.error("[easytrade] init failed:", e.message));
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);
       console.log(`  ║  📈 DrFX Quant v5.2 on port ${PORT}         ║`);
