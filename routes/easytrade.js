@@ -49,6 +49,11 @@ router.get("/me", auth, async (req, res) => {
   catch (e) { fail(res, e); }
 });
 
+router.get("/history", auth, async (req, res) => {
+  try { res.json(await easytrade.history(req.user.id, req.query.limit, req.query.offset)); }
+  catch (e) { fail(res, e); }
+});
+
 router.post("/bet", auth, async (req, res) => {
   try {
     const { houseId, stake, pick } = req.body || {};

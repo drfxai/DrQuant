@@ -174,6 +174,48 @@ async function me(userId) {
     openTicketId: open[0] ? open[0].id : null };
 }
 
+// ── a user's prediction history (settled + pending + refunded) + P/L summary ──
+async function history(userId, limitInput, offsetInput) {
+  await init();
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(limitInput) || 30)));
+  const offset = Math.max(0, Math.floor(Number(offsetInput) || 0));
+  const { rows } = await pool.query(
+    `SELECT t.id, t.house_id, t.stake, t.pick, t.status, t.payout, t.created_at, t.settled_at,
+            r.symbol, r.direction, r.outcome, r.entry_price, r.last_price
+       FROM easytrade_tickets t
+       LEFT JOIN easytrade_rounds r ON r.id = t.round_id
+      WHERE t.user_id = $1
+      ORDER BY t.id DESC
+      LIMIT $2 OFFSET $3`,
+    [String(userId), limit, offset]);
+  // lifetime summary over SETTLED tickets only (won/lost; refunds are P/L-neutral).
+  // net P/L = (winnings paid) − (stakes on settled tickets) = Σstake(won) − Σstake(lost).
+  const { rows: agg } = await pool.query(
+    `SELECT COUNT(*) FILTER (WHERE status IN ('won','lost'))      AS settled,
+            COUNT(*) FILTER (WHERE status='won')                  AS won,
+            COUNT(*) FILTER (WHERE status='pending')              AS open,
+            COALESCE(SUM(stake)  FILTER (WHERE status IN ('won','lost')),0) AS staked,
+            COALESCE(SUM(payout) FILTER (WHERE status='won'),0)            AS paid
+       FROM easytrade_tickets WHERE user_id=$1`, [String(userId)]);
+  const a = agg[0] || {};
+  const settled = Number(a.settled || 0), won = Number(a.won || 0);
+  return {
+    items: rows.map((r) => ({
+      id: r.id, houseId: r.house_id, stake: r.stake, pick: r.pick, status: r.status,
+      payout: r.payout, createdAt: r.created_at, settledAt: r.settled_at,
+      symbol: r.symbol, direction: r.direction, outcome: r.outcome,
+      entry: r.entry_price, lastPrice: r.last_price,
+    })),
+    summary: {
+      settled, won, open: Number(a.open || 0),
+      winRate: settled ? Math.round((won / settled) * 100) : null,
+      staked: a.staked || "0", paid: a.paid || "0",
+      net: decimal.sub(a.paid || "0", a.staked || "0"),
+    },
+    limit, offset, count: rows.length,
+  };
+}
+
 // ── EXPOSURE GUARD ──────────────────────────────────────────────────────────
 // Invariant: the pool's standing buffer must cover every open ticket's PROFIT,
 // because a winning ticket pays 2× while only 1× was deposited. With S = sum of
@@ -478,7 +520,7 @@ async function listOpenRounds() {
 }
 
 module.exports = {
-  init, listHouses, me, placeBet, getTicket, cancelTicket, ingestEvent, fundPool, sweepStale,
+  init, listHouses, me, history, placeBet, getTicket, cancelTicket, ingestEvent, fundPool, sweepStale,
   poolStats, listOpenRounds,
   MIN_STAKE, MAX_STAKE, PAYOUT_MULT,
 };

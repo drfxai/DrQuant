@@ -26,7 +26,8 @@
     balance: "0", pool: "0",
     houses: [],
     ticket: null,                            // the open/most-recent ticket
-    poll: null                               // polling timer id
+    poll: null,                              // polling timer id
+    view: "home"                             // home | history | ticket | result
   };
 
   // ── safe accessors ─────────────────────────────────────────────────────────
@@ -148,8 +149,15 @@
 
   // ── HOME (stats + house grid) ──────────────────────────────────────────────
   function renderHome(ov) {
+    ET.view = "home";
     var t = TT();
     var body = ov.querySelector("#et-body"); if (!body) return;
+    var liveBanner = ET.openTicketId ? (
+      '<button id="et-resume" type="button" style="width:100%;display:flex;align-items:center;gap:10px;border:1px solid ' + hexA(t.pr, .4) + ';background:' + hexA(t.pr, .1) + ';border-radius:14px;padding:12px 14px;margin-bottom:14px;cursor:pointer;font-family:inherit;text-align:left">' +
+        '<span class="et-dot" style="background:' + t.pr + ';box-shadow:0 0 7px ' + hexA(t.pr, .6) + '"></span>' +
+        '<span style="flex:1;color:' + t.t1 + ';font-weight:700;font-size:13px">You have a live prediction</span>' +
+        '<span style="color:' + t.pr + ';font-weight:800;font-size:12px">View &rarr;</span>' +
+      '</button>') : "";
     var stat =
       '<div class="et-stats">' +
         '<div class="et-stat"><div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,' + t.pr + ',transparent)"></div>' +
@@ -180,13 +188,22 @@
       '</div>';
     }).join("");
 
-    body.innerHTML = stat +
+    body.innerHTML = stat + liveBanner +
       '<div class="et-h">' + ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 16) + 'Choose a signal house</div>' +
       '<div style="font-size:11.5px;color:' + t.t4 + ';margin:-6px 2px 13px;line-height:1.5">Pick a house, stake QNTM, then predict whether its next signal hits its <b style="color:' + GREEN + '">target</b> or its <b style="color:' + RED + '">stop</b>. Guess right, win double.</div>' +
       '<div class="et-grid">' + grid + '</div>' +
       '<div style="text-align:center;margin-top:22px;font-size:10.5px;color:' + t.t4 + ';line-height:1.6">Outcomes are decided by each house\u2019s live TradingView indicator.<br>Predict responsibly \u2014 you can lose your entire stake.</div>';
 
     body.querySelectorAll(".et-house").forEach(function (c) { c.onclick = function () { openBetSheet(ov, houseById(c.dataset.house)); }; });
+    var resume = body.querySelector("#et-resume");
+    if (resume) resume.onclick = function () {
+      API("/easytrade/ticket/" + encodeURIComponent(ET.openTicketId)).then(function (r) {
+        var tk = r && r.ticket; if (!tk) { ET.openTicketId = null; renderHome(ov); return; }
+        ET.ticket = tk;
+        if (tk.status === "pending") { renderTicket(ov); startPolling(ov, tk.id); }
+        else renderResult(ov, tk);
+      }).catch(function () {});
+    };
   }
 
   // ── BET sheet ───────────────────────────────────────────────────────────────
@@ -271,6 +288,7 @@
         .then(function (r) {
           closeSheet();
           ET.ticket = r && r.ticket;
+          if (ET.ticket) ET.openTicketId = ET.ticket.id;
           loadMe().catch(function () {});           // balance now reflects the debit
           renderTicket(ov);
           if (ET.ticket) startPolling(ov, ET.ticket.id);
@@ -295,10 +313,10 @@
       API("/easytrade/ticket/" + encodeURIComponent(ticketId)).then(function (r) {
         var tk = r && r.ticket; if (!tk) return;
         ET.ticket = tk;
-        if (tk.status === "pending") { renderTicket(ov); return; }
+        if (tk.status === "pending") { if (ET.view === "ticket") renderTicket(ov); return; }
         if (!settledSeen) {
-          settledSeen = true; stopPolling();
-          loadMe().then(function () { renderResult(ov, tk); }).catch(function () { renderResult(ov, tk); });
+          settledSeen = true; stopPolling(); ET.openTicketId = null;
+          loadMe().then(function () { if (ET.view === "ticket") renderResult(ov, tk); }).catch(function () { if (ET.view === "ticket") renderResult(ov, tk); });
         }
       }).catch(function () {});
     }, 2000);
@@ -306,6 +324,7 @@
 
   // ── waiting / live ticket view (with chart once a round exists) ─────────────
   function renderTicket(ov) {
+    ET.view = "ticket";
     var t = TT(); var tk = ET.ticket; if (!tk) { renderHome(ov); return; }
     var body = ov.querySelector("#et-body"); if (!body) return;
     var house = houseById(tk.houseId);
@@ -349,7 +368,7 @@
     if (cancel) cancel.onclick = function () {
       cancel.disabled = true; cancel.textContent = "Cancelling\u2026";
       API("/easytrade/ticket/" + encodeURIComponent(tk.id) + "/cancel", { method: "POST" })
-        .then(function () { stopPolling(); ET.ticket = null; toast("Refunded", "Your stake was returned."); return loadMe(); })
+        .then(function () { stopPolling(); ET.ticket = null; ET.openTicketId = null; toast("Refunded", "Your stake was returned."); return loadMe(); })
         .then(function () { renderHome(ov); })
         .catch(function (e) { cancel.disabled = false; cancel.textContent = "Cancel & refund (no signal yet)"; toast("Couldn\u2019t cancel", (e && (e.error || e.message)) || "The round may have already started."); });
     };
@@ -357,6 +376,7 @@
 
   // ── result view ────────────────────────────────────────────────────────────
   function renderResult(ov, tk) {
+    ET.view = "result";
     var t = TT(); var body = ov.querySelector("#et-body"); if (!body) return;
     var house = houseById(tk.houseId);
     var round = tk.round || {};
@@ -398,6 +418,82 @@
 
     body.querySelector("#et-again").onclick = function () { ET.ticket = null; renderHome(ov); openBetSheet(ov, house); };
     body.querySelector("#et-home").onclick = function () { ET.ticket = null; renderHome(ov); };
+  }
+
+  // ── history (my predictions) ───────────────────────────────────────────────
+  function relTime(ts) {
+    if (!ts) return "";
+    var d = new Date(ts); if (isNaN(d.getTime())) return "";
+    var s = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (s < 60) return "just now";
+    if (s < 3600) return Math.floor(s / 60) + "m ago";
+    if (s < 86400) return Math.floor(s / 3600) + "h ago";
+    if (s < 604800) return Math.floor(s / 86400) + "d ago";
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+  function historyRow(it) {
+    var t = TT();
+    var house = houseById(it.houseId);
+    var pickCol = it.pick === "TP" ? GREEN : RED;
+    var amount, amtCol, sub;
+    if (it.status === "won") { amount = "+" + fmtQ(it.payout); amtCol = GREEN; sub = "Won"; }
+    else if (it.status === "lost") { amount = "\u2212" + fmtQ(it.stake); amtCol = RED; sub = "Lost"; }
+    else if (it.status === "refunded") { amount = "\u00b1" + fmtQ(it.stake); amtCol = t.t3; sub = "Refunded"; }
+    else { amount = fmtQ(it.stake); amtCol = t.pr; sub = "Live"; }
+    return '<div style="display:flex;align-items:center;gap:11px;padding:12px 13px;border:1px solid ' + t.bd + ';border-radius:13px;background:' + t.cd + ';margin-bottom:9px">' +
+      '<div class="et-mono" style="width:36px;height:36px;font-size:15px;margin:0;background:linear-gradient(135deg,' + house.accent + ',' + hexA(house.accent, .55) + ')">' + ESC((house.name || "?")[0]) + '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:7px">' +
+          '<span style="font-size:13.5px;font-weight:800;color:' + t.t1 + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + ESC(it.symbol || house.name) + '</span>' +
+          '<span style="font-size:10px;font-weight:800;color:' + pickCol + ';border:1px solid ' + hexA(pickCol, .4) + ';border-radius:6px;padding:1px 5px;flex-shrink:0">' + ESC(it.pick) + '</span>' +
+        '</div>' +
+        '<div style="font-size:10.5px;color:' + t.t4 + ';margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + ESC(house.name) + ' \u00b7 ' + relTime(it.settledAt || it.createdAt) + (it.outcome ? (' \u00b7 hit ' + ESC(it.outcome)) : "") + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;flex-shrink:0">' +
+        '<div style="font-size:15px;font-weight:900;color:' + amtCol + '">' + amount + '</div>' +
+        '<div style="font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:' + amtCol + ';opacity:.85">' + sub + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+  function renderHistory(ov) {
+    ET.view = "history";
+    var t = TT();
+    var body = ov.querySelector("#et-body"); if (!body) return;
+    body.innerHTML = '<div style="display:flex;justify-content:center;padding:50px 0"><div style="width:24px;height:24px;border:3px solid ' + t.bd + ';border-top-color:' + t.pr + ';border-radius:50%;animation:etSpin .8s linear infinite"></div></div>';
+    API("/easytrade/history").then(function (r) {
+      if (ET.view !== "history" || !document.getElementById("et-ov")) return;
+      var s = (r && r.summary) || {}, items = (r && r.items) || [];
+      var net = Number(s.net) || 0;
+      var netCol = net > 0 ? GREEN : net < 0 ? RED : t.t2;
+      var netStr = (net > 0 ? "+" : net < 0 ? "\u2212" : "") + fmtQ(Math.abs(net));
+      var summary =
+        '<div class="et-stats" style="margin-bottom:14px">' +
+          '<div class="et-stat"><div class="lab" style="color:' + t.t3 + '">Settled</div><div class="val">' + (s.settled || 0) + '</div></div>' +
+          '<div class="et-stat"><div class="lab" style="color:' + GOLD + '">Win rate</div><div class="val">' + (s.winRate == null ? "\u2014" : (s.winRate + '<span class="q" style="color:' + GOLD + '">%</span>')) + '</div></div>' +
+          '<div class="et-stat"><div class="lab" style="color:' + netCol + '">Net P/L</div><div class="val" style="color:' + netCol + '">' + netStr + '<span class="q" style="color:' + netCol + '">QNTM</span></div></div>' +
+        '</div>';
+      var list = items.length
+        ? items.map(historyRow).join("")
+        : '<div style="text-align:center;padding:46px 20px;color:' + t.t4 + '"><div style="display:flex;justify-content:center">' + ICO('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>', 30) + '</div><div style="font-size:14px;font-weight:700;color:' + t.t2 + ';margin-top:10px">No predictions yet</div><div style="font-size:12px;margin-top:4px">Your past predictions will appear here.</div></div>';
+      body.innerHTML =
+        '<div class="et-h" style="margin-top:2px">' + ICO('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>', 16) + 'My predictions</div>' +
+        summary +
+        (s.open ? '<div style="font-size:11px;color:' + t.pr + ';margin:-4px 2px 12px;font-weight:700">\u25cf ' + s.open + ' live right now</div>' : "") +
+        list +
+        '<button class="et-cta" id="et-h-home" type="button" style="background:' + t.btn + ';color:' + t.t2 + ';box-shadow:none;margin-top:14px">Back to houses</button>';
+      body.querySelector("#et-h-home").onclick = function () { renderHome(ov); };
+    }).catch(function () {
+      if (ET.view !== "history" || !document.getElementById("et-ov")) return;
+      body.innerHTML =
+        '<div style="text-align:center;padding:54px 24px">' +
+          '<div style="color:' + RED + ';display:flex;justify-content:center;margin-bottom:10px">' + ICO('<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>', 28) + '</div>' +
+          '<div style="font-size:14.5px;font-weight:700;color:' + t.t1 + '">Couldn\u2019t load your history</div>' +
+          '<button class="et-cta" id="et-h-retry" type="button" style="background:linear-gradient(135deg,' + t.pr + ',' + hexA(t.pr, .7) + ');max-width:200px;margin:16px auto 0">Retry</button>' +
+          '<button class="et-cta" id="et-h-home2" type="button" style="background:' + t.btn + ';color:' + t.t2 + ';box-shadow:none;margin:9px auto 0;max-width:200px">Back to houses</button>' +
+        '</div>';
+      body.querySelector("#et-h-retry").onclick = function () { renderHistory(ov); };
+      body.querySelector("#et-h-home2").onclick = function () { renderHome(ov); };
+    });
   }
 
   // ── signal chart (SVG): entry + SL/TP levels + price path ──────────────────
@@ -507,13 +603,18 @@
           '<span style="display:inline-flex;color:' + t.pr + '">' + ICO('<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>', 21) + '</span>' +
           '<div style="min-width:0"><div style="color:' + t.t1 + ';font-weight:800;font-size:17px;line-height:1">Easy Trade</div><div style="color:' + t.t4 + ';font-size:10px;font-weight:600;letter-spacing:.4px">BABY TRADER</div></div>' +
         '</div>' +
+        '<button class="et-ibtn" id="et-hist" type="button" title="My predictions">' + ICO('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>', 18) + '</button>' +
         '<button class="et-ibtn" id="et-info" type="button">' + ICO('<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>', 18) + '</button>' +
       '</div>' +
       '<div class="et-body" id="et-body"></div>';
     document.body.appendChild(ov);
 
-    ov.querySelector("#et-back").onclick = function () { stopPolling(); closeSheet(); ov.remove(); };
+    ov.querySelector("#et-back").onclick = function () {
+      if (ET.view === "history") { closeSheet(); renderHome(ov); return; }
+      stopPolling(); closeSheet(); ov.remove();
+    };
     ov.querySelector("#et-info").onclick = openRules;
+    ov.querySelector("#et-hist").onclick = function () { renderHistory(ov); };
 
     var body = ov.querySelector("#et-body");
     body.innerHTML = '<div style="display:flex;justify-content:center;padding:60px 0"><div style="width:26px;height:26px;border:3px solid ' + t.bd + ';border-top-color:' + t.pr + ';border-radius:50%;animation:etSpin .8s linear infinite"></div></div>';
