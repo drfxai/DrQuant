@@ -576,8 +576,81 @@ async function listOpenRounds() {
   return rows;
 }
 
+// ── LEADERBOARD ──────────────────────────────────────────────────────────────────
+// Ranks players from their SETTLED Easy Trade tickets. Four metrics, all derived
+// from real results (no shadow tables):
+//   wins      = COUNT(status='won')
+//   winRate   = wins / (won + lost), as a %
+//   tokensWon = SUM(payout) over won tickets (gross QNTM won in Easy Trade)
+//   xp        = wins*20 + losses*5 + floor(totalStaked/100)
+//               (rewards winning, plus participation and volume; always >= 0)
+// `net` (tokensWon - staked) is included as a secondary stat. The winRate board
+// requires >= 5 settled tickets so a single lucky bet can't sit at 100%.
+// Server-validated integers are inlined (no user-controlled SQL); viewerId is
+// floored to an int before use.
+async function leaderboard(opts) {
+  await init();
+  opts = opts || {};
+  const sort = ["xp", "winrate", "wins", "tokens"].includes(opts.sort) ? opts.sort : "xp";
+  const limit = Math.min(500, Math.max(1, Math.floor(Number(opts.limit) || 100)));
+  const minSettled = sort === "winrate" ? 5 : 1;
+  const viewerId = (opts.viewerId != null && Number.isFinite(Number(opts.viewerId)))
+    ? Math.floor(Number(opts.viewerId)) : null;
+
+  const orderBy = {
+    xp:      "xp DESC, wins DESC, tokens_won DESC",
+    winrate: "win_rate DESC, settled DESC, wins DESC",
+    wins:    "wins DESC, win_rate DESC, tokens_won DESC",
+    tokens:  "tokens_won DESC, wins DESC, win_rate DESC",
+  }[sort];
+
+  const AGG = `
+    SELECT et.user_id,
+      COUNT(*) FILTER (WHERE et.status='won')              AS wins,
+      COUNT(*) FILTER (WHERE et.status='lost')             AS losses,
+      COUNT(*) FILTER (WHERE et.status IN ('won','lost'))  AS settled,
+      COALESCE(SUM(et.payout) FILTER (WHERE et.status='won'),0)             AS tokens_won,
+      COALESCE(SUM(et.stake)  FILTER (WHERE et.status IN ('won','lost')),0) AS staked,
+      MAX(et.settled_at) AS last_played
+    FROM easytrade_tickets et`;
+  const DECOR = `
+    a.user_id, a.wins, a.losses, a.settled, a.tokens_won, a.staked, a.last_played,
+    (a.wins*20 + a.losses*5 + floor(a.staked/100))::bigint AS xp,
+    CASE WHEN a.settled>0 THEN round((a.wins::numeric / a.settled) * 100) ELSE 0 END AS win_rate,
+    (a.tokens_won - a.staked) AS net`;
+
+  const { rows } = await pool.query(
+    `WITH agg AS (${AGG} GROUP BY et.user_id)
+     SELECT ${DECOR}, u.name, u.username, u.avatar
+       FROM agg a LEFT JOIN users u ON u.id::text = a.user_id
+      WHERE a.settled >= ${minSettled}
+      ORDER BY ${orderBy}
+      LIMIT ${limit}`
+  );
+
+  const view = (r) => ({
+    userId: Number(r.user_id), name: r.name || null, username: r.username || null, avatar: r.avatar || null,
+    wins: Number(r.wins), losses: Number(r.losses), settled: Number(r.settled),
+    tokensWon: Number(r.tokens_won), staked: Number(r.staked), net: Number(r.net),
+    xp: Number(r.xp), winRate: Number(r.win_rate), lastPlayed: r.last_played,
+  });
+  const players = rows.map((r, i) => Object.assign({ rank: i + 1 }, view(r)));
+
+  let me = null;
+  if (viewerId != null) {
+    const { rows: mr } = await pool.query(
+      `WITH agg AS (${AGG} WHERE et.user_id = '${viewerId}' GROUP BY et.user_id)
+       SELECT ${DECOR}, u.name, u.username, u.avatar
+         FROM agg a LEFT JOIN users u ON u.id::text = a.user_id`
+    );
+    me = mr.length ? view(mr[0]) : null;
+  }
+
+  return { sort, minSettled, count: players.length, players, me };
+}
+
 module.exports = {
   init, listHouses, me, history, placeBet, getTicket, cancelTicket, ingestEvent, fundPool, topUpPool, sweepStale,
-  poolStats, listOpenRounds,
+  poolStats, listOpenRounds, leaderboard,
   MIN_STAKE, MAX_STAKE, PAYOUT_MULT,
 };
