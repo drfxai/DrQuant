@@ -19,8 +19,17 @@
 // ----------------------------------------------------------------------------
 const nodemailer = require("nodemailer");
 
+// Email can be delivered two ways: Brevo's HTTPS API (port 443 — works even when
+// the host blocks outbound SMTP) or classic SMTP via nodemailer. The API is used
+// whenever BREVO_API_KEY is set; otherwise we fall back to SMTP_* over nodemailer.
+function brevoApiConfigured() {
+  return !!(process.env.BREVO_API_KEY && String(process.env.BREVO_API_KEY).trim());
+}
+
+// True when ANY delivery method is configured (API key or SMTP host). The auth
+// routes use this to decide whether sign-up requires an emailed code.
 function smtpConfigured() {
-  return !!(process.env.SMTP_HOST && String(process.env.SMTP_HOST).trim());
+  return brevoApiConfigured() || !!(process.env.SMTP_HOST && String(process.env.SMTP_HOST).trim());
 }
 
 let _transport = null;
@@ -43,7 +52,55 @@ function fromAddress() {
   return process.env.SMTP_FROM || process.env.SMTP_USER || "DrFX Quant <no-reply@localhost>";
 }
 
+// Split "DrFX Quant <no-reply@drfx.io>" into { name, email } for Brevo's API,
+// which wants the sender as a structured object. A bare address also works.
+function parseFrom() {
+  const raw = String(process.env.SMTP_FROM || process.env.SMTP_USER || "no-reply@localhost").trim();
+  const m = raw.match(/^\s*(.*?)\s*<\s*([^>]+?)\s*>\s*$/);
+  if (m) return { name: (m[1] || "DrFX Quant").trim(), email: m[2].trim() };
+  return { name: "DrFX Quant", email: raw };
+}
+
+// Send through Brevo's transactional API over HTTPS (port 443). Bypasses SMTP
+// entirely, so it works on hosts that block outbound 25/465/587/2525.
+async function sendViaBrevoApi({ to, subject, text, html }) {
+  const from = parseFrom();
+  const payload = {
+    sender: { name: from.name, email: from.email },
+    to: [{ email: to }],
+    subject,
+  };
+  if (html) payload.htmlContent = html;
+  if (text) payload.textContent = text;
+  let r;
+  try {
+    r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        "api-key": String(process.env.BREVO_API_KEY).trim(),
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (e) {
+    throw new Error("Brevo API request failed: " + ((e && e.message) || "network error"));
+  }
+  const d = await r.json().catch(() => null);
+  if (!r.ok) {
+    // Brevo returns { code, message } on error. 401 -> bad API key; 400 with a
+    // "sender ... not valid" message -> the From address isn't a verified sender.
+    const msg = (d && (d.message || d.code)) || ("HTTP " + r.status);
+    throw new Error("Brevo API send failed [" + r.status + "]: " + msg);
+  }
+  return d;
+}
+
 async function sendMail({ to, subject, text, html }) {
+  // Prefer the HTTPS API when configured (works behind SMTP-blocking firewalls).
+  if (brevoApiConfigured()) {
+    return sendViaBrevoApi({ to, subject, text, html });
+  }
   const t = transport();
   if (!t) throw new Error("SMTP is not configured (set SMTP_HOST in .env)");
   try {
