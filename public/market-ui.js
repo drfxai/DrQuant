@@ -83,10 +83,22 @@
       return '<button class="mk-sortbtn" data-sort="' + v + '" style="flex-shrink:0;padding:7px 13px;border-radius:13px;border:1px solid ' + (on ? t.ba : t.bd) + ";background:" + (on ? t.act : "transparent") + ";color:" + (on ? t.ac : t.t3) + ';font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap">' + l + "</button>";
     }).join("");
     body.innerHTML =
+      '<div style="display:flex;gap:11px;padding:14px 14px 4px;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box">' +
+        '<button id="mkx-go-top" type="button" style="flex:1;display:flex;align-items:center;gap:9px;border:1px solid ' + t.bd + ';background:' + t.cd + ';border-radius:15px;padding:12px 13px;cursor:pointer;font-family:inherit;text-align:left">' +
+          '<span style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(245,181,74,.15);color:#f5b54a;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/></svg></span>' +
+          '<span style="min-width:0"><span style="display:block;font-size:13px;font-weight:800;color:' + t.t1 + '">Top Traders</span><span style="display:block;font-size:10px;color:' + t.t3 + '">Easy Trade ranks</span></span>' +
+        '</button>' +
+        '<button id="mkx-go-leagues" type="button" style="flex:1;display:flex;align-items:center;gap:9px;border:1px solid ' + t.bd + ';background:' + t.cd + ';border-radius:15px;padding:12px 13px;cursor:pointer;font-family:inherit;text-align:left">' +
+          '<span style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(124,92,255,.15);color:#7c5cff;flex-shrink:0"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.5 12.5 17 22l-5-3-5 3 1.5-9.5"/></svg></span>' +
+          '<span style="min-width:0"><span style="display:block;font-size:13px;font-weight:800;color:' + t.t1 + '">Leagues</span><span style="display:block;font-size:10px;color:' + t.t3 + '">Ascension path</span></span>' +
+        '</button>' +
+      '</div>' +
       '<div class="mkx-rail" id="mkx-rail"></div>' +
       '<div class="mkx-chiprow">' + chips + '<div style="flex:1;min-width:6px"></div>' + sorts + "</div>" +
       '<div id="mk-feed" style="padding:0 12px 30px;max-width:640px;margin:0 auto;width:100%;box-sizing:border-box">' + mkLoader() + "</div>";
     mkxLoadRail();
+    var _gt = document.getElementById("mkx-go-top"); if (_gt) _gt.onclick = function () { if (window.dqEtLeaderboard) dqEtLeaderboard.open(); };
+    var _gl = document.getElementById("mkx-go-leagues"); if (_gl) _gl.onclick = function () { if (window.dqLeagues) dqLeagues.open(); };
     try {
       var qs = "sort=" + MK.sort + "&type=" + encodeURIComponent(MK.type) + "&q=" + encodeURIComponent(MK.q || "") + "&limit=30";
       var d = await api("/market/explore?" + qs);

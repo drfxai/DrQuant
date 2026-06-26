@@ -266,12 +266,24 @@
     }).join("");
 
     body.innerHTML = stat + liveBanner +
+      '<div style="display:flex;gap:11px;margin-bottom:16px;position:relative;z-index:1">' +
+        '<button id="et-go-top" type="button" style="flex:1;display:flex;align-items:center;gap:9px;border:1px solid ' + hexA(GOLD, .4) + ';background:' + hexA(GOLD, .08) + ';border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit;text-align:left">' +
+          '<span style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:' + hexA(GOLD, .16) + ';color:' + GOLD + ';flex-shrink:0">' + ICO('<path d="M8 21h8M12 17v4"/><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>', 17) + '</span>' +
+          '<span style="min-width:0"><span style="display:block;font-size:13px;font-weight:800;color:' + t.t1 + '">Top Traders</span><span style="display:block;font-size:10px;color:' + t.t3 + '">Leaderboard</span></span>' +
+        '</button>' +
+        '<button id="et-go-leagues" type="button" style="flex:1;display:flex;align-items:center;gap:9px;border:1px solid ' + hexA(t.pr, .4) + ';background:' + hexA(t.pr, .08) + ';border-radius:14px;padding:11px 12px;cursor:pointer;font-family:inherit;text-align:left">' +
+          '<span style="width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:' + hexA(t.pr, .16) + ';color:' + t.pr + ';flex-shrink:0">' + ICO('<circle cx="12" cy="8" r="6"/><path d="M15.5 12.5 17 22l-5-3-5 3 1.5-9.5"/>', 17) + '</span>' +
+          '<span style="min-width:0"><span style="display:block;font-size:13px;font-weight:800;color:' + t.t1 + '">Leagues</span><span style="display:block;font-size:10px;color:' + t.t3 + '">Ascension</span></span>' +
+        '</button>' +
+      '</div>' +
       '<div class="et-h">' + ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 16) + 'Choose a signal house</div>' +
       '<div style="font-size:11.5px;color:' + t.t4 + ';margin:-6px 2px 13px;line-height:1.5">Pick a house, stake QNTM, then predict whether its next signal hits its <b style="color:' + GREEN + '">target</b> or its <b style="color:' + RED + '">stop</b>. Guess right, win double.</div>' +
       '<div class="et-grid">' + grid + '</div>' +
       '<div style="text-align:center;margin-top:22px;font-size:10.5px;color:' + t.t4 + ';line-height:1.6">Outcomes are decided by each house\u2019s live TradingView indicator.<br>Predict responsibly \u2014 you can lose your entire stake.</div>';
 
     body.querySelectorAll(".et-house").forEach(function (c) { c.onclick = function () { openBetSheet(ov, houseById(c.dataset.house)); }; });
+    var _goTop = body.querySelector("#et-go-top"); if (_goTop) _goTop.onclick = function () { if (window.dqEtLeaderboard) dqEtLeaderboard.open(); };
+    var _goLg = body.querySelector("#et-go-leagues"); if (_goLg) _goLg.onclick = function () { if (window.dqLeagues) dqLeagues.open(); };
     var resume = body.querySelector("#et-resume");
     if (resume) resume.onclick = function () {
       API("/easytrade/ticket/" + encodeURIComponent(ET.openTicketId)).then(function (r) {

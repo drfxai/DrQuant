@@ -204,7 +204,20 @@
   }
   // The inner content of the Explore center column (everything inside .mkx-mainwrap).
   function exploreCenterHTML(gridHTML) {
-    return `${searchBar()}${exploreHead()}${tabs()}<div class='mkx-feedgrid'>${gridHTML}</div>${exploreFoot()}`;
+    return `${searchBar()}${exploreHead()}${mkxDiscoverRow()}${tabs()}<div class='mkx-feedgrid'>${gridHTML}</div>${exploreFoot()}`;
+  }
+  // Quick access into the Easy Trade leaderboard and the QNTM Leagues ladder.
+  function mkxDiscoverRow() {
+    return `<div style='display:flex;gap:14px;margin-bottom:18px'>` +
+      `<button id='mkx-go-top' type='button' style='flex:1;display:flex;align-items:center;gap:13px;border:1px solid ${D.bd};background:${D.card};border-radius:16px;padding:15px 17px;cursor:pointer;font-family:inherit;text-align:left;transition:border-color .2s,transform .14s'>` +
+        `<span style='width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(245,181,74,.14);color:#f5b54a;flex-shrink:0'>${ic(`<path d='M8 21h8M12 17v4'/><path d='M7 4h10v5a5 5 0 0 1-10 0z'/><path d='M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3'/>`, 22)}</span>` +
+        `<span style='min-width:0'><span style='display:block;font-size:15px;font-weight:800;color:${D.t1}'>Top Traders</span><span style='display:block;font-size:12px;color:${D.t2};margin-top:1px'>Easy Trade ranks \u2014 XP, win rate & tokens</span></span>` +
+      `</button>` +
+      `<button id='mkx-go-leagues' type='button' style='flex:1;display:flex;align-items:center;gap:13px;border:1px solid ${D.bd};background:${D.card};border-radius:16px;padding:15px 17px;cursor:pointer;font-family:inherit;text-align:left;transition:border-color .2s,transform .14s'>` +
+        `<span style='width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(168,85,247,.16);color:${D.pur};flex-shrink:0'>${ic(`<circle cx='12' cy='8' r='6'/><path d='M15.5 12.5 17 22l-5-3-5 3 1.5-9.5'/>`, 22)}</span>` +
+        `<span style='min-width:0'><span style='display:block;font-size:15px;font-weight:800;color:${D.t1}'>Leagues</span><span style='display:block;font-size:12px;color:${D.t2};margin-top:1px'>Climb the QNTM ascension path</span></span>` +
+      `</button>` +
+    `</div>`;
   }
   function mainShell(gridHTML) {
     return `<main class='mkx-main'><div class='mkx-mainwrap'>${exploreCenterHTML(gridHTML)}</div></main>`;
@@ -487,6 +500,10 @@
     }
     var bell = center.querySelector('#mkx-bell');
     if (bell) bell.onclick = function () { openNotifications(); };
+    var goTop = center.querySelector('#mkx-go-top');
+    if (goTop) goTop.onclick = function () { if (window.dqEtLeaderboard) dqEtLeaderboard.open(); };
+    var goLg = center.querySelector('#mkx-go-leagues');
+    if (goLg) goLg.onclick = function () { if (window.dqLeagues) dqLeagues.open(); };
   }
 
   // Render the Explore feed into the center (search + heading + tabs + grid).
