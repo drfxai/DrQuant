@@ -287,6 +287,17 @@ function startSignalScoreboard() {
     easytrade.init()
       .then(() => {
         setInterval(() => easytrade.sweepStale().catch(() => {}), 5 * 60 * 1000);
+        // Auto-replenish the reward pool to a floor (treasury -> pool). Set
+        // EASYTRADE_POOL_FLOOR=1000000 to keep the pool at 1,000,000 QNTM; unset
+        // or 0 disables it. Runs shortly after boot, then on an interval.
+        const poolFloor = Math.floor(Number(process.env.EASYTRADE_POOL_FLOOR) || 0);
+        if (poolFloor > 0) {
+          const everyMs = Math.max(15, Number(process.env.EASYTRADE_POOL_TOPUP_INTERVAL_SEC) || 60) * 1000;
+          const runTopup = () => easytrade.topUpPool(poolFloor, null).catch((e) => console.error("[easytrade] pool top-up:", e.message));
+          setTimeout(runTopup, 12 * 1000);
+          setInterval(runTopup, everyMs);
+          console.log(`[easytrade] pool auto-topup ON - floor ${poolFloor} QNTM every ${Math.round(everyMs / 1000)}s`);
+        }
         if (String(process.env.EASYTRADE_AUTOPILOT || "").toLowerCase() === "on") {
           try { easytradeAutopilot.start(); } catch (e) { console.error("[easytrade-autopilot] start:", e.message); }
         }

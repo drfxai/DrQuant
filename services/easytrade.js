@@ -465,6 +465,47 @@ async function fundPool(amount, actorId) {
   return { funded: String(amount), pool: await poolBalance(), txn: txn.public_id };
 }
 
+// ── admin/keeper: keep the pool topped up to a floor (treasury -> pool) ──────
+// Transfers ONLY the shortfall needed to reach `target`. No-op when the pool is
+// already at/above target. Never partially drains the treasury and never throws
+// into a caller's interval: if the treasury can't cover the shortfall it logs
+// and skips. Each successful top-up is its own ledger transaction (no idempotency
+// key) so repeated calls keep refilling as the pool is drawn down by payouts.
+async function topUpPool(targetInput, actorId) {
+  await init();
+  const target = String(Math.floor(Number(targetInput) || 0));
+  if (!decimal.isPositive(target)) return { topped: false, reason: "no_target", pool: await poolBalance() };
+  const have = await poolBalance();
+  if (decimal.cmp(have, target) >= 0) return { topped: false, pool: have, target };
+  const shortfall = decimal.sub(target, have);
+  const treasuryId = await wallets.systemWalletId("treasury", "QNTM");
+  const treasuryBal = (await wallets.getWallet(treasuryId)).available_balance;
+  if (decimal.cmp(treasuryBal, shortfall) < 0) {
+    console.warn("[easytrade] pool top-up skipped: treasury has " + treasuryBal + ", need " + shortfall + " to reach " + target);
+    return { topped: false, reason: "treasury_short", pool: have, target, shortfall, treasury: treasuryBal };
+  }
+  try {
+    const txn = await postTransaction({
+      type: "transfer", amount: shortfall,  // treasury -> Easy Trade pool (auto top-up)
+      movements: [
+        { walletId: treasuryId, direction: "debit", amount: shortfall, description: "Easy Trade pool auto-topup" },
+        { walletId: _poolWalletId, direction: "credit", amount: shortfall, description: "Easy Trade pool auto-topup" },
+      ],
+      initiatorUserId: actorId ? String(actorId) : null, allowFrozen: true,
+      reference: { type: "easytrade_pool_topup" },
+    });
+    const after = await poolBalance();
+    console.log("[easytrade] pool topped up +" + shortfall + " -> " + after + " (floor " + target + ")");
+    return { topped: true, added: shortfall, pool: after, target, txn: txn.public_id };
+  } catch (e) {
+    if (/insufficient/i.test(e.message) || e.code === "insufficient_funds") {
+      console.warn("[easytrade] pool top-up failed (treasury short): needed " + shortfall + " for floor " + target);
+      return { topped: false, reason: "treasury_short", pool: have, target, shortfall };
+    }
+    throw e;
+  }
+}
+
 // ── shaping ─────────────────────────────────────────────────────────────────
 function ticketView(t, round, ticks) {
   return {
@@ -523,7 +564,7 @@ async function listOpenRounds() {
 }
 
 module.exports = {
-  init, listHouses, me, history, placeBet, getTicket, cancelTicket, ingestEvent, fundPool, sweepStale,
+  init, listHouses, me, history, placeBet, getTicket, cancelTicket, ingestEvent, fundPool, topUpPool, sweepStale,
   poolStats, listOpenRounds,
   MIN_STAKE, MAX_STAKE, PAYOUT_MULT,
 };
