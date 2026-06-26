@@ -477,16 +477,32 @@
     var outCol = outcome === "TP" ? GREEN : RED;
     var payout = Number(tk.payout) || (Number(tk.stake) * ET.payoutMult);
 
+    // Did the price ACTUALLY reach the settling level, or did the round time out
+    // near entry (the autopilot max-age fallback)? Ticks are the same samples the
+    // settler saw, so this agrees with how it settled: a real cross shows up in a
+    // sample; a timeout does not. Keeps the verdict text honest against the chart.
+    var reached = (function () {
+      var entry = num(round.entry); if (entry == null) return true;
+      var lvl = outcome === "TP" ? num(round.tp3) : num(round.sl);
+      if (lvl == null) return true;
+      var long = round.direction === "long";
+      var ps = (tk.ticks || []).map(function (x) { return num(x.price); }).filter(function (p) { return p != null; });
+      if (!ps.length) return true;
+      var mn = Math.min.apply(null, ps), mx = Math.max.apply(null, ps);
+      if (outcome === "TP") return long ? mx >= lvl : mn <= lvl;
+      return long ? mn <= lvl : mx >= lvl;
+    })();
+
     body.innerHTML =
       '<div style="text-align:center;padding:16px 0 6px">' +
         '<div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:' + t.t3 + '">' + ESC(house.name) + (round.symbol ? ' \u00b7 ' + ESC(round.symbol) : '') + '</div>' +
         '<div class="et-stamp" style="color:' + outCol + ';text-shadow:0 0 30px ' + (outcome === "TP" ? GREEN_G : RED_G) + '">' + outcome + '</div>' +
-        '<div style="font-size:13px;color:' + t.t3 + '">the signal hit its ' + (outcome === "TP" ? "target" : "stop") + '</div>' +
+        '<div style="font-size:13px;color:' + t.t3 + '">' + (reached ? ('the signal hit its ' + (outcome === "TP" ? "target" : "stop")) : 'the round closed near entry') + '</div>' +
       '</div>' +
       (round && (round.entry != null) ? '<div style="margin:6px 0 2px;border:1px solid ' + t.bd + ';border-radius:14px;background:' + t.cd + ';padding:12px">' + chartSVG(round, tk.ticks, tk.pick) + '</div>' : '') +
       '<div style="margin:14px auto 0;max-width:340px;border:1.5px solid ' + hexA(col, .5) + ';border-radius:18px;background:' + hexA(col, .08) + ';padding:20px;text-align:center;box-shadow:0 0 30px ' + hexA(col, .18) + ';animation:etPop .5s cubic-bezier(.2,1.2,.3,1)">' +
-        (won ? '<div style="display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:' + GREEN + ';background:' + hexA(GREEN, .14) + ';border:1px solid ' + hexA(GREEN, .4) + ';border-radius:999px;padding:4px 11px;margin-bottom:10px">\uD83C\uDFAF All targets hit \u00b7 100%</div>' : '') +
-        '<div style="font-size:15px;font-weight:800;color:' + col + '">' + (won ? "\uD83C\uDFC6 Perfect call!" : "Not this time") + '</div>' +
+        (won ? ('<div style="display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:' + GREEN + ';background:' + hexA(GREEN, .14) + ';border:1px solid ' + hexA(GREEN, .4) + ';border-radius:999px;padding:4px 11px;margin-bottom:10px">' + (outcome === "TP" && reached ? "\uD83C\uDFAF All targets hit \u00b7 100%" : (outcome === "SL" ? "Stop hit \u2014 you called it" : "Closed in profit")) + '</div>') : '') +
+        '<div style="font-size:15px;font-weight:800;color:' + col + '">' + (won ? (outcome === "TP" && reached ? "\uD83C\uDFC6 Perfect call!" : "\uD83C\uDFC6 You called it!") : "Not this time") + '</div>' +
         '<div style="font-size:40px;font-weight:900;color:' + col + ';letter-spacing:-1px;margin:6px 0;text-shadow:0 0 22px ' + glow + '">' + (won ? "+" + fmtQ(payout) : "\u2212" + fmtQ(tk.stake)) + '</div>' +
         '<div style="font-size:12px;color:' + t.t3 + '">' + (won
           ? ("You called " + tk.pick + " and nailed it. " + fmtQ(payout) + " QNTM paid straight to your wallet!")
