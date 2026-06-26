@@ -425,6 +425,43 @@ async function initDB() {
       );
       CREATE INDEX IF NOT EXISTS idx_chat_pins_user ON chat_pins(user_id);
     `).catch((e) => console.error("Chat pins schema:", e.message));
+
+    // ── QNTM Leagues (mirrors migrations/005_leagues.sql) ──
+    // "Earn to unlock, stake to activate." 11 fixed leagues + a per-user status
+    // row (lifetime-earned counter, cached locked stake, derived current/highest
+    // league). Whole-QNTM BIGINT thresholds; all logic lives in services/leagues.js.
+    // Additive + idempotent: a normal deploy + restart is enough (no psql step).
+    // Seeded ON CONFLICT DO UPDATE so threshold/name edits propagate on redeploy.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS league_definitions (
+        id                    SMALLINT PRIMARY KEY,
+        name                  TEXT   NOT NULL,
+        earned_threshold_qntm BIGINT NOT NULL,
+        stake_threshold_qntm  BIGINT NOT NULL,
+        created_at            TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS user_league_status (
+        user_id               INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        total_earned_qntm     BIGINT  NOT NULL DEFAULT 0,
+        staked_qntm           BIGINT  NOT NULL DEFAULT 0,
+        current_league_id     SMALLINT REFERENCES league_definitions(id),
+        highest_qualified_id  SMALLINT REFERENCES league_definitions(id),
+        current_league_status TEXT NOT NULL DEFAULT 'Locked'
+                              CHECK (current_league_status IN ('Locked','Qualified','Active')),
+        updated_at            TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_league_current ON user_league_status(current_league_id);
+      INSERT INTO league_definitions (id, name, earned_threshold_qntm, stake_threshold_qntm) VALUES
+        (1,'Discovery',1000,1000),(2,'Maker',2000,2000),(3,'Top',4000,4000),
+        (4,'Bronze',8000,8000),(5,'Silver',16000,16000),(6,'Gold',32000,32000),
+        (7,'Master',64000,64000),(8,'Champion',128000,128000),(9,'Crystal',256000,256000),
+        (10,'Titan',512000,512000),(11,'Legendary',1024000,1024000)
+      ON CONFLICT (id) DO UPDATE SET
+        name=EXCLUDED.name,
+        earned_threshold_qntm=EXCLUDED.earned_threshold_qntm,
+        stake_threshold_qntm=EXCLUDED.stake_threshold_qntm;
+    `).catch((e) => console.error("Leagues schema:", e.message));
+    console.log("Leagues ready (league_definitions, user_league_status)");
     console.log("✅ Chat pins ready (chat_pins)");
 
     console.log("✅ PostgreSQL ready");

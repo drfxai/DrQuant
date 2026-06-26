@@ -93,7 +93,19 @@ async function grant(kind, userId) {
 // `await` it (to land the balance before responding) or leave it floating —
 // either way it can never break the request.
 function fire(kind, userId) {
-  return grant(kind, userId).catch((e) => {
+  return grant(kind, userId).then((res) => {
+    // Mirror a successful milestone reward into the user's lifetime-earned league
+    // counter. Best-effort + non-blocking: a league failure must never affect the
+    // reward result or the calling request. Only FIRST-TIME grants (res.granted)
+    // increment — idempotent replays (res.idempotent) do not double-count. Lazy
+    // require avoids any load-order coupling with services/leagues.js.
+    try {
+      if (res && res.granted && res.amount) {
+        require("./leagues").addEarned(userId, res.amount, "reward:" + kind);
+      }
+    } catch (_) { /* leagues is best-effort */ }
+    return res;
+  }).catch((e) => {
     console.error("[rewards] " + kind + " unexpected:", e && e.message);
     return { ok: false, error: "unexpected" };
   });
