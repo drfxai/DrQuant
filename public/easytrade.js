@@ -505,7 +505,7 @@
         '<div style="font-size:15px;font-weight:800;color:' + col + '">' + (won ? (outcome === "TP" && reached ? "\uD83C\uDFC6 Perfect call!" : "\uD83C\uDFC6 You called it!") : "Not this time") + '</div>' +
         '<div style="font-size:40px;font-weight:900;color:' + col + ';letter-spacing:-1px;margin:6px 0;text-shadow:0 0 22px ' + glow + '">' + (won ? "+" + fmtQ(payout) : "\u2212" + fmtQ(tk.stake)) + '</div>' +
         '<div style="font-size:12px;color:' + t.t3 + '">' + (won
-          ? ("You called " + tk.pick + " and nailed it. " + fmtQ(payout) + " QNTM paid straight to your wallet!")
+          ? ("You called " + tk.pick + " and nailed it! Your " + fmtQ(tk.stake) + " stake came back as " + fmtQ(payout) + " QNTM (a " + fmtQ(payout - Number(tk.stake)) + " profit).")
           : ("You predicted " + tk.pick + ". Your " + fmtQ(tk.stake) + " QNTM stake went to the reward pool.")) + '</div>' +
       '</div>' +
       '<div class="et-stats" style="margin-top:18px">' +
