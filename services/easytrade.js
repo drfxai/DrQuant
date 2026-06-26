@@ -255,9 +255,17 @@ async function placeBet(userId, houseId, stakeInput, pick) {
   return withTransaction(async (cx) => {
     if (!(await exposureOk(cx, stake))) { const e = new Error("Easy Trade is at capacity — try a smaller stake"); e.code = "capacity"; throw e; }
     const uwId = await userWalletId(userId, cx);
+    // Bind to the house's CURRENT open round if there is one, so a prediction
+    // placed mid-round plays that live trade. If no round is open, the ticket
+    // stays unbound and catches the NEXT entry (openRound binds it then) — that
+    // path still prevents betting after a trade's outcome is already visible.
+    const { rows: orr } = await cx.query(
+      `SELECT id FROM easytrade_rounds WHERE house_id=$1 AND status='entered' ORDER BY id DESC LIMIT 1`, [houseId]);
+    const openRoundId = orr[0] ? orr[0].id : null;
     const { rows: tk } = await cx.query(
-      `INSERT INTO easytrade_tickets (user_id, house_id, stake, pick) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [String(userId), houseId, stake, pick]);
+      `INSERT INTO easytrade_tickets (user_id, house_id, stake, pick, round_id, bound_at)
+       VALUES ($1,$2,$3,$4,$5,CASE WHEN $5::bigint IS NULL THEN NULL ELSE now() END) RETURNING *`,
+      [String(userId), houseId, stake, pick, openRoundId]);
     const ticket = tk[0];
     // debit the user, credit the pool — overdraw throws InsufficientFunds and
     // rolls the whole bet back (ticket insert included).
@@ -273,7 +281,12 @@ async function placeBet(userId, houseId, stakeInput, pick) {
       metadata: { app: "easytrade", kind: "stake", houseId, pick },
     }, cx);
     await cx.query(`UPDATE easytrade_tickets SET stake_txn=$2 WHERE id=$1`, [ticket.id, txn.public_id]);
-    return ticketView({ ...ticket, stake_txn: txn.public_id }, null);
+    let boundRound = null;
+    if (openRoundId) {
+      const rr = await cx.query(`SELECT * FROM easytrade_rounds WHERE id=$1`, [openRoundId]);
+      boundRound = rr.rows[0] || null;
+    }
+    return ticketView({ ...ticket, stake_txn: txn.public_id }, boundRound);
   }).catch((err) => {
     if (/insufficient/i.test(err.message) || err.code === "insufficient_funds") {
       const e = new Error("Not enough QNTM in your wallet"); e.code = "insufficient"; throw e;
