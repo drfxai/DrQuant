@@ -61,6 +61,30 @@ Phase 1; the bucket is funded and the policy is recorded for a later phase.
   the bootstrap entrypoint is structured so a future super-admin/root tier can be
   substituted without touching the financial core.
 
+## League Unlock Ritual (non-yield qualification stake)
+
+The League Unlock Ritual is a **gamified, non-yield** mechanic for ascending
+between leagues. It is **not** an investment, savings, or interest product:
+
+- To unlock a higher league, a user locks that league's fixed `stake_for_unlock`
+  QNTM for a **7-day** period (`available` -> `locked` on the ledger).
+- At the end of the 7 days the league becomes **permanently unlocked** and the
+  **entire staked amount is returned** to the user (`locked` -> `available`). The
+  user receives back **exactly** what they committed — no bonus, no yield, no
+  interest, no additional tokens.
+- The unlock is a **one-time qualification ritual**: the league stays unlocked
+  after the tokens are returned. It is **not** tied to an ongoing locked balance,
+  so the user is never required to keep funds staked to retain league access.
+- Token movement runs through the authoritative ledger as ordinary `staking_lock`
+  / `staking_unlock` transactions (tagged `reference.type='league_unlock'`); the
+  fixed-supply and non-negative guarantees apply unchanged. No supply is created
+  or destroyed.
+
+A separate, **independent profit-bearing staking module** (where staking QNTM
+could earn token rewards) is a **possible future phase**. It is **not** part of
+the League Unlock Ritual, is **not** implemented, and — like any move toward
+yield — would require qualified legal sign-off before being built.
+
 _This posture is an engineering description, not legal advice. Any move toward a
 tradable or on-chain QNTM must be reviewed and signed off by qualified counsel
 first._

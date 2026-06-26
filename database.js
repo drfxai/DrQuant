@@ -462,6 +462,41 @@ async function initDB() {
         stake_threshold_qntm=EXCLUDED.stake_threshold_qntm;
     `).catch((e) => console.error("Leagues schema:", e.message));
     console.log("Leagues ready (league_definitions, user_league_status)");
+
+    // ── League Unlock Ritual (mirrors migrations/006_league_unlock.sql) ──
+    // Gamified, NON-YIELD 7-day ascension: lock stake_for_unlock QNTM -> 7-day
+    // countdown -> league permanently unlocks + tokens returned in full. Adds the
+    // per-league ritual cost, the permanent unlock pointer, and the ritual ledger.
+    // Additive + idempotent. Token movement is handled by the ledger, not here.
+    await client.query(`
+      ALTER TABLE league_definitions ADD COLUMN IF NOT EXISTS stake_for_unlock_qntm BIGINT NOT NULL DEFAULT 0;
+      ALTER TABLE user_league_status ADD COLUMN IF NOT EXISTS unlocked_league_id SMALLINT REFERENCES league_definitions(id);
+      INSERT INTO league_definitions (id, name, earned_threshold_qntm, stake_threshold_qntm, stake_for_unlock_qntm) VALUES
+        (1,'Discovery',1000,1000,0),(2,'Maker',2000,2000,500),(3,'Top',4000,4000,1000),
+        (4,'Bronze',8000,8000,2000),(5,'Silver',16000,16000,5000),(6,'Gold',32000,32000,10000),
+        (7,'Master',64000,64000,20000),(8,'Champion',128000,128000,40000),(9,'Crystal',256000,256000,80000),
+        (10,'Titan',512000,512000,160000),(11,'Legendary',1024000,1024000,320000)
+      ON CONFLICT (id) DO UPDATE SET stake_for_unlock_qntm = EXCLUDED.stake_for_unlock_qntm;
+      CREATE TABLE IF NOT EXISTS league_unlock_rituals (
+        id            BIGSERIAL PRIMARY KEY,
+        user_id       INTEGER  NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        league_id     SMALLINT NOT NULL REFERENCES league_definitions(id),
+        amount_qntm   BIGINT   NOT NULL CHECK (amount_qntm > 0),
+        status        TEXT     NOT NULL DEFAULT 'pending_unlock'
+                      CHECK (status IN ('pending_unlock','completed','cancelled')),
+        stake_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+        unlock_at     TIMESTAMPTZ NOT NULL,
+        completed_at  TIMESTAMPTZ,
+        released_via  TEXT CHECK (released_via IN ('manual','auto')),
+        lock_txn      TEXT,
+        release_txn   TEXT,
+        created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_lur_user ON league_unlock_rituals(user_id, status);
+      CREATE INDEX IF NOT EXISTS idx_lur_pending ON league_unlock_rituals(status, unlock_at) WHERE status = 'pending_unlock';
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_lur_one_active ON league_unlock_rituals(user_id) WHERE status = 'pending_unlock';
+    `).catch((e) => console.error("League ritual schema:", e.message));
+    console.log("League unlock ritual ready (league_unlock_rituals)");
     console.log("✅ Chat pins ready (chat_pins)");
 
     console.log("✅ PostgreSQL ready");

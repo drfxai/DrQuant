@@ -121,6 +121,7 @@ app.use("/api/signals", require("./routes/signals")); // read-only signals feed 
 app.use("/api/easytrade", require("./routes/easytrade")); // Easy Trade (Baby Trader): wallet-connected prediction game + dedicated webhook
 app.use("/api/translate", require("./routes/translate")); // chat translation (provider-agnostic; degrades to no-op if unconfigured)
 app.use("/api/wizard", require("./routes/wizard")); // wizard ("guard") panel: scoped moderation over regular users only
+try { app.use("/api/leagues", require("./routes/leagues")); } catch (e) { console.error("Leagues route disabled:", e.message); } // QNTM Leagues + League Unlock Ritual
 
 // QNTM economy — internal ledger/wallet admin routes (mounts at /api/qntm/admin),
 // guarded by the host's auth + admin middleware so it shares one RBAC path.
@@ -283,6 +284,21 @@ function startSignalScoreboard() {
     await initDB();
     startMessageExpiryCleaner();
     startSignalScoreboard();
+    // ── League Unlock Ritual sweeper ──
+    // Auto-settle matured 7-day rituals: return locked QNTM, permanently unlock the
+    // league, and push a realtime "league_unlocked" event so the client shows the
+    // welcome pop-up. Runs ~20s after boot, then every minute (like the other sweeps).
+    try {
+      const leagueRituals = require("./services/league-rituals");
+      const sweepRituals = () => leagueRituals.sweepMatured()
+        .then((done) => {
+          for (const u of (done || [])) io.to(`user_${u.userId}`).emit("league_unlocked", u);
+          if (done && done.length) console.log(`[leagues] auto-unlocked ${done.length} ritual(s)`);
+        })
+        .catch((e) => console.error("League ritual sweep:", e.message));
+      setTimeout(sweepRituals, 20 * 1000);
+      setInterval(sweepRituals, 60 * 1000);
+    } catch (e) { console.error("League ritual sweeper disabled:", e.message); }
     await setupQntmSchema().catch((e) => console.error("[qntm] schema setup failed:", e.message));
     easytrade.init()
       .then(() => {
