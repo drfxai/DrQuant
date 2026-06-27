@@ -2,57 +2,60 @@
  * crystal3d.js — DrFX Quant real-time 3D crystals (WebGL / Three.js)
  * ----------------------------------------------------------------------------
  * Self-contained SPA module. Loads as a plain <script> after index.html's main
- * script. It renders genuine 3D, lit, faceted crystals into any container and
- * is used by the Profile popup for two things:
+ * script. It renders genuine 3D, lit, faceted ICE-BLUE crystals into any
+ * container and is used by the Profile popup for two things:
  *
  *   - the League Progress "gem"   (a tall faceted crystal shard)
- *   - the Premium Tier "crown"    (a crystal crown of shards on a base)
+ *   - the Premium Tier "crown"    (a fanned crystal tiara on a faceted pedestal)
  *
- * Public API (all synchronous to call; rendering boots lazily):
+ * The look is tuned to match the approved reference art: bright ice-blue glass
+ * with WHITE-HOT facet edges, deep-blue interior shadows, an emissive inner
+ * glow, a procedural environment reflection (no external asset) and a soft
+ * ground-glow pool beneath the model — i.e. lots of colour depth.
+ *
+ * Public API (synchronous to call; rendering boots lazily):
  *
  *     window.dq3DCrystal.mount(el, {
  *        kind:  "shard" | "crown",     // which model            (default "shard")
  *        color: "#7cc7ff",             // base crystal colour    (default blue)
  *        height: 150,                  // canvas px height       (default = el's)
- *        spin:  true                   // slow auto-rotation     (default true)
+ *        spin:  true,                  // slow auto-rotation     (default true)
+ *        glow:  true                   // ground-glow pool       (default true)
  *     })  ->  returns a handle { destroy() }  (also tracked internally)
  *
  *     window.dq3DCrystal.disposeAll()   // tear down every live instance + GL
  *
- * Design / safety notes
- *   • Three.js (r128) is lazy-loaded from cdnjs only the first time a crystal is
- *     mounted, so it costs nothing until the Profile is opened.
- *   • Phone-safe: device-pixel-ratio is capped, the renderer pauses whenever the
- *     canvas is scrolled off-screen (IntersectionObserver) and whenever the tab
- *     is hidden, and every instance fully disposes its geometry/material/GL
- *     context on destroy(). No localStorage / sessionStorage is ever touched.
- *   • Graceful fallback: if WebGL is unavailable or Three.js fails to load, a
- *     crisp static SVG crystal is injected instead, so the card never breaks.
+ * Safety: Three.js (r128) is lazy-loaded from cdnjs only on first mount.
+ * Phone-safe: DPR capped, pauses off-screen / when tab hidden, fully disposes
+ * geometry+material+env+GL on destroy. No localStorage / sessionStorage ever.
+ * Graceful fallback: a crisp static SVG crystal if WebGL/Three is unavailable.
  * ========================================================================== */
 (function () {
   "use strict";
   if (window.dq3DCrystal) return; // singleton
 
   var THREE_URL = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
-  var _loading = null;        // Promise<boolean> for the Three.js script
-  var _instances = [];        // live handles, for disposeAll()
+  var _loading = null;
+  var _instances = [];
 
-  // ── tiny colour helpers ────────────────────────────────────────────────────
+  // ── colour helpers ──────────────────────────────────────────────────────────
   function hexToRgb(h) {
     h = String(h || "#7cc7ff").replace("#", "");
     if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
     var n = parseInt(h, 16);
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
   }
-  function lighten(h, amt) {
-    var c = hexToRgb(h);
-    var r = Math.round(c.r + (255 - c.r) * amt),
-        g = Math.round(c.g + (255 - c.g) * amt),
-        b = Math.round(c.b + (255 - c.b) * amt);
-    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  function mix(a, b, amt) {
+    return {
+      r: Math.round(a.r + (b.r - a.r) * amt),
+      g: Math.round(a.g + (b.g - a.g) * amt),
+      b: Math.round(a.b + (b.b - a.b) * amt)
+    };
   }
+  function toHex(c) { return "#" + ((1 << 24) + (c.r << 16) + (c.g << 8) + c.b).toString(16).slice(1); }
+  function lighten(h, amt) { return toHex(mix(hexToRgb(h), { r: 255, g: 255, b: 255 }, amt)); }
+  function darken(h, amt) { return toHex(mix(hexToRgb(h), { r: 4, g: 12, b: 34 }, amt)); }
 
-  // ── WebGL capability probe ─────────────────────────────────────────────────
   function webglOK() {
     try {
       var c = document.createElement("canvas");
@@ -61,7 +64,6 @@
     } catch (e) { return false; }
   }
 
-  // ── lazy Three.js loader ───────────────────────────────────────────────────
   function loadThree() {
     if (window.THREE) return Promise.resolve(true);
     if (_loading) return _loading;
@@ -75,51 +77,129 @@
     return _loading;
   }
 
-  // ── SVG fallback (used when WebGL/Three is unavailable) ─────────────────────
+  // ── SVG fallback ────────────────────────────────────────────────────────────
   function svgFallback(el, kind, color) {
-    var lite = lighten(color, 0.45), pale = lighten(color, 0.7);
+    var lite = lighten(color, 0.5), pale = lighten(color, 0.78), deep = darken(color, 0.55);
     var gid = "dqc-" + Math.random().toString(36).slice(2, 8);
     var inner;
     if (kind === "crown") {
       inner =
         '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">' +
-        '<stop offset="0" stop-color="' + pale + '"/><stop offset="1" stop-color="' + color + '"/></linearGradient></defs>' +
-        '<g filter="drop-shadow(0 6px 16px ' + color + '88)">' +
-        '<path d="M14 70 L14 44 L28 56 L44 30 L60 56 L74 44 L74 70 Z" fill="url(#' + gid + ')" stroke="' + lite + '" stroke-width="1.4" stroke-linejoin="round"/>' +
-        '<path d="M44 30 L44 70 M28 56 L28 70 M60 56 L60 70" stroke="rgba(255,255,255,.45)" stroke-width="1"/>' +
-        '<rect x="12" y="70" width="64" height="9" rx="2.5" fill="' + color + '" stroke="' + lite + '" stroke-width="1.2"/>' +
-        '<circle cx="44" cy="24" r="3.4" fill="' + pale + '"/></g>';
+        '<stop offset="0" stop-color="' + pale + '"/><stop offset=".5" stop-color="' + color + '"/><stop offset="1" stop-color="' + deep + '"/></linearGradient></defs>' +
+        '<g filter="drop-shadow(0 4px 20px ' + color + 'aa)">' +
+        '<path d="M10 66 L10 40 L22 54 L32 26 L44 48 L56 26 L66 54 L78 40 L78 66 Z" fill="url(#' + gid + ')" stroke="' + lite + '" stroke-width="1.5" stroke-linejoin="round"/>' +
+        '<path d="M32 26 L32 66 M56 26 L56 66 M22 54 L22 66 M66 54 L66 66 M44 48 L44 66" stroke="rgba(255,255,255,.55)" stroke-width="1"/>' +
+        '<rect x="9" y="66" width="70" height="10" rx="3" fill="' + deep + '" stroke="' + lite + '" stroke-width="1.3"/>' +
+        '<rect x="9" y="65" width="70" height="3" rx="1.5" fill="' + pale + '"/></g>';
     } else {
       inner =
         '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="1" y2="1">' +
-        '<stop offset="0" stop-color="' + pale + '"/><stop offset=".55" stop-color="' + color + '"/><stop offset="1" stop-color="' + lite + '"/></linearGradient></defs>' +
-        '<g filter="drop-shadow(0 6px 18px ' + color + '99)">' +
-        '<polygon points="44,6 60,30 52,74 36,74 28,30" fill="url(#' + gid + ')" stroke="' + lite + '" stroke-width="1.4" stroke-linejoin="round"/>' +
-        '<polygon points="44,6 52,74 44,40" fill="rgba(255,255,255,.20)"/>' +
-        '<polygon points="44,6 36,74 44,40" fill="rgba(0,0,0,.12)"/>' +
-        '<polyline points="28,30 44,40 60,30" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="1"/></g>';
+        '<stop offset="0" stop-color="' + pale + '"/><stop offset=".5" stop-color="' + color + '"/><stop offset="1" stop-color="' + deep + '"/></linearGradient></defs>' +
+        '<g filter="drop-shadow(0 4px 22px ' + color + 'bb)">' +
+        '<polygon points="44,5 60,30 52,76 36,76 28,30" fill="url(#' + gid + ')" stroke="' + lite + '" stroke-width="1.5" stroke-linejoin="round"/>' +
+        '<polygon points="44,5 52,76 44,40" fill="rgba(255,255,255,.26)"/>' +
+        '<polygon points="44,5 36,76 44,40" fill="rgba(0,10,30,.22)"/>' +
+        '<polyline points="28,30 44,40 60,30" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1.1"/></g>';
     }
     el.innerHTML = '<svg viewBox="0 0 88 88" width="100%" height="100%" style="display:block;overflow:visible">' + inner + "</svg>";
   }
 
-  // ── geometry builders ──────────────────────────────────────────────────────
-  // A tall, double-terminated crystal shard (classic "gem" silhouette).
+  // ── procedural environment map (gives glassy facet reflections, no asset) ───
+  function makeEnvTexture(THREE, color) {
+    var size = 128;
+    var cv = document.createElement("canvas"); cv.width = size; cv.height = size;
+    var ctx = cv.getContext("2d");
+    // vertical sky: white-hot top, ice-blue middle, deep navy bottom
+    var g = ctx.createLinearGradient(0, 0, 0, size);
+    g.addColorStop(0, "#ffffff");
+    g.addColorStop(0.35, lighten(color, 0.45));
+    g.addColorStop(0.62, color);
+    g.addColorStop(1, "#040a1e");
+    ctx.fillStyle = g; ctx.fillRect(0, 0, size, size);
+    // a couple of bright specular blobs to catch on the facets
+    function blob(x, y, r, a) {
+      var rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+      rg.addColorStop(0, "rgba(255,255,255," + a + ")");
+      rg.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    blob(size * 0.30, size * 0.26, size * 0.26, 0.95);
+    blob(size * 0.74, size * 0.42, size * 0.18, 0.7);
+    blob(size * 0.52, size * 0.70, size * 0.22, 0.4);
+    var tex = new THREE.Texture(cv);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.needsUpdate = true;
+    return tex;
+  }
+
+  // ── vertex-coloured glass material (blue→cyan→white depth across the body) ──
+  function makeCrystalMaterial(THREE, color, env) {
+    var mat = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color("#ffffff"),     // let vertex colours drive the hue
+      vertexColors: true,
+      metalness: 0.0,
+      roughness: 0.08,
+      transmission: 0.5,
+      transparent: true,
+      opacity: 0.96,
+      reflectivity: 0.92,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.06,
+      envMap: env || null,
+      envMapIntensity: 1.5,
+      emissive: new THREE.Color(color),
+      emissiveIntensity: 0.34,
+      flatShading: true,
+      side: THREE.DoubleSide
+    });
+    return mat;
+  }
+
+  // Paint a geometry's vertices with a vertical gradient: deep at the base,
+  // saturated mid, white-hot near the tips — this is what gives "colour depth".
+  function paintVerticalGradient(THREE, geo, color) {
+    var pos = geo.attributes.position;
+    var n = pos.count;
+    var ys = [];
+    var minY = Infinity, maxY = -Infinity;
+    for (var i = 0; i < n; i++) { var y = pos.getY(i); ys.push(y); if (y < minY) minY = y; if (y > maxY) maxY = y; }
+    var span = (maxY - minY) || 1;
+    var deep = hexToRgb(darken(color, 0.5));
+    var mid = hexToRgb(color);
+    var hot = hexToRgb(lighten(color, 0.7));
+    var cols = new Float32Array(n * 3);
+    for (var j = 0; j < n; j++) {
+      var f = (ys[j] - minY) / span;           // 0 base → 1 tip
+      var c;
+      if (f < 0.5) c = mix(deep, mid, f / 0.5);
+      else c = mix(mid, hot, (f - 0.5) / 0.5);
+      cols[j * 3] = c.r / 255; cols[j * 3 + 1] = c.g / 255; cols[j * 3 + 2] = c.b / 255;
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+  }
+
+  // Bright white edge lines overlaid on a geometry (the "white-hot" facet seams)
+  function edgeLines(THREE, geo, opacity) {
+    var eg = new THREE.EdgesGeometry(geo, 18);
+    var lm = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: opacity == null ? 0.55 : opacity });
+    return new THREE.LineSegments(eg, lm);
+  }
+
+  // ── geometry: a tall, double-terminated crystal shard ───────────────────────
   function buildShardGeo(THREE) {
-    var R = 1.0, top = 2.05, bot = -2.05, mid = 0.42, sides = 6;
+    var R = 1.0, top = 2.1, bot = -2.1, mid = 0.4, sides = 6;
     var verts = [], idx = [];
-    // ring of `sides` vertices around the middle
     for (var i = 0; i < sides; i++) {
       var a = (i / sides) * Math.PI * 2;
       verts.push(Math.cos(a) * R, mid, Math.sin(a) * R);
     }
-    // apex (top) and nadir (bottom)
-    verts.push(0, top, 0);             // index sides
-    verts.push(0, bot, 0);             // index sides+1
+    verts.push(0, top, 0);
+    verts.push(0, bot, 0);
     var apex = sides, nadir = sides + 1;
     for (var j = 0; j < sides; j++) {
-      var n = (j + 1) % sides;
-      idx.push(j, n, apex);            // top faces
-      idx.push(n, j, nadir);           // bottom faces
+      var nx = (j + 1) % sides;
+      idx.push(j, nx, apex);
+      idx.push(nx, j, nadir);
     }
     var g = new THREE.BufferGeometry();
     g.setIndex(idx);
@@ -129,38 +209,81 @@
     return g;
   }
 
-  // A crown: a ring base + several upward crystal spikes.
-  function buildCrownGroup(THREE, mat) {
+  // A single flat, blade-like crown spike (a thin 4-sided pyramid prism).
+  // Built tip-up, base at y=0; w = half-width, d = half-depth, h = height.
+  function buildBladeGeo(THREE, w, d, h) {
+    var verts = [
+      -w, 0, -d,  w, 0, -d,  w, 0, d,  -w, 0, d, // base ring 0..3
+      0, h, 0                                     // tip 4
+    ];
+    var idx = [
+      0, 1, 4,  1, 2, 4,  2, 3, 4,  3, 0, 4,      // 4 side faces
+      0, 3, 2,  0, 2, 1                            // base (closes it)
+    ];
+    var g = new THREE.BufferGeometry();
+    g.setIndex(idx);
+    g.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+    g.computeVertexNormals();
+    return g;
+  }
+
+  // The crown: faceted translucent base block + glowing rim + fanned blades.
+  // Returns { group, extras:[geometries to dispose], edges:[lineSegments] }.
+  function buildCrown(THREE, color, env) {
     var group = new THREE.Group();
+    var extras = [], edges = [];
+    var glassMat = makeCrystalMaterial(THREE, color, env);
 
-    // base ring (slightly tapered cylinder)
-    var baseGeo = new THREE.CylinderGeometry(1.18, 1.32, 0.5, 12, 1);
-    var base = new THREE.Mesh(baseGeo, mat);
-    base.position.y = -1.15;
-    group.add(base);
+    // ── faceted base block (an octagonal prism — reads as the crystal cube) ──
+    var baseGeo = new THREE.CylinderGeometry(1.5, 1.62, 0.62, 8, 1);
+    paintVerticalGradient(THREE, baseGeo, color);
+    var base = new THREE.Mesh(baseGeo, glassMat);
+    base.position.y = -1.5;
+    group.add(base); extras.push(baseGeo);
+    var baseEdge = edgeLines(THREE, baseGeo, 0.4); baseEdge.position.copy(base.position); group.add(baseEdge); edges.push(baseEdge);
 
-    // a thin bright band on top of the base
-    var bandGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.12, 12, 1);
-    var band = new THREE.Mesh(bandGeo, mat);
-    band.position.y = -0.86;
-    group.add(band);
+    // dark inner pedestal that the spikes rise from (the near-black ring)
+    var pedGeo = new THREE.CylinderGeometry(1.18, 1.28, 0.5, 8, 1);
+    var pedMat = new THREE.MeshStandardMaterial({ color: new THREE.Color("#0a1124"), metalness: 0.5, roughness: 0.35, flatShading: true });
+    var ped = new THREE.Mesh(pedGeo, pedMat);
+    ped.position.y = -0.92;
+    group.add(ped); extras.push(pedGeo);
 
-    // spikes — a tall centre one flanked by shorter ones
-    var spikeGeo = new THREE.ConeGeometry(0.34, 1.7, 4, 1);
-    var heights = [0.0, 0.0, 0.0, 0.0, 0.0];
-    var angles = [-0.92, -0.46, 0, 0.46, 0.92];
-    var scales = [0.72, 0.9, 1.18, 0.9, 0.72];
-    for (var i = 0; i < angles.length; i++) {
-      var s = new THREE.Mesh(spikeGeo, mat);
-      var radius = 0.92;
-      s.position.x = Math.sin(angles[i]) * radius;
-      s.position.z = Math.cos(angles[i]) * 0.18;
-      s.scale.set(1, scales[i], 1);
-      s.position.y = -0.7 + (1.7 * scales[i]) / 2;
-      s.rotation.y = angles[i];
-      group.add(s);
+    // bright glowing rim band on top of the pedestal
+    var rimGeo = new THREE.CylinderGeometry(1.24, 1.24, 0.12, 8, 1);
+    var rimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(lighten(color, 0.55)), transparent: true, opacity: 0.95 });
+    var rim = new THREE.Mesh(rimGeo, rimMat);
+    rim.position.y = -0.66;
+    group.add(rim); extras.push(rimGeo);
+
+    // ── fanned blade spikes (symmetric tiara) ─────────────────────────────────
+    // angle around the ring, blade height, blade half-width
+    var blades = [
+      { a: -0.95, h: 1.45, w: 0.20 },
+      { a: -0.48, h: 1.95, w: 0.22 },
+      { a: 0.00, h: 2.45, w: 0.25 },
+      { a: 0.48, h: 1.95, w: 0.22 },
+      { a: 0.95, h: 1.45, w: 0.20 }
+    ];
+    var ringR = 1.02;
+    for (var i = 0; i < blades.length; i++) {
+      var b = blades[i];
+      var bg = buildBladeGeo(THREE, b.w, 0.16, b.h);
+      paintVerticalGradient(THREE, bg, color);
+      var m = new THREE.Mesh(bg, glassMat);
+      m.position.x = Math.sin(b.a) * ringR;
+      m.position.z = Math.cos(b.a) * 0.12;
+      m.position.y = -0.6;
+      m.rotation.y = b.a;
+      group.add(m); extras.push(bg);
+      var e = edgeLines(THREE, bg, 0.6);
+      e.position.copy(m.position); e.rotation.copy(m.rotation); group.add(e); edges.push(e);
     }
-    return group;
+
+    group._glassMat = glassMat;
+    group._pedMat = pedMat;
+    group._rimMat = rimMat;
+    return { group: group, extras: extras, edges: edges };
   }
 
   // ── one live crystal instance ──────────────────────────────────────────────
@@ -169,13 +292,14 @@
     var kind = opts.kind || "shard";
     var color = opts.color || "#7cc7ff";
     var spin = opts.spin !== false;
+    var wantGlow = opts.glow !== false;
 
     var W = el.clientWidth || 120;
     var H = opts.height || el.clientHeight || 150;
 
     var scene = new THREE.Scene();
-    var camera = new THREE.PerspectiveCamera(38, W / H, 0.1, 100);
-    camera.position.set(0, 0, 6.4);
+    var camera = new THREE.PerspectiveCamera(36, W / H, 0.1, 100);
+    camera.position.set(0, 0.2, 6.6);
 
     var renderer;
     try {
@@ -187,80 +311,87 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(W, H);
     renderer.setClearColor(0x000000, 0);
+    if (renderer.outputEncoding !== undefined && THREE.sRGBEncoding) renderer.outputEncoding = THREE.sRGBEncoding;
     el.innerHTML = "";
     el.appendChild(renderer.domElement);
     renderer.domElement.style.display = "block";
 
-    // material — glassy, faceted, glowing crystal
-    var base = hexToRgb(color);
-    var mat = new THREE.MeshPhysicalMaterial({
-      color: new THREE.Color(color),
-      metalness: 0.0,
-      roughness: 0.16,
-      transmission: 0.55,          // glassiness (r128 supports basic transmission)
-      transparent: true,
-      opacity: 0.92,
-      reflectivity: 0.7,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.18,
-      emissive: new THREE.Color(color),
-      emissiveIntensity: 0.22,
-      flatShading: true,           // crisp facets
-      side: THREE.DoubleSide
-    });
+    var env = makeEnvTexture(THREE, color);
 
-    var obj, geo;
+    var disposables = [];   // geometries / textures / materials to free
+    disposables.push(env);
+
+    var obj, edgesList = [], singleEdge = null, glassMat = null;
+
     if (kind === "crown") {
-      obj = buildCrownGroup(THREE, mat);
-      obj.scale.set(1.02, 1.02, 1.02);
+      var built = buildCrown(THREE, color, env);
+      obj = built.group;
+      obj.scale.set(0.92, 0.92, 0.92);
+      obj.position.y = 0.25;
+      edgesList = built.edges;
+      glassMat = obj._glassMat;
+      built.extras.forEach(function (g) { disposables.push(g); });
+      disposables.push(obj._glassMat, obj._pedMat, obj._rimMat);
     } else {
-      geo = buildShardGeo(THREE);
-      obj = new THREE.Mesh(geo, mat);
-      obj.rotation.z = 0.06;
+      var geo = buildShardGeo(THREE);
+      paintVerticalGradient(THREE, geo, color);
+      glassMat = makeCrystalMaterial(THREE, color, env);
+      obj = new THREE.Mesh(geo, glassMat);
+      obj.rotation.z = 0.05;
+      singleEdge = edgeLines(THREE, geo, 0.6);
+      obj.add(singleEdge);
+      disposables.push(geo, glassMat);
     }
     scene.add(obj);
 
-    // a faint inner wireframe twin to accentuate the facets
-    var wire = null;
-    if (kind !== "crown") {
-      var wmat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color(lighten(color, 0.6)),
-        wireframe: true, transparent: true, opacity: 0.16
-      });
-      wire = new THREE.Mesh(geo, wmat);
-      wire.scale.set(1.005, 1.005, 1.005);
-      scene.add(wire);
+    // ground-glow pool beneath the model (soft radial sprite) ------------------
+    var glow = null;
+    if (wantGlow) {
+      var gs = 256;
+      var gcv = document.createElement("canvas"); gcv.width = gs; gcv.height = gs;
+      var gx = gcv.getContext("2d");
+      var rg = gx.createRadialGradient(gs / 2, gs / 2, 0, gs / 2, gs / 2, gs / 2);
+      var cr = hexToRgb(lighten(color, 0.2));
+      rg.addColorStop(0, "rgba(" + cr.r + "," + cr.g + "," + cr.b + ",0.85)");
+      rg.addColorStop(0.4, "rgba(" + cr.r + "," + cr.g + "," + cr.b + ",0.35)");
+      rg.addColorStop(1, "rgba(" + cr.r + "," + cr.g + "," + cr.b + ",0)");
+      gx.fillStyle = rg; gx.fillRect(0, 0, gs, gs);
+      var gtex = new THREE.Texture(gcv); gtex.needsUpdate = true;
+      var gmat = new THREE.SpriteMaterial({ map: gtex, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending });
+      glow = new THREE.Sprite(gmat);
+      glow.scale.set(5.2, 2.6, 1);
+      glow.position.set(0, kind === "crown" ? -2.0 : -2.3, -0.2);
+      scene.add(glow);
+      disposables.push(gtex, gmat);
     }
 
-    // lighting rig — cool key, warm-white rim, soft fill, glow point inside
-    scene.add(new THREE.AmbientLight(0x4466aa, 0.6));
-    var key = new THREE.DirectionalLight(0xffffff, 1.15);
-    key.position.set(3, 4, 5); scene.add(key);
-    var rim = new THREE.DirectionalLight(new THREE.Color(lighten(color, 0.3)), 0.9);
-    rim.position.set(-4, 1, -3); scene.add(rim);
-    var core = new THREE.PointLight(new THREE.Color(color), 1.1, 12);
-    core.position.set(0, 0, 0); scene.add(core);
+    // lighting — bright key, cool rim, fill, and an emissive core point --------
+    scene.add(new THREE.AmbientLight(0x6688cc, 0.7));
+    var key = new THREE.DirectionalLight(0xffffff, 1.5);
+    key.position.set(3, 5, 5); scene.add(key);
+    var rim2 = new THREE.DirectionalLight(new THREE.Color(lighten(color, 0.2)), 1.1);
+    rim2.position.set(-5, 2, -2); scene.add(rim2);
+    var fill = new THREE.DirectionalLight(new THREE.Color(color), 0.6);
+    fill.position.set(0, -3, 4); scene.add(fill);
+    var core = new THREE.PointLight(new THREE.Color(lighten(color, 0.3)), 1.4, 14);
+    core.position.set(0, 0.2, 0.5); scene.add(core);
 
-    // animation + visibility gating
+    // animation + visibility gating -------------------------------------------
     var raf = 0, visible = true, alive = true, tPrev = performance.now();
     function frame(now) {
       if (!alive) return;
       raf = requestAnimationFrame(frame);
       if (!visible) return;
       var dt = Math.min(0.05, (now - tPrev) / 1000); tPrev = now;
-      if (spin) {
-        obj.rotation.y += dt * 0.6;
-        if (wire) wire.rotation.y = obj.rotation.y;
-      }
-      // gentle bob + light shimmer
-      var s = Math.sin(now / 900);
-      obj.position.y = s * 0.05;
-      core.intensity = 0.9 + (s + 1) * 0.28;
+      if (spin) obj.rotation.y += dt * 0.55;
+      var s = Math.sin(now / 950);
+      obj.position.y = (kind === "crown" ? 0.25 : 0) + s * 0.05;
+      core.intensity = 1.15 + (s + 1) * 0.35;
+      if (glow) glow.material.opacity = 0.75 + (s + 1) * 0.1;
       renderer.render(scene, camera);
     }
     raf = requestAnimationFrame(frame);
 
-    // pause when scrolled out of view
     var io = null;
     if ("IntersectionObserver" in window) {
       io = new IntersectionObserver(function (es) {
@@ -269,11 +400,9 @@
       }, { threshold: 0.05 });
       io.observe(el);
     }
-    // pause when the tab is hidden
     function onVis() { if (document.hidden) visible = false; else { visible = true; tPrev = performance.now(); } }
     document.addEventListener("visibilitychange", onVis);
 
-    // keep crisp on container resize
     function onResize() {
       var w = el.clientWidth || W, h = opts.height || el.clientHeight || H;
       camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -290,11 +419,13 @@
       if (ro) ro.disconnect();
       document.removeEventListener("visibilitychange", onVis);
       try { scene.remove(obj); } catch (e) { }
+      // dispose every edge line
       try {
-        if (geo) geo.dispose();
-        mat.dispose();
-        if (wire) wire.material.dispose();
+        edgesList.forEach(function (e) { if (e.geometry) e.geometry.dispose(); if (e.material) e.material.dispose(); });
+        if (singleEdge) { if (singleEdge.geometry) singleEdge.geometry.dispose(); if (singleEdge.material) singleEdge.material.dispose(); }
       } catch (e) { }
+      // dispose tracked geometries / materials / textures
+      try { disposables.forEach(function (d) { if (d && d.dispose) d.dispose(); }); } catch (e) { }
       try {
         renderer.forceContextLoss();
         renderer.dispose();
@@ -306,22 +437,20 @@
     return { destroy: destroy };
   }
 
-  // ── public mount ───────────────────────────────────────────────────────────
+  // ── public mount ────────────────────────────────────────────────────────────
   function mount(el, opts) {
     opts = opts || {};
     if (!el) return { destroy: function () { } };
 
-    // show a quiet placeholder gem immediately; upgrade to 3D once ready
     svgFallback(el, opts.kind || "shard", opts.color || "#7cc7ff");
 
     var handle = { destroy: function () { handle._d && handle._d(); } };
     _instances.push(handle);
 
-    if (!webglOK()) return handle;   // keep the SVG fallback
+    if (!webglOK()) return handle;
 
     loadThree().then(function (ok) {
-      if (!ok || !window.THREE) return;     // keep the SVG fallback
-      // if the element was removed while loading, abort
+      if (!ok || !window.THREE) return;
       if (!document.body.contains(el)) return;
       try {
         var inst = makeInstance(el, opts);
