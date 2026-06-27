@@ -1,22 +1,26 @@
 /* ============================================================================
- * profile-ui.js — DrFX Quant Profile (high-fidelity 3D, LIVE DATA)
+ * profile-ui.js — DrFX Quant Profile (high-fidelity faux-3D, LIVE DATA)
  * ----------------------------------------------------------------------------
  * Self-contained SPA module. Loads as a plain <script> AFTER index.html's main
- * script (and after leagues-ui.js / idcard.js). It REPLACES window.openProfile
- * with the approved 3D profile and wires every field to its real source:
+ * script (and after leagues-ui.js / idcard.js / crystal3d.js). It REPLACES
+ * window.openProfile with the approved 3D profile and wires every field to its
+ * real source:
  *
- *       • QNTM Balance  ← GET /api/qntm/wallets/me  (wallet.available_balance)
- *       • Name/@user/avatar/bio/email/role ← S.user.*
- *       • League / XP   ← GET /api/leagues/me
- *       • Account stats ← GET /api/easytrade/leaderboard?sort=xp  (.me)
- *       • UID / since   ← deterministic from S.user (mirrors idcard.js)
- *       • Save          → PUT /api/auth/profile  (button keeps id "pp-save")
- *       • Avatar upload → POST /api/upload
+ *   • QNTM Balance   ← GET /api/qntm/wallets/me               (wallet.available_balance)
+ *   • Market XP      ← GET /api/market/me/stats               (.xp = 1000 + 100·like + 100·post)
+ *   • Easy Trade XP  ← GET /api/easytrade/leaderboard?sort=xp (.me.xp = w·20 + l·5 + ⌊staked/100⌋)
+ *   • TOTAL XP       = Market XP + Easy Trade XP              (shown with breakdown + milestone bar)
+ *   • League name    ← GET /api/leagues/me                    (.currentLeagueName | "Unranked")
+ *   • Account stats  ← GET /api/easytrade/leaderboard?sort=xp (.me settled / wins / winRate)
+ *   • Name/@user/avatar/bio/email/role ← S.user.*
+ *   • UID / since    ← deterministic from S.user (mirrors idcard.js)
+ *   • Save           → PUT  /api/auth/profile                 (button keeps id "pp-save")
+ *   • Avatar upload  → POST /api/upload
  *
- * The Premium-Tier crown is REAL 3D (WebGL) via window.dq3DCrystal
- * (crystal3d.js), with a graceful SVG fallback. The page header text + the
- * QNTM card render immediately from S.user; the three async cards (balance,
- * league/XP, activity) fill in from their endpoints via wireLiveData().
+ * The Premium-Tier crown and the League crystal are rendered as resolution-
+ * independent faux-3D VECTOR ART (rich gradients, multi-facet geometry,
+ * specular highlights, ambient glow, animated sparkles). Being pure SVG+CSS
+ * they stay razor-sharp at any DPI/zoom with zero WebGL weight.
  *
  * Structural hooks kept so the rest of the app keeps working:
  *   • Save button keeps id "pp-save"  (idcard.js / leagues-ui.js inject before it)
@@ -31,6 +35,11 @@
 
   // ── data source: live endpoints (set to false for the hard-coded preview) ───
   var USE_LIVE_DATA = true;
+
+  // XP milestone step: the League card's progress bar fills toward the next
+  // multiple of this (Market + Easy Trade are uncapped together, so a rolling
+  // milestone is always meaningful). Tunable in one place.
+  var XP_MILESTONE_STEP = 2500;
 
   // ── spec sample values (used while USE_LIVE_DATA === false) ─────────────────
   var SAMPLE = {
@@ -47,8 +56,8 @@
     memberRole: "Administrator",
     since: "May 24, 2025",
     league: "Unranked",
-    xpCur: 0,
-    xpMax: 1000,
+    marketXp: 1000,
+    eztXp: 0,
     matches: 12,
     wins: 7,
     winRate: 58
@@ -82,6 +91,16 @@
     return dt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
   }
 
+  // XP milestone helper → { total, floorXp, nextXp, pct }
+  function xpTier(total) {
+    total = Math.max(0, num(total));
+    var step = XP_MILESTONE_STEP;
+    var idx = Math.floor(total / step);
+    var floorXp = idx * step, nextXp = floorXp + step;
+    var pct = step ? ((total - floorXp) / step) * 100 : 0;
+    return { total: total, floorXp: floorXp, nextXp: nextXp, pct: Math.max(0, Math.min(100, pct)) };
+  }
+
   // Build the initial values object. With live data we seed from S.user (sync)
   // and let wireLiveData() fill the async cards; otherwise we use SAMPLE.
   function buildValues() {
@@ -104,65 +123,219 @@
       memberRole: role === "admin" ? "Administrator" : roleName,
       since: memberSince(u) || "\u2014",
       league: "\u2026",                                // filled by wireLiveData
-      xpCur: 0,
-      xpMax: 1000,
+      marketXp: 0,                                     // filled by wireLiveData
+      eztXp: 0,                                        // filled by wireLiveData
       matches: "\u2026",                               // filled by wireLiveData
       wins: "\u2026",
       winRate: "\u2026"
     };
   }
 
-  // ── flat SVG: ice-blue faceted CROWN (no 3D) ────────────────────────────────
-  function crownSVG(w) {
-    w = w || 150;
-    var id = "cr" + Math.random().toString(36).slice(2, 7);
-    return '' +
-      '<svg width="' + w + '" height="' + Math.round(w * 0.92) + '" viewBox="0 0 150 138" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 6px 26px rgba(70,150,255,.55))">' +
-        '<defs>' +
-          '<linearGradient id="' + id + 'a" x1="75" y1="6" x2="75" y2="118" gradientUnits="userSpaceOnUse"><stop stop-color="#eaf6ff"/><stop offset=".45" stop-color="#7cc7ff"/><stop offset="1" stop-color="#1c4f8f"/></linearGradient>' +
-          '<linearGradient id="' + id + 'b" x1="75" y1="86" x2="75" y2="128" gradientUnits="userSpaceOnUse"><stop stop-color="#2f6bd6"/><stop offset="1" stop-color="#0a1a3a"/></linearGradient>' +
-          '<radialGradient id="' + id + 'g" cx="75" cy="84" r="70" gradientUnits="userSpaceOnUse"><stop stop-color="rgba(80,170,255,.55)"/><stop offset="1" stop-color="rgba(80,170,255,0)"/></radialGradient>' +
-        '</defs>' +
-        '<ellipse cx="75" cy="104" rx="68" ry="20" fill="url(#' + id + 'g)"/>' +
-        // base block
-        '<path d="M30 92 L75 80 L120 92 L120 104 L75 116 L30 104 Z" fill="url(#' + id + 'b)" stroke="#9fdcff" stroke-width="1.2" stroke-linejoin="round" opacity=".95"/>' +
-        '<path d="M30 92 L75 104 L120 92 M75 104 L75 116" stroke="rgba(255,255,255,.5)" stroke-width="1"/>' +
-        // pedestal ring
-        '<path d="M40 84 L75 75 L110 84 L110 92 L75 100 L40 92 Z" fill="#0c1830" stroke="#7fc4ff" stroke-width="1.1" stroke-linejoin="round"/>' +
-        '<path d="M40 84 L75 92 L110 84" stroke="' + 'rgba(150,220,255,.85)' + '" stroke-width="1.4"/>' +
-        // five fanned blades
-        '<path d="M40 86 L46 46 L54 86 Z" fill="url(#' + id + 'a)" stroke="#dff1ff" stroke-width="1.1" stroke-linejoin="round"/>' +
-        '<path d="M56 86 L64 28 L72 86 Z" fill="url(#' + id + 'a)" stroke="#dff1ff" stroke-width="1.1" stroke-linejoin="round"/>' +
-        '<path d="M67 88 L75 14 L83 88 Z" fill="url(#' + id + 'a)" stroke="#dff1ff" stroke-width="1.2" stroke-linejoin="round"/>' +
-        '<path d="M78 86 L86 28 L94 86 Z" fill="url(#' + id + 'a)" stroke="#dff1ff" stroke-width="1.1" stroke-linejoin="round"/>' +
-        '<path d="M96 86 L104 46 L110 86 Z" fill="url(#' + id + 'a)" stroke="#dff1ff" stroke-width="1.1" stroke-linejoin="round"/>' +
-        // centre facet highlights
-        '<path d="M64 28 L64 86 M86 28 L86 86 M75 14 L75 88" stroke="rgba(255,255,255,.45)" stroke-width="1"/>' +
-      '</svg>';
+  // ════════════════════════════════════════════════════════════════════════════
+  // HIGH-DETAIL FAUX-3D VECTOR ART  (crown + crystal)
+  // Pure SVG + CSS. Resolution-independent: crisp at any DPI / zoom level.
+  // ════════════════════════════════════════════════════════════════════════════
+
+  // reusable 4-point specular star
+  function sparkle(cx, cy, r, op, delay) {
+    return '<path class="dqca-spark" style="animation-delay:' + (delay || 0) + 'ms" d="M' + cx + ' ' + (cy - r) +
+      ' Q' + (cx + r * 0.16) + ' ' + (cy - r * 0.16) + ' ' + (cx + r) + ' ' + cy +
+      ' Q' + (cx + r * 0.16) + ' ' + (cy + r * 0.16) + ' ' + cx + ' ' + (cy + r) +
+      ' Q' + (cx - r * 0.16) + ' ' + (cy + r * 0.16) + ' ' + (cx - r) + ' ' + cy +
+      ' Q' + (cx - r * 0.16) + ' ' + (cy - r * 0.16) + ' ' + cx + ' ' + (cy - r) + ' Z" ' +
+      'fill="#fff" opacity="' + (op == null ? 0.95 : op) + '"/>';
   }
 
-  // ── flat SVG: ice-blue faceted CRYSTAL shard (no 3D) ────────────────────────
-  function crystalSVG(w) {
-    w = w || 96;
+  // ── REAL CROWN: jeweled crystalline circlet, 5 faceted spires, gem hearts ───
+  function crownArt(w) {
+    w = w || 168;
+    var h = Math.round(w * (262 / 320));
+    var id = "cw" + Math.random().toString(36).slice(2, 7);
+    return '' +
+      '<div class="dqca-crown" style="width:' + w + 'px;height:' + h + 'px">' +
+      '<svg viewBox="0 0 320 262" width="' + w + '" height="' + h + '" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">' +
+        '<defs>' +
+          // crystalline ice metal (vertical body)
+          '<linearGradient id="' + id + 'ice" x1="160" y1="20" x2="160" y2="210" gradientUnits="userSpaceOnUse"><stop stop-color="#f4fbff"/><stop offset=".28" stop-color="#cfeaff"/><stop offset=".62" stop-color="#74b6ef"/><stop offset="1" stop-color="#1f4f8c"/></linearGradient>' +
+          '<linearGradient id="' + id + 'iceD" x1="160" y1="40" x2="160" y2="210" gradientUnits="userSpaceOnUse"><stop stop-color="#5d9bdb"/><stop offset="1" stop-color="#16335f"/></linearGradient>' +
+          '<linearGradient id="' + id + 'iceB" x1="160" y1="20" x2="160" y2="150" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#d8f1ff"/></linearGradient>' +
+          // band
+          '<linearGradient id="' + id + 'band" x1="160" y1="168" x2="160" y2="212" gradientUnits="userSpaceOnUse"><stop stop-color="#bfe3ff"/><stop offset=".5" stop-color="#5aa6ec"/><stop offset="1" stop-color="#14376b"/></linearGradient>' +
+          '<linearGradient id="' + id + 'bandT" x1="160" y1="160" x2="160" y2="178" gradientUnits="userSpaceOnUse"><stop stop-color="#f2fbff"/><stop offset="1" stop-color="#9fd0ff"/></linearGradient>' +
+          // gems
+          '<radialGradient id="' + id + 'gemG" cx="160" cy="186" r="26" gradientUnits="userSpaceOnUse"><stop stop-color="#eafff6"/><stop offset=".4" stop-color="#16e29a"/><stop offset="1" stop-color="#0a6f4d"/></radialGradient>' +
+          '<radialGradient id="' + id + 'gemB" cx=".4" cy=".34" r=".75"><stop stop-color="#f1f9ff"/><stop offset=".45" stop-color="#7cc7ff"/><stop offset="1" stop-color="#1c4f8f"/></radialGradient>' +
+          '<radialGradient id="' + id + 'pearl" cx=".36" cy=".3" r=".78"><stop stop-color="#ffffff"/><stop offset=".5" stop-color="#dcefff"/><stop offset="1" stop-color="#6ea8e0"/></radialGradient>' +
+          // ambient halo + ground
+          '<radialGradient id="' + id + 'halo" cx="160" cy="135" r="150" gradientUnits="userSpaceOnUse"><stop stop-color="rgba(90,175,255,.42)"/><stop offset="1" stop-color="rgba(90,175,255,0)"/></radialGradient>' +
+          '<radialGradient id="' + id + 'grd" cx="160" cy="232" r="120" gradientUnits="userSpaceOnUse"><stop stop-color="rgba(70,150,255,.55)"/><stop offset="1" stop-color="rgba(70,150,255,0)"/></radialGradient>' +
+          '<filter id="' + id + 'blur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="6"/></filter>' +
+        '</defs>' +
+
+        // ambient glow + cast shadow
+        '<rect x="0" y="0" width="320" height="262" fill="url(#' + id + 'halo)"/>' +
+        '<ellipse cx="160" cy="234" rx="104" ry="20" fill="url(#' + id + 'grd)"/>' +
+
+        '<g class="dqca-float">' +
+
+          // ── 5 faceted spires (drawn back-to-front: outer, mid, centre) ──────
+          // each spire = lit facet (bright) + shade facet (dark) + ridge highlight + tip orb
+          // outer-left
+          '<path d="M64 176 L80 104 L96 176 Z" fill="url(#' + id + 'iceD)"/>' +
+          '<path d="M80 104 L96 176 L88 176 L80 116 Z" fill="url(#' + id + 'ice)"/>' +
+          '<path d="M80 104 L80 176 L72 176 L80 116 Z" fill="url(#' + id + 'iceB)" opacity=".9"/>' +
+          // outer-right
+          '<path d="M224 176 L240 104 L256 176 Z" fill="url(#' + id + 'iceD)"/>' +
+          '<path d="M240 104 L240 176 L232 176 L240 116 Z" fill="url(#' + id + 'ice)"/>' +
+          '<path d="M240 104 L248 176 L240 176 L240 116 Z" fill="url(#' + id + 'iceB)" opacity=".75"/>' +
+          // mid-left
+          '<path d="M104 178 L120 64 L136 178 Z" fill="url(#' + id + 'iceD)"/>' +
+          '<path d="M120 64 L136 178 L126 178 L120 80 Z" fill="url(#' + id + 'ice)"/>' +
+          '<path d="M120 64 L120 178 L110 178 L120 80 Z" fill="url(#' + id + 'iceB)" opacity=".92"/>' +
+          // mid-right
+          '<path d="M184 178 L200 64 L216 178 Z" fill="url(#' + id + 'iceD)"/>' +
+          '<path d="M200 64 L200 178 L190 178 L200 80 Z" fill="url(#' + id + 'ice)"/>' +
+          '<path d="M200 64 L210 178 L200 178 L200 80 Z" fill="url(#' + id + 'iceB)" opacity=".75"/>' +
+          // centre spire (tallest, trefoil crown)
+          '<path d="M138 182 L160 30 L182 182 Z" fill="url(#' + id + 'iceD)"/>' +
+          '<path d="M160 30 L182 182 L168 182 L160 52 Z" fill="url(#' + id + 'ice)"/>' +
+          '<path d="M160 30 L160 182 L152 182 L160 52 Z" fill="url(#' + id + 'iceB)"/>' +
+          // ridge highlights down each spire
+          '<path d="M80 110 L80 174 M120 70 L120 176 M160 38 L160 180 M200 70 L200 176 M240 110 L240 174" stroke="rgba(255,255,255,.7)" stroke-width="1.4" stroke-linecap="round"/>' +
+          // spire edge glints
+          '<path d="M160 30 L182 182 M120 64 L136 178 M200 64 L216 178" stroke="rgba(180,230,255,.5)" stroke-width="1"/>' +
+
+          // ── valleys between spires (small inner points) ─────────────────────
+          '<path d="M96 176 L100 150 L104 178 Z M136 178 L138 158 L138 182 Z M182 182 L182 158 L184 178 Z M216 178 L220 150 L224 176 Z" fill="url(#' + id + 'iceD)" opacity=".85"/>' +
+
+          // ── jeweled band (circlet) ──────────────────────────────────────────
+          '<path d="M58 168 Q160 150 262 168 L262 200 Q160 222 58 200 Z" fill="url(#' + id + 'band)" stroke="#bfe6ff" stroke-width="1.4" stroke-linejoin="round"/>' +
+          '<path d="M58 168 Q160 150 262 168 L262 176 Q160 158 58 176 Z" fill="url(#' + id + 'bandT)"/>' +
+          // beaded gold/ice studs along the band edges
+          '<g fill="#eaf7ff" opacity=".9">' +
+            '<circle cx="80" cy="206" r="2.4"/><circle cx="104" cy="210" r="2.4"/><circle cx="128" cy="212" r="2.4"/><circle cx="160" cy="213" r="2.6"/><circle cx="192" cy="212" r="2.4"/><circle cx="216" cy="210" r="2.4"/><circle cx="240" cy="206" r="2.4"/>' +
+          '</g>' +
+
+          // ── band gems: side sapphires + centre emerald (brand green) ────────
+          '<g>' +
+            '<circle cx="110" cy="190" r="11" fill="url(#' + id + 'gemB)" stroke="#dff1ff" stroke-width="1"/>' +
+            '<path d="M110 181 L116 190 L110 199 L104 190 Z" fill="rgba(255,255,255,.45)"/>' +
+            '<circle cx="210" cy="190" r="11" fill="url(#' + id + 'gemB)" stroke="#dff1ff" stroke-width="1"/>' +
+            '<path d="M210 181 L216 190 L210 199 L204 190 Z" fill="rgba(255,255,255,.45)"/>' +
+          '</g>' +
+          // centre emerald — emerald-cut, faceted
+          '<g>' +
+            '<rect x="143" y="172" width="34" height="30" rx="4" transform="rotate(0 160 187)" fill="url(#' + id + 'gemG)" stroke="#d6ffe9" stroke-width="1.4"/>' +
+            '<path d="M149 178 H171 L166 196 H154 Z" fill="rgba(255,255,255,.28)"/>' +
+            '<path d="M143 172 L149 178 M177 172 L171 178 M143 202 L149 196 M177 202 L171 196" stroke="rgba(255,255,255,.5)" stroke-width="1"/>' +
+            '<rect x="148" y="177" width="10" height="8" rx="2" fill="rgba(255,255,255,.35)"/>' +
+          '</g>' +
+
+          // ── tip orbs / pearls on each spire ─────────────────────────────────
+          '<circle cx="160" cy="30" r="8.5" fill="url(#' + id + 'pearl)" stroke="#eaf7ff" stroke-width="1"/>' +
+          '<circle cx="120" cy="64" r="6.5" fill="url(#' + id + 'pearl)" stroke="#eaf7ff" stroke-width=".8"/>' +
+          '<circle cx="200" cy="64" r="6.5" fill="url(#' + id + 'pearl)" stroke="#eaf7ff" stroke-width=".8"/>' +
+          '<circle cx="80" cy="104" r="5.5" fill="url(#' + id + 'pearl)" stroke="#eaf7ff" stroke-width=".8"/>' +
+          '<circle cx="240" cy="104" r="5.5" fill="url(#' + id + 'pearl)" stroke="#eaf7ff" stroke-width=".8"/>' +
+
+        '</g>' +
+
+        // ── specular sparkles (twinkle) ───────────────────────────────────────
+        sparkle(160, 26, 9, 0.95, 0) +
+        sparkle(120, 60, 6, 0.85, 600) +
+        sparkle(110, 186, 5, 0.8, 1100) +
+        sparkle(210, 186, 5, 0.8, 300) +
+        sparkle(160, 184, 6, 0.9, 1500) +
+
+        // floating motes
+        '<g fill="#cfeaff">' +
+          '<circle class="dqca-mote" style="animation-delay:0ms" cx="40" cy="120" r="2"/>' +
+          '<circle class="dqca-mote" style="animation-delay:900ms" cx="284" cy="96" r="2.4"/>' +
+          '<circle class="dqca-mote" style="animation-delay:1700ms" cx="268" cy="150" r="1.8"/>' +
+          '<circle class="dqca-mote" style="animation-delay:500ms" cx="52" cy="70" r="1.6"/>' +
+        '</g>' +
+      '</svg>' +
+      '</div>';
+  }
+
+  // ── REAL CRYSTAL: faceted brilliant-cut obelisk shard, internal dispersion ──
+  function crystalArt(w) {
+    w = w || 116;
+    var h = Math.round(w * (320 / 240));
     var id = "cy" + Math.random().toString(36).slice(2, 7);
     return '' +
-      '<svg width="' + w + '" height="' + Math.round(w * 1.3) + '" viewBox="0 0 96 125" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;filter:drop-shadow(0 6px 24px rgba(70,150,255,.6))">' +
+      '<div class="dqca-crystal" style="width:' + w + 'px;height:' + h + 'px">' +
+      '<svg viewBox="0 0 240 320" width="' + w + '" height="' + h + '" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">' +
         '<defs>' +
-          '<linearGradient id="' + id + 'a" x1="48" y1="6" x2="48" y2="120" gradientUnits="userSpaceOnUse"><stop stop-color="#eaf6ff"/><stop offset=".5" stop-color="#7cc7ff"/><stop offset="1" stop-color="#1c4f8f"/></linearGradient>' +
-          '<radialGradient id="' + id + 'g" cx="48" cy="64" r="56" gradientUnits="userSpaceOnUse"><stop stop-color="rgba(80,170,255,.5)"/><stop offset="1" stop-color="rgba(80,170,255,0)"/></radialGradient>' +
+          // facet gradients (light / medium / dark) for faux-3D faceting
+          '<linearGradient id="' + id + 'lit" x1="120" y1="24" x2="170" y2="240" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset=".4" stop-color="#bfe6ff"/><stop offset="1" stop-color="#3f8fd6"/></linearGradient>' +
+          '<linearGradient id="' + id + 'med" x1="120" y1="24" x2="100" y2="300" gradientUnits="userSpaceOnUse"><stop stop-color="#dff2ff"/><stop offset=".5" stop-color="#7cc0f2"/><stop offset="1" stop-color="#234f88"/></linearGradient>' +
+          '<linearGradient id="' + id + 'drk" x1="120" y1="120" x2="120" y2="300" gradientUnits="userSpaceOnUse"><stop stop-color="#5a9bda"/><stop offset="1" stop-color="#102a52"/></linearGradient>' +
+          '<linearGradient id="' + id + 'drk2" x1="60" y1="150" x2="120" y2="300" gradientUnits="userSpaceOnUse"><stop stop-color="#3f78bd"/><stop offset="1" stop-color="#0b1e3e"/></linearGradient>' +
+          '<radialGradient id="' + id + 'core" cx="120" cy="150" r="90" gradientUnits="userSpaceOnUse"><stop stop-color="rgba(230,248,255,.85)"/><stop offset=".5" stop-color="rgba(124,199,255,.25)"/><stop offset="1" stop-color="rgba(124,199,255,0)"/></radialGradient>' +
+          '<radialGradient id="' + id + 'halo" cx="120" cy="160" r="150" gradientUnits="userSpaceOnUse"><stop stop-color="rgba(90,175,255,.4)"/><stop offset="1" stop-color="rgba(90,175,255,0)"/></radialGradient>' +
+          '<radialGradient id="' + id + 'grd" cx="120" cy="298" r="96" gradientUnits="userSpaceOnUse"><stop stop-color="rgba(40,220,170,.5)"/><stop offset=".5" stop-color="rgba(70,150,255,.4)"/><stop offset="1" stop-color="rgba(70,150,255,0)"/></radialGradient>' +
         '</defs>' +
-        '<ellipse cx="48" cy="70" rx="42" ry="44" fill="url(#' + id + 'g)"/>' +
-        '<polygon points="48,6 78,40 64,116 32,116 18,40" fill="url(#' + id + 'a)" stroke="#dff1ff" stroke-width="1.4" stroke-linejoin="round"/>' +
-        '<polygon points="48,6 64,116 48,52" fill="rgba(255,255,255,.22)"/>' +
-        '<polygon points="48,6 32,116 48,52" fill="rgba(8,20,46,.28)"/>' +
-        '<polyline points="18,40 48,52 78,40" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="1.2"/>' +
-        '<polyline points="32,116 48,52 64,116" fill="none" stroke="rgba(255,255,255,.35)" stroke-width="1"/>' +
-      '</svg>';
+
+        // ambient halo + ground caustic
+        '<rect x="0" y="0" width="240" height="320" fill="url(#' + id + 'halo)"/>' +
+        '<ellipse cx="120" cy="300" rx="80" ry="16" fill="url(#' + id + 'grd)"/>' +
+
+        '<g class="dqca-float2">' +
+          // ── facets (front face split by central ridge T–M–C) ────────────────
+          // M = (120,150) centre,  T=(120,24)  girdle L2=(54,150) R2=(186,150)
+          // upper-left front
+          '<polygon points="120,24 120,150 54,150 88,78" fill="url(#' + id + 'med)"/>' +
+          // upper-right front (lit)
+          '<polygon points="120,24 152,78 186,150 120,150" fill="url(#' + id + 'lit)"/>' +
+          // lower-left front (dark)
+          '<polygon points="120,150 54,150 84,238 120,300" fill="url(#' + id + 'drk2)"/>' +
+          // lower-right front (medium-dark)
+          '<polygon points="120,150 120,300 156,238 186,150" fill="url(#' + id + 'drk)"/>' +
+          // narrow outer bevels for thickness
+          '<polygon points="120,24 88,78 54,150 54,150" fill="rgba(255,255,255,.10)"/>' +
+          '<polygon points="186,150 152,78 120,24" fill="rgba(255,255,255,.18)"/>' +
+
+          // internal core glow
+          '<ellipse cx="120" cy="150" rx="58" ry="92" fill="url(#' + id + 'core)"/>' +
+
+          // ── outline + facet edges ───────────────────────────────────────────
+          '<polygon points="120,24 152,78 186,150 156,238 120,300 84,238 54,150 88,78" fill="none" stroke="#e6f6ff" stroke-width="1.6" stroke-linejoin="round"/>' +
+          '<path d="M120 24 L120 300 M88 78 L120 150 L152 78 M54 150 L120 150 L186 150 M84 238 L120 150 L156 238" stroke="rgba(255,255,255,.45)" stroke-width="1"/>' +
+          // bright lit-edge accents
+          '<path d="M120 24 L152 78 L186 150" stroke="rgba(255,255,255,.85)" stroke-width="1.6" stroke-linecap="round"/>' +
+          // table flash near apex
+          '<polygon points="120,30 134,66 120,86 106,66" fill="rgba(255,255,255,.4)"/>' +
+
+          // faint chromatic dispersion along edges (subtle, on-brand)
+          '<path d="M89 80 L56 148" stroke="rgba(34,211,238,.5)" stroke-width="1.4" stroke-linecap="round"/>' +
+          '<path d="M118 152 L86 236" stroke="rgba(167,139,250,.4)" stroke-width="1.2" stroke-linecap="round"/>' +
+          '<path d="M122 152 L120 298" stroke="rgba(22,226,154,.4)" stroke-width="1.2" stroke-linecap="round"/>' +
+        '</g>' +
+
+        // specular sparkles
+        sparkle(140, 70, 8, 0.95, 0) +
+        sparkle(120, 150, 7, 0.85, 800) +
+        sparkle(150, 120, 5, 0.8, 1400) +
+        sparkle(96, 100, 4, 0.7, 500) +
+
+        // floating motes
+        '<g fill="#cfeaff">' +
+          '<circle class="dqca-mote" style="animation-delay:200ms" cx="30" cy="120" r="2"/>' +
+          '<circle class="dqca-mote" style="animation-delay:1000ms" cx="208" cy="96" r="2.2"/>' +
+          '<circle class="dqca-mote" style="animation-delay:1600ms" cx="196" cy="180" r="1.6"/>' +
+          '<circle class="dqca-mote" style="animation-delay:600ms" cx="40" cy="60" r="1.6"/>' +
+        '</g>' +
+      '</svg>' +
+      '</div>';
   }
 
   // ── small inline icons ──────────────────────────────────────────────────────
   function svgGear(c) { return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="' + c + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>'; }
   function svgCheckCircle() { return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="11" fill="rgba(28,132,255,.18)" stroke="' + BLUE + '" stroke-width="1.6"/><path d="M7.5 12.3l3 3 6-6.5" fill="none" stroke="' + BLUE + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+  // little inline XP marks for the breakdown chips
+  function svgChart(c) { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="' + c + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="20" x2="6" y2="12"/><line x1="12" y1="20" x2="12" y2="5"/><line x1="18" y1="20" x2="18" y2="14"/></svg>'; }
+  function svgBolt(c) { return '<svg width="15" height="15" viewBox="0 0 24 24" fill="' + c + '"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>'; }
 
   // ════════════════════════════════════════════════════════════════════════════
   function openProfileV2() {
@@ -249,7 +422,7 @@
           navIcon('<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>', cap, false) +
         '</div>';
 
-      // ── RIGHT: Premium / League / Membership / Activity ─────────────────────
+      // ── RIGHT: Premium / League+XP / Membership / Activity ──────────────────
       var feats = ["Priority Support", "Advanced Analytics", "Early Access Features", "Exclusive Rewards"];
       var checks = feats.map(function (f) {
         return '<div style="display:flex;align-items:center;gap:11px;margin-bottom:13px">' + svgCheckCircle() + '<span style="color:' + txt2 + ';font-size:15px;font-weight:600">' + f + '</span></div>';
@@ -257,17 +430,6 @@
       var premiumCard =
         '<div style="position:relative;overflow:hidden;padding:20px;border-radius:20px;background:linear-gradient(150deg,rgba(20,32,66,.7),rgba(10,18,40,.55));border:1px solid ' + cardB + ';box-shadow:0 12px 40px rgba(0,0,0,.35)">' +
           '<div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,' + BLUE + ',transparent)"></div>' +
-          // fractured-marble top-right corner (pure CSS: bright streak + hairline cracks)
-          '<div style="position:absolute;top:0;right:0;width:58%;height:48%;pointer-events:none;opacity:.9;background:radial-gradient(120% 90% at 92% 4%,rgba(150,200,255,.22),rgba(150,200,255,0) 60%);-webkit-mask-image:linear-gradient(225deg,#000,transparent 72%);mask-image:linear-gradient(225deg,#000,transparent 72%)"></div>' +
-          '<div style="position:absolute;top:-10px;right:-10px;width:62%;height:60%;pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(225deg,#000,transparent 70%);mask-image:linear-gradient(225deg,#000,transparent 70%)">' +
-            '<svg width="100%" height="100%" viewBox="0 0 200 130" preserveAspectRatio="none" style="display:block">' +
-              '<defs><linearGradient id="ppMarbleStreak" x1="0" y1="0" x2="1" y2="1"><stop stop-color="rgba(210,235,255,.85)"/><stop offset="1" stop-color="rgba(210,235,255,0)"/></linearGradient></defs>' +
-              '<path d="M205 -5 L120 95" stroke="url(#ppMarbleStreak)" stroke-width="3" fill="none"/>' +
-              '<path d="M200 10 L150 70" stroke="rgba(180,215,255,.35)" stroke-width="1" fill="none"/>' +
-              '<path d="M185 -5 L150 40 L168 55" stroke="rgba(180,215,255,.25)" stroke-width="1" fill="none"/>' +
-              '<path d="M205 35 L165 80" stroke="rgba(180,215,255,.2)" stroke-width="1" fill="none"/>' +
-            '</svg>' +
-          '</div>' +
           '<div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
             '<div><div style="display:flex;align-items:center;gap:10px">' +
               '<span style="display:flex;color:' + BLUE + ';filter:drop-shadow(0 0 8px ' + BLUE_GLOW + ')"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M3 8l4.2 3.4L12 5l4.8 6.4L21 8l-1.7 10.4H4.7z"/><rect x="4.7" y="19" width="14.6" height="2.1" rx="1"/></svg></span>' +
@@ -277,24 +439,46 @@
           '</div>' +
           '<div style="position:relative;display:flex;align-items:center;gap:6px;margin-top:18px">' +
             '<div style="flex:1;min-width:0">' + checks + '</div>' +
-            '<div id="pp-crown3d" style="width:150px;height:138px;flex-shrink:0"></div>' +
+            '<div style="flex-shrink:0;display:flex;align-items:center;justify-content:center">' + crownArt(168) + '</div>' +
           '</div>' +
           '<button id="pp-upgrade" type="button" style="position:relative;width:100%;margin-top:8px;padding:15px;border-radius:14px;border:none;cursor:pointer;background:' + GREEN_GRAD + ';color:#fff;font-size:16px;font-weight:800;font-family:\'Outfit\',sans-serif;box-shadow:0 8px 26px ' + GREEN_GLOW + ';display:flex;align-items:center;justify-content:center;gap:8px;-webkit-appearance:none">Upgrade Now <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>' +
         '</div>';
 
-      var pct = Math.max(0, Math.min(100, V.xpMax ? (V.xpCur / V.xpMax) * 100 : 0));
+      // ── League Progress + combined XP (Market + Easy Trade) ─────────────────
+      var t0 = xpTier(USE_LIVE_DATA ? 0 : (SAMPLE.marketXp + SAMPLE.eztXp));
+      var initTotal = USE_LIVE_DATA ? "\u2026" : fmtN(SAMPLE.marketXp + SAMPLE.eztXp);
+      var initMk = USE_LIVE_DATA ? "\u2026" : fmtN(SAMPLE.marketXp);
+      var initEz = USE_LIVE_DATA ? "\u2026" : fmtN(SAMPLE.eztXp);
+      var chip = function (icon, label, valId, val, accent) {
+        return '<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:9px 11px;border-radius:12px;background:rgba(8,14,34,.55);border:1px solid ' + cardB + '">' +
+          '<span style="display:flex;flex-shrink:0">' + icon + '</span>' +
+          '<div style="min-width:0"><div style="color:' + cap + ';font-size:11px;line-height:1.1;white-space:nowrap">' + label + '</div>' +
+          '<div id="' + valId + '" style="color:' + (accent || txt1) + ';font-size:15px;font-weight:900;line-height:1.15">' + val + '</div></div>' +
+        '</div>';
+      };
       var leagueCard =
         '<div style="position:relative;overflow:hidden;padding:18px;border-radius:20px;background:linear-gradient(150deg,rgba(16,26,60,.65),rgba(8,14,34,.5));border:1px solid ' + cardB + ';box-shadow:0 10px 32px rgba(0,0,0,.3)">' +
           '<div style="display:flex;align-items:center;justify-content:space-between"><div style="color:' + txt1 + ';font-size:17px;font-weight:900">League Progress</div><button id="pp-league-all" type="button" style="background:none;border:none;color:' + BLUE + ';font-size:14px;font-weight:700;cursor:pointer;font-family:\'Outfit\',sans-serif">View All</button></div>' +
-          '<div style="display:flex;align-items:center;gap:16px;margin-top:8px">' +
-            '<div style="flex-shrink:0">' + crystalSVG(92) + '</div>' +
+          '<div style="display:flex;align-items:center;gap:14px;margin-top:10px">' +
+            '<div style="flex-shrink:0">' + crystalArt(112) + '</div>' +
             '<div style="flex:1;min-width:0">' +
-              '<div id="pp-league-name" style="color:' + txt1 + ';font-size:24px;font-weight:900">' + esc2(V.league) + '</div>' +
-              '<div style="margin:6px 0 10px"><span id="pp-xp-cur" style="color:' + BLUE + ';font-size:15px;font-weight:800">' + V.xpCur + '</span><span style="color:' + cap + ';font-size:15px;font-weight:700"> / <span id="pp-xp-max">' + V.xpMax + '</span> XP</span></div>' +
-              '<div style="height:12px;border-radius:7px;background:rgba(8,14,34,.8);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)"><div id="pp-xp-bar" style="height:100%;width:' + pct + '%;min-width:8%;border-radius:7px;background:linear-gradient(90deg,#22c55e,#38bdf8 60%,#7c5cff);box-shadow:0 0 14px ' + BLUE_GLOW + ';transition:width .8s ease"></div></div>' +
-              '<div style="color:' + cap + ';font-size:12.5px;margin-top:9px">Play matches to climb the leaderboard</div>' +
+              '<div id="pp-league-name" style="color:' + txt1 + ';font-size:22px;font-weight:900;line-height:1.1">' + esc2(V.league) + '</div>' +
+              // combined total XP headline
+              '<div style="margin:7px 0 2px;display:flex;align-items:baseline;gap:7px">' +
+                '<span id="pp-xp-total" style="color:#fff;font-size:26px;font-weight:900;line-height:1;text-shadow:0 0 14px ' + BLUE_GLOW + '">' + initTotal + '</span>' +
+                '<span style="color:' + cap + ';font-size:13px;font-weight:700">/ <span id="pp-xp-max">' + fmtN(t0.nextXp) + '</span> XP</span>' +
+              '</div>' +
+              '<div style="color:' + cap + ';font-size:11.5px;margin-bottom:8px">Total XP \u2014 Market + Easy Trade combined</div>' +
+              // progress bar toward next milestone
+              '<div style="height:12px;border-radius:7px;background:rgba(8,14,34,.8);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)"><div id="pp-xp-bar" style="height:100%;width:' + (USE_LIVE_DATA ? 0 : t0.pct) + '%;min-width:6px;border-radius:7px;background:linear-gradient(90deg,#22c55e,#38bdf8 60%,#7c5cff);box-shadow:0 0 14px ' + BLUE_GLOW + ';transition:width .9s ease"></div></div>' +
             '</div>' +
           '</div>' +
+          // breakdown chips
+          '<div style="display:flex;gap:10px;margin-top:13px">' +
+            chip(svgChart(GREEN), "Market XP", "pp-xp-market", initMk, GREEN) +
+            chip(svgBolt(BLUE), "Easy Trade XP", "pp-xp-ezt", initEz, BLUE) +
+          '</div>' +
+          '<div style="color:' + cap + ';font-size:12px;margin-top:11px">Earn XP by posting in Market and winning Easy Trade rounds</div>' +
         '</div>';
 
       var membershipRow =
@@ -332,24 +516,20 @@
         '.ppx-r2{inset:10px;border:1px dashed rgba(34,210,140,.5)}' +
         '.ppx-r3{inset:17px;border:1px solid rgba(34,211,238,.4)}' +
         '.ppx-node{position:absolute;width:10px;height:10px;margin:-5px 0 0 -5px;background:' + GREEN + ';transform:rotate(45deg);box-shadow:0 0 12px ' + GREEN + ';border-radius:2px}' +
+        // crown/crystal art animations
+        '@keyframes dqcaFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}' +
+        '@keyframes dqcaFloat2{0%,100%{transform:translateY(0) rotate(-.5deg)}50%{transform:translateY(-6px) rotate(.5deg)}}' +
+        '@keyframes dqcaTwinkle{0%,100%{transform:scale(.5);opacity:.15}50%{transform:scale(1);opacity:1}}' +
+        '@keyframes dqcaDrift{0%{transform:translateY(0);opacity:0}25%{opacity:.9}75%{opacity:.5}100%{transform:translateY(-18px);opacity:0}}' +
+        '.dqca-crown,.dqca-crystal{position:relative;filter:drop-shadow(0 8px 26px rgba(70,150,255,.5))}' +
+        '.dqca-float{transform-origin:50% 60%;animation:dqcaFloat 5.5s ease-in-out infinite}' +
+        '.dqca-float2{transform-origin:50% 55%;animation:dqcaFloat2 6.5s ease-in-out infinite}' +
+        '.dqca-spark{transform-origin:center;transform-box:fill-box;animation:dqcaTwinkle 2.6s ease-in-out infinite}' +
+        '.dqca-mote{animation:dqcaDrift 4.2s ease-in-out infinite}' +
+        '@media (prefers-reduced-motion: reduce){.dqca-float,.dqca-float2,.dqca-spark,.dqca-mote,.ppx-r1{animation:none}}' +
         '#pp-body-wrap{padding:18px}' +
         '</style>' +
         '<div id="pp-body-wrap">' + inner + '</div>';
-
-      // ── mount the REAL 3D crown (WebGL) into the Premium Tier card ──────────
-      // crystal3d.js paints an SVG fallback first, then upgrades to WebGL when
-      // Three.js has loaded; it self-disposes the GL context on disposeAll().
-      if (window.dq3DCrystal) {
-        var crownEl = body.querySelector("#pp-crown3d");
-        if (crownEl) dq3DCrystal.mount(crownEl, { kind: "crown", color: BLUE, height: 138 });
-        var ovEl = body.closest(".dq-modal-ov");
-        if (ovEl && "MutationObserver" in window) {
-          var mo = new MutationObserver(function () {
-            if (!document.body.contains(ovEl)) { try { dq3DCrystal.disposeAll(); } catch (e) { } mo.disconnect(); }
-          });
-          mo.observe(document.body, { childList: true });
-        }
-      }
 
       // ── handlers (UI behaviour only; data reads deferred to live pass) ───────
       var avEl = body.querySelector("#pp-av");
@@ -421,14 +601,13 @@
             var up2 = await api("/auth/profile", { method: "PUT", body: JSON.stringify(payload) });
             S.user = Object.assign({}, S.user, up2);
             try { localStorage.setItem("dq_u", JSON.stringify(S.user)); } catch (e) { }
-            try { if (window.dq3DCrystal) dq3DCrystal.disposeAll(); } catch (e) { }
             close();
             if (typeof renderApp === "function") renderApp();
           } catch (e) { alert((e && (e.error || e.message)) || "Could not save changes."); }
         })();
       };
 
-      // fill the three async cards (balance, league/XP, activity) from endpoints
+      // fill the async cards (balance, league, XP total, activity) from endpoints
       if (USE_LIVE_DATA) wireLiveData(body);
     });
   }
@@ -437,6 +616,26 @@
   // Called after render when USE_LIVE_DATA is true. Each read is independent and
   // best-effort: a failure leaves that card showing its placeholder.
   function wireLiveData(body) {
+    // running totals for the combined XP headline + bar
+    var marketXp = null, eztXp = null;
+
+    function paintXp() {
+      var mk = num(marketXp), ez = num(eztXp);
+      var mkEl = body.querySelector("#pp-xp-market");
+      var ezEl = body.querySelector("#pp-xp-ezt");
+      if (marketXp != null && mkEl) mkEl.textContent = fmtN(mk);
+      if (eztXp != null && ezEl) ezEl.textContent = fmtN(ez);
+      // only paint the combined total once BOTH sources have resolved
+      if (marketXp == null || eztXp == null) return;
+      var tier = xpTier(mk + ez);
+      var tEl = body.querySelector("#pp-xp-total");
+      var maxEl = body.querySelector("#pp-xp-max");
+      var bar = body.querySelector("#pp-xp-bar");
+      if (tEl) tEl.textContent = fmtN(tier.total);
+      if (maxEl) maxEl.textContent = fmtN(tier.nextXp);
+      if (bar) bar.style.width = tier.pct + "%";
+    }
+
     // QNTM balance
     (async function () {
       try {
@@ -447,29 +646,32 @@
       } catch (e) { var el2 = body.querySelector("#dq-wc-bal"); if (el2) el2.textContent = "0.00"; }
     })();
 
-    // League name + XP bar
+    // League name (QNTM ladder); XP comes from Market + Easy Trade below
     (async function () {
       try {
         var me = await api("/leagues/me");
         var nm = body.querySelector("#pp-league-name");
         if (nm) nm.textContent = (me && me.currentLeagueName) || "Unranked";
-        var cur = num(me && (me.xp != null ? me.xp : (me.currentXp != null ? me.currentXp : me.points)));
-        var max = num(me && (me.nextLevelXp != null ? me.nextLevelXp : me.xpToNext)) || 1000;
-        var c = body.querySelector("#pp-xp-cur"), m = body.querySelector("#pp-xp-max"), bar = body.querySelector("#pp-xp-bar");
-        if (c) c.textContent = fmtN(cur);
-        if (m) m.textContent = fmtN(max);
-        if (bar) bar.style.width = Math.max(0, Math.min(100, max ? (cur / max) * 100 : 0)) + "%";
       } catch (e) {
         var nm2 = body.querySelector("#pp-league-name"); if (nm2) nm2.textContent = "Unranked";
-        var c2 = body.querySelector("#pp-xp-cur"); if (c2) c2.textContent = "0";
       }
     })();
 
-    // Account activity (Easy Trade leaderboard .me)
+    // Market XP  (1000 base + 100·like + 100·post)
+    (async function () {
+      try {
+        var s = await api("/market/me/stats");
+        marketXp = num(s && s.xp);
+      } catch (e) { marketXp = 0; }
+      paintXp();
+    })();
+
+    // Easy Trade XP + Account activity (single leaderboard read powers both)
     (async function () {
       try {
         var d = await api("/easytrade/leaderboard?sort=xp");
         var me = d && d.me;
+        eztXp = me ? num(me.xp) : 0;
         var mEl = body.querySelector("#pp-st-matches"), wEl = body.querySelector("#pp-st-wins"), wrEl = body.querySelector("#pp-st-wr");
         if (me) {
           if (mEl) mEl.textContent = fmtN(me.settled != null ? me.settled : (num(me.wins) + num(me.losses)));
@@ -481,10 +683,12 @@
           if (wrEl) wrEl.textContent = "0%";
         }
       } catch (e) {
+        eztXp = 0;
         var mEl2 = body.querySelector("#pp-st-matches"); if (mEl2) mEl2.textContent = "0";
         var wEl2 = body.querySelector("#pp-st-wins"); if (wEl2) wEl2.textContent = "0";
         var wrEl2 = body.querySelector("#pp-st-wr"); if (wrEl2) wrEl2.textContent = "0%";
       }
+      paintXp();
     })();
   }
 
@@ -500,7 +704,7 @@
         // figure silhouette
         '<ellipse cx="75" cy="58" rx="9" ry="10" fill="#0a1326"/>' +
         '<path d="M62 112 C62 88 66 74 75 74 C84 74 88 88 88 112 Z" fill="#0a1326"/>' +
-        // DFFX/DrFX gold plaque
+        // DrFX gold plaque
         '<rect x="52" y="80" width="46" height="20" rx="4" fill="url(#dqcrestGold)" stroke="#fff2c0" stroke-width="1"/>' +
         '<text x="75" y="95" text-anchor="middle" font-family="Outfit,sans-serif" font-size="13" font-weight="800" fill="#3a2a08" letter-spacing="1">DrFX</text>' +
         // top glow spark
