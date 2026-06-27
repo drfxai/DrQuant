@@ -19,8 +19,8 @@
  *
  * The Premium-Tier crown and the League crystal are rendered as resolution-
  * independent faux-3D VECTOR ART (rich gradients, multi-facet geometry,
- * specular highlights, ambient glow, animated sparkles). Being pure SVG+CSS
- * they stay razor-sharp at any DPI/zoom with zero WebGL weight.
+ * specular highlights, pulsing light emission, animated sparkles). Being pure
+ * SVG+CSS they stay razor-sharp at any DPI/zoom with zero WebGL weight.
  *
  * Structural hooks kept so the rest of the app keeps working:
  *   • Save button keeps id "pp-save"  (idcard.js / leagues-ui.js inject before it)
@@ -374,11 +374,15 @@
         '</div>';
 
       // emblem (concentric neon rings + winged DrFX crest), no avatar img by default
+      // orbiting ember sparks emitted around the rotating rings
+      var ppxSparks = "";
+      for (var _si = 0; _si < 12; _si++) ppxSparks += '<div class="ppx-spk-wrap" style="transform:rotate(' + (_si * 30) + 'deg)"><span class="ppx-spk" style="animation-delay:' + ((_si * 210) % 2520) + 'ms"></span></div>';
+
       var emblem =
         '<div style="position:relative;width:200px;height:200px;margin:18px auto 0">' +
           '<div class="ppx-ring ppx-r1"></div><div class="ppx-ring ppx-r2"></div><div class="ppx-ring ppx-r3"></div>' +
-          '<span class="ppx-node" style="top:-5px;left:50%"></span><span class="ppx-node" style="bottom:-5px;left:50%"></span>' +
-          '<span class="ppx-node" style="left:-5px;top:50%"></span><span class="ppx-node" style="right:-5px;top:50%"></span>' +
+          '<div class="ppx-orbit"><span class="ppx-node" style="top:-5px;left:50%"></span><span class="ppx-node" style="bottom:-5px;left:50%"></span><span class="ppx-node" style="left:-5px;top:50%"></span><span class="ppx-node" style="right:-5px;top:50%"></span></div>' +
+          '<div class="ppx-sparks">' + ppxSparks + '</div>' +
           '<div id="pp-av" style="position:absolute;inset:28px;border-radius:50%;cursor:pointer;overflow:hidden;background:radial-gradient(circle at 50% 28%,#12244e,#05091c);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 34px rgba(0,0,0,.75),0 0 26px ' + GREEN_GLOW + '">' +
             (V.avatar
               ? ((typeof avatar === "function") ? avatar(V.avatar, 144) : '<img src="' + esc2(V.avatar) + '" style="width:144px;height:144px;border-radius:50%;object-fit:cover"/>')
@@ -408,7 +412,7 @@
         '</div>';
 
       var saveBlock =
-        '<button id="pp-save" type="button" style="position:relative;overflow:hidden;width:100%;margin-top:16px;padding:16px;border-radius:15px;border:none;cursor:pointer;background:' + GREEN_GRAD + ';color:#04140d;font-size:17px;font-weight:900;font-family:\'Outfit\',sans-serif;box-shadow:0 8px 28px ' + GREEN_GLOW + ';display:flex;align-items:center;justify-content:center;gap:10px;-webkit-appearance:none"><span style="display:flex;align-items:center;gap:10px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#04140d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Save Changes</span></button>' +
+        '<button id="pp-save" type="button" style="position:relative;overflow:hidden;width:100%;margin-top:16px;padding:16px;border-radius:15px;border:none;cursor:pointer;background:' + GREEN_GRAD + ';color:#04140d;font-size:17px;font-weight:900;font-family:\'Outfit\',sans-serif;box-shadow:0 8px 28px ' + GREEN_GLOW + ';display:flex;align-items:center;justify-content:center;gap:10px;-webkit-appearance:none"><span class="ppx-save-gloss"></span><span class="ppx-save-shine"></span><span style="position:relative;z-index:2;display:flex;align-items:center;gap:10px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#04140d" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Save Changes</span></button>' +
         '<div style="text-align:center;color:' + cap + ';font-size:12px;margin-top:11px;display:flex;align-items:center;justify-content:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="' + GREEN + '" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Your data is secure with us</div>' +
         '<div id="dq-lg-card" style="display:none"></div><div id="dq-idcard-entry" style="display:none"></div>';
 
@@ -435,7 +439,7 @@
               '<span style="display:flex;color:' + BLUE + ';filter:drop-shadow(0 0 8px ' + BLUE_GLOW + ')"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M3 8l4.2 3.4L12 5l4.8 6.4L21 8l-1.7 10.4H4.7z"/><rect x="4.7" y="19" width="14.6" height="2.1" rx="1"/></svg></span>' +
               '<div style="font-size:23px;font-weight:900;color:' + txt1 + '">Premium Tier</div></div>' +
             '<div style="color:' + cap + ';font-size:13px;margin-top:6px;line-height:1.45;max-width:220px">Unlock advanced tools and exclusive benefits</div></div>' +
-            '<span style="flex-shrink:0;padding:3px 12px;border-radius:9px;border:1px solid rgba(245,196,81,.6);color:#f5c451;font-size:12px;font-weight:800;letter-spacing:.5px">OD</span>' +
+            '<span style="flex-shrink:0;padding:3px 12px;border-radius:9px;border:1px solid rgba(245,196,81,.6);color:#f5c451;font-size:12px;font-weight:800;letter-spacing:.5px">PRO</span>' +
           '</div>' +
           '<div style="position:relative;display:flex;align-items:center;gap:6px;margin-top:18px">' +
             '<div style="flex:1;min-width:0">' + checks + '</div>' +
@@ -512,21 +516,31 @@
         '<style>' +
         '@keyframes ppxSpin{to{transform:rotate(360deg)}}@keyframes ppxSpinR{to{transform:rotate(-360deg)}}' +
         '.ppx-ring{position:absolute;border-radius:50%;inset:0}' +
-        '.ppx-r1{border:2px solid ' + GREEN + ';box-shadow:0 0 26px ' + GREEN_GLOW + ',inset 0 0 26px ' + GREEN_GLOW + ';opacity:.9}' +
-        '.ppx-r2{inset:10px;border:1px dashed rgba(34,210,140,.5)}' +
-        '.ppx-r3{inset:17px;border:1px solid rgba(34,211,238,.4)}' +
+        '.ppx-r1{border:2px dashed ' + GREEN + ';box-shadow:0 0 26px ' + GREEN_GLOW + ',inset 0 0 26px ' + GREEN_GLOW + ';opacity:.95;animation:ppxSpin 16s linear infinite}' +
+        '.ppx-r2{inset:10px;border:1px dashed rgba(34,210,140,.6);animation:ppxSpinR 11s linear infinite}' +
+        '.ppx-r3{inset:17px;border:1px dotted rgba(34,211,238,.55);box-shadow:0 0 14px rgba(34,211,238,.22);animation:ppxSpin 7s linear infinite}' +
+        '.ppx-orbit{position:absolute;inset:0;animation:ppxSpinR 20s linear infinite}' +
         '.ppx-node{position:absolute;width:10px;height:10px;margin:-5px 0 0 -5px;background:' + GREEN + ';transform:rotate(45deg);box-shadow:0 0 12px ' + GREEN + ';border-radius:2px}' +
+        '@keyframes ppxSpark{0%{transform:translateY(0) scale(.3);opacity:0}12%{opacity:1}55%{opacity:.8}100%{transform:translateY(-16px) scale(1.15);opacity:0}}' +
+        '.ppx-sparks{position:absolute;inset:0;pointer-events:none;animation:ppxSpin 26s linear infinite}' +
+        '.ppx-spk-wrap{position:absolute;inset:0}' +
+        '.ppx-spk{position:absolute;top:-2px;left:50%;width:5px;height:5px;margin-left:-2.5px;border-radius:50%;background:radial-gradient(circle,#f0fff8 0%,#16e29a 60%,rgba(22,226,154,0) 100%);box-shadow:0 0 8px #16e29a,0 0 14px rgba(22,226,154,.6);animation:ppxSpark 2.6s ease-out infinite}' +
         // crown/crystal art animations
         '@keyframes dqcaFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}' +
         '@keyframes dqcaFloat2{0%,100%{transform:translateY(0) rotate(-.5deg)}50%{transform:translateY(-6px) rotate(.5deg)}}' +
         '@keyframes dqcaTwinkle{0%,100%{transform:scale(.5);opacity:.15}50%{transform:scale(1);opacity:1}}' +
         '@keyframes dqcaDrift{0%{transform:translateY(0);opacity:0}25%{opacity:.9}75%{opacity:.5}100%{transform:translateY(-18px);opacity:0}}' +
-        '.dqca-crown,.dqca-crystal{position:relative;filter:drop-shadow(0 8px 26px rgba(70,150,255,.5))}' +
+        '@keyframes dqcaEmit{0%,100%{filter:drop-shadow(0 8px 22px rgba(70,150,255,.5)) drop-shadow(0 0 12px rgba(124,199,255,.4)) brightness(1)}50%{filter:drop-shadow(0 10px 32px rgba(90,175,255,.85)) drop-shadow(0 0 26px rgba(150,210,255,.8)) brightness(1.14)}}' +
+        '.dqca-crown,.dqca-crystal{position:relative;animation:dqcaEmit 3.4s ease-in-out infinite}' +
+        '.dqca-crystal{animation-delay:-1.6s}' +
         '.dqca-float{transform-origin:50% 60%;animation:dqcaFloat 5.5s ease-in-out infinite}' +
         '.dqca-float2{transform-origin:50% 55%;animation:dqcaFloat2 6.5s ease-in-out infinite}' +
         '.dqca-spark{transform-origin:center;transform-box:fill-box;animation:dqcaTwinkle 2.6s ease-in-out infinite}' +
         '.dqca-mote{animation:dqcaDrift 4.2s ease-in-out infinite}' +
-        '@media (prefers-reduced-motion: reduce){.dqca-float,.dqca-float2,.dqca-spark,.dqca-mote,.ppx-r1{animation:none}}' +
+        '@media (prefers-reduced-motion: reduce){.dqca-float,.dqca-float2,.dqca-spark,.dqca-mote,.dqca-crown,.dqca-crystal,.ppx-r1,.ppx-r2,.ppx-r3,.ppx-orbit,.ppx-sparks,.ppx-spk,.ppx-save-shine{animation:none}}' +
+        '@keyframes ppxShine{0%{transform:translateX(-160%) skewX(-18deg)}55%{transform:translateX(170%) skewX(-18deg)}100%{transform:translateX(170%) skewX(-18deg)}}' +
+        '.ppx-save-gloss{position:absolute;left:1px;right:1px;top:1px;height:50%;border-radius:14px 14px 0 0;background:linear-gradient(180deg,rgba(255,255,255,.5),rgba(255,255,255,.06) 80%,transparent);pointer-events:none;z-index:1}' +
+        '.ppx-save-shine{position:absolute;top:0;bottom:0;left:0;width:42%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.72),transparent);filter:blur(2px);transform:translateX(-160%) skewX(-18deg);animation:ppxShine 3.8s ease-in-out infinite;pointer-events:none;z-index:1}' +
         '#pp-body-wrap{padding:18px}' +
         '</style>' +
         '<div id="pp-body-wrap">' + inner + '</div>';
