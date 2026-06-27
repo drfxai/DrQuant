@@ -206,16 +206,29 @@
       var premiumCard =
         '<div style="position:relative;overflow:hidden;padding:20px;border-radius:20px;background:linear-gradient(150deg,rgba(20,32,66,.7),rgba(10,18,40,.55));border:1px solid ' + cardB + ';box-shadow:0 12px 40px rgba(0,0,0,.35)">' +
           '<div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,' + BLUE + ',transparent)"></div>' +
-          '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
-            '<div><div style="font-size:23px;font-weight:900;color:' + txt1 + '">Premium Tier</div>' +
+          // fractured-marble top-right corner (pure CSS: bright streak + hairline cracks)
+          '<div style="position:absolute;top:0;right:0;width:58%;height:48%;pointer-events:none;opacity:.9;background:radial-gradient(120% 90% at 92% 4%,rgba(150,200,255,.22),rgba(150,200,255,0) 60%);-webkit-mask-image:linear-gradient(225deg,#000,transparent 72%);mask-image:linear-gradient(225deg,#000,transparent 72%)"></div>' +
+          '<div style="position:absolute;top:-10px;right:-10px;width:62%;height:60%;pointer-events:none;overflow:hidden;-webkit-mask-image:linear-gradient(225deg,#000,transparent 70%);mask-image:linear-gradient(225deg,#000,transparent 70%)">' +
+            '<svg width="100%" height="100%" viewBox="0 0 200 130" preserveAspectRatio="none" style="display:block">' +
+              '<defs><linearGradient id="ppMarbleStreak" x1="0" y1="0" x2="1" y2="1"><stop stop-color="rgba(210,235,255,.85)"/><stop offset="1" stop-color="rgba(210,235,255,0)"/></linearGradient></defs>' +
+              '<path d="M205 -5 L120 95" stroke="url(#ppMarbleStreak)" stroke-width="3" fill="none"/>' +
+              '<path d="M200 10 L150 70" stroke="rgba(180,215,255,.35)" stroke-width="1" fill="none"/>' +
+              '<path d="M185 -5 L150 40 L168 55" stroke="rgba(180,215,255,.25)" stroke-width="1" fill="none"/>' +
+              '<path d="M205 35 L165 80" stroke="rgba(180,215,255,.2)" stroke-width="1" fill="none"/>' +
+            '</svg>' +
+          '</div>' +
+          '<div style="position:relative;display:flex;align-items:flex-start;justify-content:space-between;gap:10px">' +
+            '<div><div style="display:flex;align-items:center;gap:10px">' +
+              '<span style="display:flex;color:' + BLUE + ';filter:drop-shadow(0 0 8px ' + BLUE_GLOW + ')"><svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor"><path d="M3 8l4.2 3.4L12 5l4.8 6.4L21 8l-1.7 10.4H4.7z"/><rect x="4.7" y="19" width="14.6" height="2.1" rx="1"/></svg></span>' +
+              '<div style="font-size:23px;font-weight:900;color:' + txt1 + '">Premium Tier</div></div>' +
             '<div style="color:' + cap + ';font-size:13px;margin-top:6px;line-height:1.45;max-width:220px">Unlock advanced tools and exclusive benefits</div></div>' +
             '<span style="flex-shrink:0;padding:3px 12px;border-radius:9px;border:1px solid rgba(245,196,81,.6);color:#f5c451;font-size:12px;font-weight:800;letter-spacing:.5px">OD</span>' +
           '</div>' +
-          '<div style="display:flex;align-items:center;gap:6px;margin-top:18px">' +
+          '<div style="position:relative;display:flex;align-items:center;gap:6px;margin-top:18px">' +
             '<div style="flex:1;min-width:0">' + checks + '</div>' +
-            '<div style="flex-shrink:0">' + crownSVG(150) + '</div>' +
+            '<div id="pp-crown3d" style="width:150px;height:138px;flex-shrink:0"></div>' +
           '</div>' +
-          '<button id="pp-upgrade" type="button" style="width:100%;margin-top:8px;padding:15px;border-radius:14px;border:none;cursor:pointer;background:' + GREEN_GRAD + ';color:#fff;font-size:16px;font-weight:800;font-family:\'Outfit\',sans-serif;box-shadow:0 8px 26px ' + GREEN_GLOW + ';display:flex;align-items:center;justify-content:center;gap:8px;-webkit-appearance:none">Upgrade Now <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>' +
+          '<button id="pp-upgrade" type="button" style="position:relative;width:100%;margin-top:8px;padding:15px;border-radius:14px;border:none;cursor:pointer;background:' + GREEN_GRAD + ';color:#fff;font-size:16px;font-weight:800;font-family:\'Outfit\',sans-serif;box-shadow:0 8px 26px ' + GREEN_GLOW + ';display:flex;align-items:center;justify-content:center;gap:8px;-webkit-appearance:none">Upgrade Now <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></button>' +
         '</div>';
 
       var pct = Math.max(0, Math.min(100, V.xpMax ? (V.xpCur / V.xpMax) * 100 : 0));
@@ -271,6 +284,21 @@
         '#pp-body-wrap{padding:18px}' +
         '</style>' +
         '<div id="pp-body-wrap">' + inner + '</div>';
+
+      // ── mount the REAL 3D crown (WebGL) into the Premium Tier card ──────────
+      // crystal3d.js paints an SVG fallback first, then upgrades to WebGL when
+      // Three.js has loaded; it self-disposes the GL context on disposeAll().
+      if (window.dq3DCrystal) {
+        var crownEl = body.querySelector("#pp-crown3d");
+        if (crownEl) dq3DCrystal.mount(crownEl, { kind: "crown", color: BLUE, height: 138 });
+        var ovEl = body.closest(".dq-modal-ov");
+        if (ovEl && "MutationObserver" in window) {
+          var mo = new MutationObserver(function () {
+            if (!document.body.contains(ovEl)) { try { dq3DCrystal.disposeAll(); } catch (e) { } mo.disconnect(); }
+          });
+          mo.observe(document.body, { childList: true });
+        }
+      }
 
       // ── handlers (UI behaviour only; data reads deferred to live pass) ───────
       var avEl = body.querySelector("#pp-av");

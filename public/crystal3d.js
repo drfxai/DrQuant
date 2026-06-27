@@ -253,40 +253,64 @@
     ped.position.y = -0.92;
     group.add(ped); extras.push(pedGeo);
 
-    // bright glowing rim band on top of the pedestal
-    var rimGeo = new THREE.CylinderGeometry(1.24, 1.24, 0.12, 8, 1);
-    var rimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(lighten(color, 0.55)), transparent: true, opacity: 0.95 });
+    // a lower, wider glass step under the base block (the second tier of the
+    // plinth in the reference) — gives the base more presence/height.
+    var stepGeo = new THREE.CylinderGeometry(1.66, 1.78, 0.34, 8, 1);
+    paintVerticalGradient(THREE, stepGeo, color);
+    var step = new THREE.Mesh(stepGeo, glassMat);
+    step.position.y = -1.96;
+    group.add(step); extras.push(stepGeo);
+    var stepEdge = edgeLines(THREE, stepGeo, 0.35); stepEdge.position.copy(step.position); group.add(stepEdge); edges.push(stepEdge);
+
+    // bright glowing rim band on top of the pedestal (primary cyan ring)
+    var rimGeo = new THREE.CylinderGeometry(1.26, 1.26, 0.16, 8, 1);
+    var rimMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(lighten(color, 0.62)), transparent: true, opacity: 0.98 });
     var rim = new THREE.Mesh(rimGeo, rimMat);
     rim.position.y = -0.66;
     group.add(rim); extras.push(rimGeo);
 
+    // a second, slightly larger and softer halo band just below it — makes the
+    // glowing base ring read as thick and luminous like the artwork.
+    var rim2Geo = new THREE.CylinderGeometry(1.34, 1.34, 0.07, 8, 1);
+    var rim2Mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(lighten(color, 0.35)), transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false });
+    var rim2 = new THREE.Mesh(rim2Geo, rim2Mat);
+    rim2.position.y = -0.78;
+    group.add(rim2); extras.push(rim2Geo);
+
     // ── fanned blade spikes (symmetric tiara) ─────────────────────────────────
-    // angle around the ring, blade height, blade half-width
+    // A wide 7-point fan of sharp glass blades, tallest in the centre, stepping
+    // down to short outer needles — matching the reference crown silhouette.
+    // a = angle around the ring, h = blade height, w = blade half-width,
+    // r = how far out along the ring the blade sits (wider at the edges).
     var blades = [
-      { a: -0.95, h: 1.45, w: 0.20 },
-      { a: -0.48, h: 1.95, w: 0.22 },
-      { a: 0.00, h: 2.45, w: 0.25 },
-      { a: 0.48, h: 1.95, w: 0.22 },
-      { a: 0.95, h: 1.45, w: 0.20 }
+      { a: -1.30, h: 1.18, w: 0.155, r: 1.20 },
+      { a: -0.86, h: 1.62, w: 0.180, r: 1.12 },
+      { a: -0.43, h: 2.12, w: 0.205, r: 1.05 },
+      { a:  0.00, h: 2.70, w: 0.235, r: 1.00 },
+      { a:  0.43, h: 2.12, w: 0.205, r: 1.05 },
+      { a:  0.86, h: 1.62, w: 0.180, r: 1.12 },
+      { a:  1.30, h: 1.18, w: 0.155, r: 1.20 }
     ];
-    var ringR = 1.02;
     for (var i = 0; i < blades.length; i++) {
       var b = blades[i];
-      var bg = buildBladeGeo(THREE, b.w, 0.16, b.h);
+      var bg = buildBladeGeo(THREE, b.w, 0.15, b.h);
       paintVerticalGradient(THREE, bg, color);
       var m = new THREE.Mesh(bg, glassMat);
-      m.position.x = Math.sin(b.a) * ringR;
+      m.position.x = Math.sin(b.a) * b.r;
       m.position.z = Math.cos(b.a) * 0.12;
       m.position.y = -0.6;
       m.rotation.y = b.a;
+      // fan the outer blades slightly outward so the tips splay like the artwork
+      m.rotation.z = -b.a * 0.16;
       group.add(m); extras.push(bg);
-      var e = edgeLines(THREE, bg, 0.6);
+      var e = edgeLines(THREE, bg, 0.7);
       e.position.copy(m.position); e.rotation.copy(m.rotation); group.add(e); edges.push(e);
     }
 
     group._glassMat = glassMat;
     group._pedMat = pedMat;
     group._rimMat = rimMat;
+    group._rim2Mat = rim2Mat;
     return { group: group, extras: extras, edges: edges };
   }
 
@@ -340,7 +364,7 @@
       obj.position.y = 0.18;
       edgesList = built.edges;
       built.extras.forEach(function (g) { disposables.push(g); });
-      disposables.push(obj._glassMat, obj._pedMat, obj._rimMat);
+      disposables.push(obj._glassMat, obj._pedMat, obj._rimMat, obj._rim2Mat);
     } else {
       var geo = buildShardGeo(THREE);
       paintVerticalGradient(THREE, geo, color);
