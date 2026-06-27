@@ -143,6 +143,7 @@
     var t = TT();
     var ex = document.getElementById("bp-ov"); if (ex) ex.remove();
     var ov = document.createElement("div"); ov.id = "bp-ov";
+    ov.style.zIndex = "5400"; // inline so backnav.js recognizes this as a closeable layer (hardware/edge back)
     ov.innerHTML =
       '<div class="bp-hd">' +
         '<button class="bp-ib" id="bp-back" type="button">' + ICO('<polyline points="15 18 9 12 15 6"/>', 20) + '</button>' +
@@ -439,6 +440,7 @@
   function openFairness(id) {
     var t = TT();
     var scrim = document.createElement("div"); scrim.className = "bp-scrim"; scrim.id = "bp-scrim";
+    scrim.style.zIndex = "5500"; // inline so backnav.js sees the sheet as the top layer and closes it first
     scrim.innerHTML = '<div class="bp-sheet"><div class="bp-grab"></div>' +
       '<div style="font-size:16px;font-weight:800;color:' + t.t1 + ';margin-bottom:4px">Provably fair</div>' +
       '<div style="font-size:12px;color:' + t.t3 + ';line-height:1.5;margin-bottom:12px">The result was committed before you played. Recompute the roll from the seeds below to confirm it was never altered.</div>' +

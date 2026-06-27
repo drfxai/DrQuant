@@ -342,6 +342,7 @@
 
     var scrim = document.createElement("div");
     scrim.className = "et-scrim"; scrim.id = "et-scrim";
+    scrim.style.zIndex = "5300"; // inline so backnav.js sees the sheet as the top layer and closes it first
     scrim.innerHTML =
       '<div class="et-sheet" id="et-sheet">' +
         '<div class="et-grab"></div>' +
@@ -893,6 +894,7 @@
     stopPolling();
 
     var ov = document.createElement("div"); ov.id = "et-ov";
+    ov.style.zIndex = "5200"; // inline so backnav.js recognizes this as a closeable layer (hardware/edge back)
     ov.innerHTML =
       '<div class="et-amb" style="top:-70px;right:-50px;width:230px;height:230px;background:radial-gradient(circle,' + hexA(t.pr, .5) + ',transparent 70%)"></div>' +
       '<div class="et-amb" style="bottom:-80px;left:-60px;width:230px;height:230px;background:radial-gradient(circle,' + GOLD_G + ',transparent 72%);opacity:.3"></div>' +
@@ -909,7 +911,11 @@
     document.body.appendChild(ov);
 
     ov.querySelector("#et-back").onclick = function () {
-      if (ET.view === "history") { closeSheet(); renderHome(ov); return; }
+      // Layer-aware back so the hardware/edge back gesture peels one layer at a
+      // time instead of jumping straight out of Easy Trade.
+      if (ET.view === "history" || ET.view === "ticket" || ET.view === "result") {
+        stopPolling(); closeSheet(); renderHome(ov); return;
+      }
       stopPolling(); closeSheet(); ov.remove();
       if (ET.openTicketId) startNavWatch();  // keep the nav tab honest while the screen is closed
     };
