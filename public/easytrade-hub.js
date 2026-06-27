@@ -1,27 +1,30 @@
 /* ===========================================================================
  * easytrade-hub.js - Easy Trade launcher hub for DrFX Quant
  * ---------------------------------------------------------------------------
- * Tapping the "Easy Trade" nav tab opens a hub that shows the Legendary League
- * art. Three clickable regions route onward:
+ * Tapping the "Easy Trade" nav tab opens a hub with three cards. Each card is
+ * its own image and routes onward:
  *
- *   - top hero panel    -> Leagues       (window.dqLeagues.open)
- *   - Baby Trader card  -> the original Easy Trade game (captured openEasyTrade)
- *   - Baby Pick card    -> Baby Pick      (window.dqBabyPick.open)
+ *   - Legendary League card -> Leagues      (window.dqLeagues.open)
+ *   - Baby Trader card      -> the original Easy Trade game (captured openEasyTrade)
+ *   - Baby Pick card        -> Baby Pick     (window.dqBabyPick.open)
  *
  * Load this LAST, right before </body> (after babypick.js), so every target
  * global exists when this file runs:
  *
  *   <script src="/easytrade-hub.js"></script>
  *
- * The art is served as a normal asset at /easytrade-hub.jpg (place the file in
- * public/). Targets are also resolved at click time, so order is forgiving.
+ * The three card images are served as normal assets from public/:
+ *   /easytrade-league.jpg   /easytrade-baby-trader.jpg   /easytrade-baby-pick.jpg
+ * Targets are also resolved at click time, so load order is forgiving.
  * =========================================================================== */
 (function () {
   "use strict";
   if (window.__dqEzHub) return;
   window.__dqEzHub = true;
 
-  var HUB_IMG = "/easytrade-hub.jpg";
+  var IMG_LEAGUE = "/easytrade-league.jpg";
+  var IMG_TRADER = "/easytrade-baby-trader.jpg";
+  var IMG_PICK   = "/easytrade-baby-pick.jpg";
 
   // Capture the original Easy Trade (Baby Trader) opener before we override it.
   var babyTraderOpen = (typeof window.openEasyTrade === "function") ? window.openEasyTrade : null;
@@ -47,28 +50,44 @@
     closeHub();
     var ov = document.createElement("div");
     ov.id = OV_ID;
-    ov.style.cssText = "position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(4,7,18,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)";
+    ov.style.cssText = "position:fixed;inset:0;z-index:5000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(4,7,18,.84);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px)";
     ov.innerHTML =
       '<style>' +
-        '.ezh-hot{position:absolute;cursor:pointer;border-radius:14px;transition:box-shadow .18s ease,transform .12s ease,background .18s ease}' +
-        '.ezh-hot:hover{box-shadow:0 0 0 2px rgba(124,199,255,.7),0 0 26px rgba(96,170,255,.5);background:rgba(124,199,255,.08)}' +
-        '.ezh-hot:active{transform:scale(.985)}' +
-        '@keyframes ezhIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}' +
+        '@keyframes ezhIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}' +
+        '.ezh-col{width:min(430px,94vw);max-height:94vh;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;gap:12px;padding:2px;animation:ezhIn .3s ease;-webkit-overflow-scrolling:touch}' +
+        '.ezh-col::-webkit-scrollbar{width:0;height:0}' +
+        '.ezh-card{position:relative;cursor:pointer;border-radius:18px;overflow:hidden;border:1px solid rgba(150,180,255,.18);box-shadow:0 10px 30px rgba(0,0,0,.45);transition:transform .16s ease,box-shadow .2s ease,border-color .2s ease;background:#0a1126}' +
+        '.ezh-card img{width:100%;height:auto;display:block;-webkit-user-select:none;user-select:none}' +
+        '.ezh-card:hover{transform:translateY(-3px)}' +
+        '.ezh-card:active{transform:translateY(-1px) scale(.992)}' +
+        '.ezh-league:hover{border-color:rgba(245,200,90,.85);box-shadow:0 16px 42px rgba(220,170,40,.42)}' +
+        '.ezh-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
+        '.ezh-row .ezh-card img{aspect-ratio:283 / 334;object-fit:cover;height:auto}' +
+        '.ezh-trader:hover{border-color:rgba(96,170,255,.9);box-shadow:0 16px 42px rgba(60,140,255,.44)}' +
+        '.ezh-pick:hover{border-color:rgba(255,170,60,.9);box-shadow:0 16px 42px rgba(255,150,40,.44)}' +
       '</style>' +
-      '<div style="position:relative;width:min(460px,92vw,92vh);animation:ezhIn .28s ease">' +
-        '<img src="' + HUB_IMG + '" alt="Easy Trade" draggable="false" style="width:100%;height:auto;display:block;border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.6);-webkit-user-select:none;user-select:none"/>' +
-        '<button id="ezh-x" type="button" title="Close" style="position:absolute;top:8px;right:8px;z-index:4;width:34px;height:34px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(6,10,24,.55);color:#dce8ff;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>' +
-        '<div id="ezh-league" class="ezh-hot" title="Enter the League" style="top:1.5%;left:1.5%;width:97%;height:59%"></div>' +
-        '<div id="ezh-baby" class="ezh-hot" title="Baby Trader" style="top:62.5%;left:1.5%;width:47%;height:36%"></div>' +
-        '<div id="ezh-pick" class="ezh-hot" title="Baby Pick" style="top:62.5%;right:1.5%;width:47%;height:36%"></div>' +
+      '<button id="ezh-x" type="button" title="Close" style="position:fixed;top:14px;right:14px;z-index:5001;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(6,10,24,.6);color:#dce8ff;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>' +
+      '<div class="ezh-col">' +
+        '<div id="ezh-league" class="ezh-card ezh-league" role="button" tabindex="0" title="Enter the League"><img src="' + IMG_LEAGUE + '" alt="Legendary League" draggable="false"/></div>' +
+        '<div class="ezh-row">' +
+          '<div id="ezh-baby" class="ezh-card ezh-trader" role="button" tabindex="0" title="Baby Trader"><img src="' + IMG_TRADER + '" alt="Baby Trader" draggable="false"/></div>' +
+          '<div id="ezh-pick" class="ezh-card ezh-pick" role="button" tabindex="0" title="Baby Pick"><img src="' + IMG_PICK + '" alt="Baby Pick" draggable="false"/></div>' +
+        '</div>' +
       '</div>';
     document.body.appendChild(ov);
     ov.addEventListener("click", function (e) { if (e.target === ov) closeHub(); });
     document.addEventListener("keydown", onKey);
+
+    function wire(id, fn) {
+      var el = ov.querySelector(id);
+      if (!el) return;
+      el.onclick = function () { route(fn); };
+      el.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); route(fn); } };
+    }
     var x = ov.querySelector("#ezh-x"); if (x) x.onclick = closeHub;
-    var L = ov.querySelector("#ezh-league"); if (L) L.onclick = function () { route(goLeagues); };
-    var B = ov.querySelector("#ezh-baby"); if (B) B.onclick = function () { route(goBabyTrader); };
-    var P = ov.querySelector("#ezh-pick"); if (P) P.onclick = function () { route(goBabyPick); };
+    wire("#ezh-league", goLeagues);
+    wire("#ezh-baby", goBabyTrader);
+    wire("#ezh-pick", goBabyPick);
   }
 
   window.dqEasyHub = { open: openHub };
