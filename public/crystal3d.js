@@ -1,5 +1,5 @@
 /* ============================================================================
- * crystal3d.js — DrFX Quant real-time 3D crystals (WebGL / Three.js)
+ * crystal3d.js — DrFX Quant STATIC 3D crystals (WebGL / Three.js)
  * ----------------------------------------------------------------------------
  * Self-contained SPA module. Loads as a plain <script> after index.html's main
  * script. It renders genuine 3D, lit, faceted ICE-BLUE crystals into any
@@ -8,10 +8,14 @@
  *   - the League Progress "gem"   (a tall faceted crystal shard)
  *   - the Premium Tier "crown"    (a fanned crystal tiara on a faceted pedestal)
  *
- * The look is tuned to match the approved reference art: bright ice-blue glass
- * with WHITE-HOT facet edges, deep-blue interior shadows, an emissive inner
- * glow, a procedural environment reflection (no external asset) and a soft
- * ground-glow pool beneath the model — i.e. lots of colour depth.
+ * The look matches the approved reference art: bright ice-blue glass with
+ * WHITE-HOT facet edges, deep-blue interior shadows, an emissive inner glow, a
+ * procedural environment reflection (no external asset) and a soft ground-glow
+ * pool beneath the model — lots of colour depth.
+ *
+ * STATIC by design: the scene is posed front-facing and rendered as a SINGLE
+ * FRAME. There is NO animation — no spin, no bob, no pulsing. The only time it
+ * re-renders is on a container resize (to stay crisp); otherwise it never moves.
  *
  * Public API (synchronous to call; rendering boots lazily):
  *
@@ -19,15 +23,15 @@
  *        kind:  "shard" | "crown",     // which model            (default "shard")
  *        color: "#7cc7ff",             // base crystal colour    (default blue)
  *        height: 150,                  // canvas px height       (default = el's)
- *        spin:  true,                  // slow auto-rotation     (default true)
  *        glow:  true                   // ground-glow pool       (default true)
  *     })  ->  returns a handle { destroy() }  (also tracked internally)
+ *     // NOTE: a `spin` option is accepted but IGNORED — the crystals are static.
  *
  *     window.dq3DCrystal.disposeAll()   // tear down every live instance + GL
  *
  * Safety: Three.js (r128) is lazy-loaded from cdnjs only on first mount.
- * Phone-safe: DPR capped, pauses off-screen / when tab hidden, fully disposes
- * geometry+material+env+GL on destroy. No localStorage / sessionStorage ever.
+ * Phone-safe: DPR capped, single frame (no RAF loop, no battery drain), fully
+ * disposes geometry+material+env+GL on destroy. No localStorage/sessionStorage.
  * Graceful fallback: a crisp static SVG crystal if WebGL/Three is unavailable.
  * ========================================================================== */
 (function () {
@@ -286,12 +290,11 @@
     return { group: group, extras: extras, edges: edges };
   }
 
-  // ── one live crystal instance ──────────────────────────────────────────────
+  // ── one live (STATIC) crystal instance ──────────────────────────────────────
   function makeInstance(el, opts) {
     var THREE = window.THREE;
     var kind = opts.kind || "shard";
     var color = opts.color || "#7cc7ff";
-    var spin = opts.spin !== false;
     var wantGlow = opts.glow !== false;
 
     var W = el.clientWidth || 120;
@@ -299,7 +302,10 @@
 
     var scene = new THREE.Scene();
     var camera = new THREE.PerspectiveCamera(36, W / H, 0.1, 100);
-    camera.position.set(0, 0.2, 6.6);
+    // Pose the camera slightly above and back so we look at the model head-on
+    // with a gentle downward tilt — matching the reference art.
+    camera.position.set(0, 0.55, 6.6);
+    camera.lookAt(0, 0.05, 0);
 
     var renderer;
     try {
@@ -321,23 +327,29 @@
     var disposables = [];   // geometries / textures / materials to free
     disposables.push(env);
 
-    var obj, edgesList = [], singleEdge = null, glassMat = null;
+    var obj, edgesList = [], singleEdge = null;
 
     if (kind === "crown") {
       var built = buildCrown(THREE, color, env);
       obj = built.group;
       obj.scale.set(0.92, 0.92, 0.92);
-      obj.position.y = 0.25;
+      // STATIC front-facing pose: face the camera, tilt forward a touch so the
+      // tops of the blades and the base facets are visible (as in the artwork).
+      obj.rotation.y = 0;
+      obj.rotation.x = 0.12;
+      obj.position.y = 0.18;
       edgesList = built.edges;
-      glassMat = obj._glassMat;
       built.extras.forEach(function (g) { disposables.push(g); });
       disposables.push(obj._glassMat, obj._pedMat, obj._rimMat);
     } else {
       var geo = buildShardGeo(THREE);
       paintVerticalGradient(THREE, geo, color);
-      glassMat = makeCrystalMaterial(THREE, color, env);
+      var glassMat = makeCrystalMaterial(THREE, color, env);
       obj = new THREE.Mesh(geo, glassMat);
-      obj.rotation.z = 0.05;
+      // STATIC pose: a slight lean like the league crystal in the reference.
+      obj.rotation.y = 0.42;
+      obj.rotation.z = 0.06;
+      obj.rotation.x = 0.05;
       singleEdge = edgeLines(THREE, geo, 0.6);
       obj.add(singleEdge);
       disposables.push(geo, glassMat);
@@ -373,40 +385,24 @@
     rim2.position.set(-5, 2, -2); scene.add(rim2);
     var fill = new THREE.DirectionalLight(new THREE.Color(color), 0.6);
     fill.position.set(0, -3, 4); scene.add(fill);
-    var core = new THREE.PointLight(new THREE.Color(lighten(color, 0.3)), 1.4, 14);
+    var core = new THREE.PointLight(new THREE.Color(lighten(color, 0.3)), 1.5, 14);
     core.position.set(0, 0.2, 0.5); scene.add(core);
 
-    // animation + visibility gating -------------------------------------------
-    var raf = 0, visible = true, alive = true, tPrev = performance.now();
-    function frame(now) {
-      if (!alive) return;
-      raf = requestAnimationFrame(frame);
-      if (!visible) return;
-      var dt = Math.min(0.05, (now - tPrev) / 1000); tPrev = now;
-      if (spin) obj.rotation.y += dt * 0.55;
-      var s = Math.sin(now / 950);
-      obj.position.y = (kind === "crown" ? 0.25 : 0) + s * 0.05;
-      core.intensity = 1.15 + (s + 1) * 0.35;
-      if (glow) glow.material.opacity = 0.75 + (s + 1) * 0.1;
-      renderer.render(scene, camera);
-    }
-    raf = requestAnimationFrame(frame);
+    // ── render ONE static frame (no animation loop at all) ────────────────────
+    var alive = true;
+    function renderOnce() { if (alive) renderer.render(scene, camera); }
+    // render now, and once more on the next tick in case fonts/layout shift the
+    // container size right after mount (keeps the first paint crisp). Still no
+    // ongoing animation — these are one-off draws.
+    renderOnce();
+    requestAnimationFrame(renderOnce);
 
-    var io = null;
-    if ("IntersectionObserver" in window) {
-      io = new IntersectionObserver(function (es) {
-        visible = es[0] && es[0].isIntersecting;
-        if (visible) tPrev = performance.now();
-      }, { threshold: 0.05 });
-      io.observe(el);
-    }
-    function onVis() { if (document.hidden) visible = false; else { visible = true; tPrev = performance.now(); } }
-    document.addEventListener("visibilitychange", onVis);
-
+    // re-render only when the container is resized (stay crisp), never on a timer
     function onResize() {
       var w = el.clientWidth || W, h = opts.height || el.clientHeight || H;
       camera.aspect = w / h; camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      renderOnce();
     }
     var ro = null;
     if ("ResizeObserver" in window) { ro = new ResizeObserver(onResize); ro.observe(el); }
@@ -414,10 +410,7 @@
     function destroy() {
       if (!alive) return;
       alive = false;
-      cancelAnimationFrame(raf);
-      if (io) io.disconnect();
       if (ro) ro.disconnect();
-      document.removeEventListener("visibilitychange", onVis);
       try { scene.remove(obj); } catch (e) { }
       // dispose every edge line
       try {
