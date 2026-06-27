@@ -51,6 +51,52 @@
   var RED = "#ef4444", RED_G = "rgba(239,68,68,.5)";
   var GOLD = "#f5b54a", GOLD_G = "rgba(245,181,74,.45)";
 
+  // ── self-managed BACK handling ─────────────────────────────────────────────
+  // The hardware/edge back gesture on Android fires `popstate`. We push one
+  // sentinel history entry while Easy Trade is open and intercept popstate to
+  // peel one layer at a time (sheet → ticket/result/history → home → close the
+  // overlay) instead of letting the browser unwind its history and exit the app.
+  // This is independent of backnav.js so it works even if the overlay isn't
+  // recognized there. Everything is wrapped in try/catch and guards a
+  // self-initiated history.back() so the listener ignores our own rewind.
+  var BACK = { armed: false, selfPop: false, bound: false, lastBtn: 0 };
+  function backArm() {
+    try { if (!BACK.armed) { history.pushState({ etBack: 1 }, ""); BACK.armed = true; } } catch (e) {}
+  }
+  function backDisarm() {
+    // Consume our sentinel if it's still the current entry (overlay closed by a
+    // button/tap rather than by the back gesture).
+    try { if (BACK.armed) { BACK.armed = false; BACK.selfPop = true; history.back(); } } catch (e) { BACK.selfPop = false; }
+  }
+  function backHandler() {
+    if (BACK.selfPop) { BACK.selfPop = false; return; }   // our own rewind — ignore
+    if (!document.getElementById("et-ov")) { BACK.armed = false; return; }
+    // If backnav.js already handled this same popstate by clicking #et-back
+    // (which peels a layer), don't peel a second time — just re-arm.
+    if (Date.now() - BACK.lastBtn < 60) { if (document.getElementById("et-ov")) backArm(); else BACK.armed = false; return; }
+    BACK.armed = false;            // the sentinel we pushed was just consumed
+    var handled = false;
+    try {
+      // 1) an open sheet (bet / rules) closes first
+      if (document.getElementById("et-scrim")) { closeSheet(); handled = true; }
+      // 2) a sub-view returns to the house grid
+      else if (ET.view === "history" || ET.view === "ticket" || ET.view === "result") {
+        stopPolling(); renderHome(document.getElementById("et-ov")); handled = true;
+      }
+    } catch (e) { handled = false; }
+    if (handled) { backArm(); return; }   // still inside Easy Trade → re-arm
+    // 3) nothing left to peel → close the whole overlay
+    try {
+      stopPolling(); closeSheet();
+      var ov = document.getElementById("et-ov"); if (ov) ov.remove();
+      if (ET.openTicketId) startNavWatch();
+    } catch (e) {}
+  }
+  function backBind() {
+    if (BACK.bound) return;
+    try { window.addEventListener("popstate", backHandler); BACK.bound = true; } catch (e) {}
+  }
+
   // fallback house art (used only until /houses responds; ids match the seed)
   var FALLBACK_HOUSES = [
     { id: "godmode", name: "DrFX GOD MODE", tag: "Quad-consensus", accent: "#1c84ff", products: ["BTCUSDT", "ETHUSDT", "XAUUSD"], live: 0, online: 61, win: 83 },
@@ -909,14 +955,19 @@
       '</div>' +
       '<div class="et-body" id="et-body"></div>';
     document.body.appendChild(ov);
+    backBind(); backArm();   // intercept the Android/edge back gesture while open
 
     ov.querySelector("#et-back").onclick = function () {
-      // Layer-aware back so the hardware/edge back gesture peels one layer at a
-      // time instead of jumping straight out of Easy Trade.
+      BACK.lastBtn = Date.now();   // mark so the popstate handler won't double-peel
+      // Layer-aware back so the on-screen back button peels one layer at a time,
+      // mirroring the hardware back gesture.
+      if (document.getElementById("et-scrim")) { closeSheet(); return; }
       if (ET.view === "history" || ET.view === "ticket" || ET.view === "result") {
-        stopPolling(); closeSheet(); renderHome(ov); return;
+        stopPolling(); renderHome(ov); return;
       }
-      stopPolling(); closeSheet(); ov.remove();
+      stopPolling(); closeSheet();
+      backDisarm();            // consume the history sentinel we pushed on open
+      ov.remove();
       if (ET.openTicketId) startNavWatch();  // keep the nav tab honest while the screen is closed
     };
     ov.querySelector("#et-info").onclick = openRules;

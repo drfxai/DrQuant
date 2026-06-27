@@ -41,6 +41,29 @@
 
   var GREEN = "#34d27a", GREENG = "rgba(52,210,122,.5)", RED = "#ef4444", REDG = "rgba(239,68,68,.5)", GOLD = "#f5b54a";
 
+  // ── self-managed BACK handling (independent of backnav.js) ─────────────────
+  // Push one sentinel history entry while Baby Pick is open and intercept the
+  // Android/edge back gesture (popstate) to peel a layer at a time (fairness
+  // sheet → game → hub → close) instead of letting the browser exit the app.
+  var BK = { armed: false, selfPop: false, bound: false, lastBtn: 0 };
+  function bkArm() { try { if (!BK.armed) { history.pushState({ bpBack: 1 }, ""); BK.armed = true; } } catch (e) {} }
+  function bkDisarm() { try { if (BK.armed) { BK.armed = false; BK.selfPop = true; history.back(); } } catch (e) { BK.selfPop = false; } }
+  function bkHandler() {
+    if (BK.selfPop) { BK.selfPop = false; return; }            // our own rewind
+    if (!document.getElementById("bp-ov")) { BK.armed = false; return; }
+    if (Date.now() - BK.lastBtn < 60) { if (document.getElementById("bp-ov")) bkArm(); else BK.armed = false; return; } // backnav already handled
+    BK.armed = false;
+    var handled = false;
+    try {
+      var sheet = document.getElementById("bp-scrim");
+      if (sheet) { sheet.remove(); handled = true; }            // 1) fairness sheet
+      else if (BP.view !== "hub") { stopGameTimers(); renderHub(); handled = true; } // 2) game → hub
+    } catch (e) { handled = false; }
+    if (handled) { bkArm(); return; }
+    try { close(); } catch (e) {}                               // 3) hub → close overlay
+  }
+  function bkBind() { if (BK.bound) return; try { window.addEventListener("popstate", bkHandler); BK.bound = true; } catch (e) {} }
+
   var GAMES = [
     { id: "quick", name: "Quick Signal", sub: "Predict UP / DOWN · 60s", accent: "#1c84ff", live: true,
       icon: '<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>' },
@@ -155,8 +178,13 @@
       '</div>' +
       '<div class="bp-body" id="bp-body"></div>';
     document.body.appendChild(ov);
-    ov.querySelector("#bp-close").onclick = close;
-    ov.querySelector("#bp-back").onclick = function () { if (BP.view === "hub") close(); else { stopGameTimers(); renderHub(); } };
+    bkBind(); bkArm();   // intercept the Android/edge back gesture while open
+    ov.querySelector("#bp-close").onclick = function () { BK.lastBtn = Date.now(); bkDisarm(); close(); };
+    ov.querySelector("#bp-back").onclick = function () {
+      BK.lastBtn = Date.now();
+      if (document.getElementById("bp-scrim")) { document.getElementById("bp-scrim").remove(); return; }
+      if (BP.view === "hub") { bkDisarm(); close(); } else { stopGameTimers(); renderHub(); }
+    };
     return ov;
   }
   function setHead(title, sub) { var a = document.getElementById("bp-title"), b = document.getElementById("bp-sub"); if (a) a.textContent = title; if (b) b.textContent = sub; }
