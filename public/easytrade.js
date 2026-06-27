@@ -51,46 +51,57 @@
   var RED = "#ef4444", RED_G = "rgba(239,68,68,.5)";
   var GOLD = "#f5b54a", GOLD_G = "rgba(245,181,74,.45)";
 
-  // ── self-managed BACK handling ─────────────────────────────────────────────
-  // The hardware/edge back gesture on Android fires `popstate`. We push one
-  // sentinel history entry while Easy Trade is open and intercept popstate to
-  // peel one layer at a time (sheet → ticket/result/history → home → close the
-  // overlay) instead of letting the browser unwind its history and exit the app.
-  // This is independent of backnav.js so it works even if the overlay isn't
-  // recognized there. Everything is wrapped in try/catch and guards a
-  // self-initiated history.back() so the listener ignores our own rewind.
-  var BACK = { armed: false, selfPop: false, bound: false, lastBtn: 0 };
-  function backArm() {
-    try { if (!BACK.armed) { history.pushState({ etBack: 1 }, ""); BACK.armed = true; } } catch (e) {}
-  }
-  function backDisarm() {
-    // Consume our sentinel if it's still the current entry (overlay closed by a
-    // button/tap rather than by the back gesture).
-    try { if (BACK.armed) { BACK.armed = false; BACK.selfPop = true; history.back(); } } catch (e) { BACK.selfPop = false; }
-  }
-  function backHandler() {
-    if (BACK.selfPop) { BACK.selfPop = false; return; }   // our own rewind — ignore
-    if (!document.getElementById("et-ov")) { BACK.armed = false; return; }
-    // If backnav.js already handled this same popstate by clicking #et-back
-    // (which peels a layer), don't peel a second time — just re-arm.
-    if (Date.now() - BACK.lastBtn < 60) { if (document.getElementById("et-ov")) backArm(); else BACK.armed = false; return; }
-    BACK.armed = false;            // the sentinel we pushed was just consumed
-    var handled = false;
+  // ── self-managed BACK handling (depth-counted) ─────────────────────────────
+  // The hardware/edge back gesture fires `popstate`. We keep ONE pushed history
+  // entry per currently-open layer, so being N layers deep takes N back presses
+  // to leave — the browser only unwinds real history (exiting the app) once every
+  // layer has been peeled. backDepth() reports how many layers are open right now
+  // (overlay = 1, + open sheet, + a sub-view above the home grid); backSync()
+  // pushes/consumes sentinels so the held count matches. Independent of
+  // backnav.js; wrapped in try/catch; a self-initiated history.back() is flagged
+  // so the listener ignores our own rewind.
+  var BACK = { depth: 0, pending: 0, bound: false, inHandler: false };
+  function backDepth() {
     try {
-      // 1) an open sheet (bet / rules) closes first
-      if (document.getElementById("et-scrim")) { closeSheet(); handled = true; }
-      // 2) a sub-view returns to the house grid
-      else if (ET.view === "history" || ET.view === "ticket" || ET.view === "result") {
-        stopPolling(); renderHome(document.getElementById("et-ov")); handled = true;
+      if (!document.getElementById("et-ov")) return 0;
+      var n = 1;                                            // the overlay itself
+      if (document.getElementById("et-scrim")) n++;          // an open sheet (bet / rules)
+      if (ET.view === "history" || ET.view === "ticket" || ET.view === "result") n++; // a sub-view above home
+      return n;
+    } catch (e) { return 0; }
+  }
+  // Make the number of held history sentinels equal the number of open layers.
+  function backSync() {
+    try {
+      var want = backDepth();
+      while (BACK.depth < want) { history.pushState({ etBack: BACK.depth + 1 }, ""); BACK.depth++; }
+      while (BACK.depth > want) { BACK.pending++; BACK.depth--; history.back(); }
+    } catch (e) {}
+  }
+  function backPeelOne() {
+    // Close exactly one layer, top-most first. Returns nothing; backSync()
+    // afterwards reconciles the held sentinel count to whatever is left open.
+    try {
+      if (document.getElementById("et-scrim")) { closeSheet(); return; }      // 1) sheet
+      if (ET.view === "history" || ET.view === "ticket" || ET.view === "result") {
+        stopPolling(); renderHome(document.getElementById("et-ov")); return;  // 2) sub-view → home
       }
-    } catch (e) { handled = false; }
-    if (handled) { backArm(); return; }   // still inside Easy Trade → re-arm
-    // 3) nothing left to peel → close the whole overlay
-    try {
-      stopPolling(); closeSheet();
-      var ov = document.getElementById("et-ov"); if (ov) ov.remove();
+      stopPolling();
+      var ov = document.getElementById("et-ov"); if (ov) ov.remove();         // 3) home → close overlay
       if (ET.openTicketId) startNavWatch();
     } catch (e) {}
+  }
+  function backHandler() {
+    if (BACK.pending > 0) { BACK.pending--; return; }   // our own history.back() — ignore
+    // If Baby Pick is open on top of Easy Trade, it owns the back gesture; its
+    // own popstate handler will peel its layers. Don't double-handle here.
+    if (document.getElementById("bp-ov")) return;
+    if (BACK.depth <= 0) return;
+    BACK.inHandler = true;
+    BACK.depth--;                                       // the sentinel just got consumed by the gesture
+    backPeelOne();                                      // close one layer
+    BACK.inHandler = false;
+    backSync();                                         // re-arm so deeper layers stay covered
   }
   function backBind() {
     if (BACK.bound) return;
@@ -377,6 +388,7 @@
         else renderResult(ov, tk);
       }).catch(function () {});
     };
+    if (!BACK.inHandler) backSync();   // view changed → keep held history entries == open layers
   }
 
   // ── BET sheet ───────────────────────────────────────────────────────────────
@@ -415,6 +427,7 @@
         '<button class="et-cta" id="et-place" type="button" disabled style="background:linear-gradient(135deg,' + t.pr + ',' + hexA(t.pr, .7) + ');box-shadow:0 8px 26px ' + hexA(t.pr, .4) + '">Choose TP or SL</button>' +
       '</div>';
     document.body.appendChild(scrim);
+    backSync();   // a sheet just opened → hold one more history entry for it
 
     var $ = function (id) { return scrim.querySelector(id); };
     var sv = $("#et-sv"), sl = $("#et-sl"), num = $("#et-num"), payout = $("#et-payout"), place = $("#et-place"), warn = $("#et-warn");
@@ -476,7 +489,7 @@
     };
     refresh();
   }
-  function closeSheet() { var s = document.getElementById("et-scrim"); if (s) s.remove(); }
+  function closeSheet() { var s = document.getElementById("et-scrim"); if (s) s.remove(); if (!BACK.inHandler) backSync(); }
 
   // ── polling ──────────────────────────────────────────────────────────────
   function stopPolling() { if (ET.poll) { clearInterval(ET.poll); ET.poll = null; } }
@@ -918,6 +931,7 @@
         '<button class="et-cta" id="et-rx" type="button" style="background:linear-gradient(135deg,' + t.pr + ',' + hexA(t.pr, .7) + ')">Got it</button>' +
       '</div>';
     document.body.appendChild(scrim);
+    backSync();   // rules sheet opened → hold one more history entry for it
     scrim.querySelector("#et-rx").onclick = closeSheet;
     scrim.onclick = function (e) { if (e.target === scrim) closeSheet(); };
   }
@@ -955,20 +969,12 @@
       '</div>' +
       '<div class="et-body" id="et-body"></div>';
     document.body.appendChild(ov);
-    backBind(); backArm();   // intercept the Android/edge back gesture while open
+    backBind(); backSync();   // intercept the Android/edge back gesture while open
 
     ov.querySelector("#et-back").onclick = function () {
-      BACK.lastBtn = Date.now();   // mark so the popstate handler won't double-peel
-      // Layer-aware back so the on-screen back button peels one layer at a time,
-      // mirroring the hardware back gesture.
-      if (document.getElementById("et-scrim")) { closeSheet(); return; }
-      if (ET.view === "history" || ET.view === "ticket" || ET.view === "result") {
-        stopPolling(); renderHome(ov); return;
-      }
-      stopPolling(); closeSheet();
-      backDisarm();            // consume the history sentinel we pushed on open
-      ov.remove();
-      if (ET.openTicketId) startNavWatch();  // keep the nav tab honest while the screen is closed
+      // Same peel-one-then-resync flow the gesture uses, so the on-screen back
+      // button and the hardware back stay perfectly in step at any depth.
+      backPeelOne(); backSync();
     };
     ov.querySelector("#et-info").onclick = openRules;
     ov.querySelector("#et-hist").onclick = function () { renderHistory(ov); };

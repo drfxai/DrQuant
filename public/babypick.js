@@ -41,28 +41,52 @@
 
   var GREEN = "#34d27a", GREENG = "rgba(52,210,122,.5)", RED = "#ef4444", REDG = "rgba(239,68,68,.5)", GOLD = "#f5b54a";
 
-  // ── self-managed BACK handling (independent of backnav.js) ─────────────────
-  // Push one sentinel history entry while Baby Pick is open and intercept the
-  // Android/edge back gesture (popstate) to peel a layer at a time (fairness
-  // sheet → game → hub → close) instead of letting the browser exit the app.
-  var BK = { armed: false, selfPop: false, bound: false, lastBtn: 0 };
-  function bkArm() { try { if (!BK.armed) { history.pushState({ bpBack: 1 }, ""); BK.armed = true; } } catch (e) {} }
-  function bkDisarm() { try { if (BK.armed) { BK.armed = false; BK.selfPop = true; history.back(); } } catch (e) { BK.selfPop = false; } }
-  function bkHandler() {
-    if (BK.selfPop) { BK.selfPop = false; return; }            // our own rewind
-    if (!document.getElementById("bp-ov")) { BK.armed = false; return; }
-    if (Date.now() - BK.lastBtn < 60) { if (document.getElementById("bp-ov")) bkArm(); else BK.armed = false; return; } // backnav already handled
-    BK.armed = false;
-    var handled = false;
+  // ── self-managed BACK handling (depth-counted, independent of backnav.js) ────
+  // We keep ONE pushed history entry per currently-open layer, so being N layers
+  // deep takes N back presses to leave — the browser only unwinds real history
+  // (exiting the app) once every layer is peeled. bkDepth() = open layer count
+  // (overlay = 1, + fairness sheet, + a game sub-view above the hub); bkSync()
+  // pushes/consumes sentinels so the held count matches. A self-initiated
+  // history.back() is flagged so the listener ignores our own rewind.
+  var BK = { depth: 0, pending: 0, bound: false, inHandler: false };
+  function bkDepth() {
+    try {
+      if (!document.getElementById("bp-ov")) return 0;
+      var n = 1;                                          // the overlay itself
+      if (document.getElementById("bp-scrim")) n++;        // an open sheet (fairness)
+      if (BP.view !== "hub") n++;                          // a game sub-view above the hub
+      return n;
+    } catch (e) { return 0; }
+  }
+  function bkSync() {
+    try {
+      var want = bkDepth();
+      while (BK.depth < want) { history.pushState({ bpBack: BK.depth + 1 }, ""); BK.depth++; }
+      while (BK.depth > want) { BK.pending++; BK.depth--; history.back(); }
+    } catch (e) {}
+  }
+  function bkPeelOne() {
+    // Close exactly one layer, top-most first; bkSync() afterwards reconciles.
     try {
       var sheet = document.getElementById("bp-scrim");
-      if (sheet) { sheet.remove(); handled = true; }            // 1) fairness sheet
-      else if (BP.view !== "hub") { stopGameTimers(); renderHub(); handled = true; } // 2) game → hub
-    } catch (e) { handled = false; }
-    if (handled) { bkArm(); return; }
-    try { close(); } catch (e) {}                               // 3) hub → close overlay
+      if (sheet) { sheet.remove(); return; }              // 1) fairness sheet
+      if (BP.view !== "hub") { stopGameTimers(); renderHub(); return; } // 2) sub-view → hub
+      close();                                            // 3) hub → close overlay
+    } catch (e) {}
+  }
+  function bkHandler() {
+    if (BK.pending > 0) { BK.pending--; return; }         // our own history.back() — ignore
+    if (BK.depth <= 0) return;
+    BK.inHandler = true;
+    BK.depth--;                                           // the sentinel just got consumed
+    bkPeelOne();                                          // close one layer
+    BK.inHandler = false;
+    bkSync();                                             // re-arm so deeper layers stay covered
   }
   function bkBind() { if (BK.bound) return; try { window.addEventListener("popstate", bkHandler); BK.bound = true; } catch (e) {} }
+  // Close the whole overlay from the X button: tear everything down, then sync
+  // (overlay gone → bkDepth()==0 → every held sentinel is consumed cleanly).
+  function bkPeelOneToClose() { try { var s = document.getElementById("bp-scrim"); if (s) s.remove(); close(); bkSync(); } catch (e) {} }
 
   var GAMES = [
     { id: "quick", name: "Quick Signal", sub: "Predict UP / DOWN · 60s", accent: "#1c84ff", live: true,
@@ -178,13 +202,9 @@
       '</div>' +
       '<div class="bp-body" id="bp-body"></div>';
     document.body.appendChild(ov);
-    bkBind(); bkArm();   // intercept the Android/edge back gesture while open
-    ov.querySelector("#bp-close").onclick = function () { BK.lastBtn = Date.now(); bkDisarm(); close(); };
-    ov.querySelector("#bp-back").onclick = function () {
-      BK.lastBtn = Date.now();
-      if (document.getElementById("bp-scrim")) { document.getElementById("bp-scrim").remove(); return; }
-      if (BP.view === "hub") { bkDisarm(); close(); } else { stopGameTimers(); renderHub(); }
-    };
+    bkBind(); bkSync();   // intercept the Android/edge back gesture while open
+    ov.querySelector("#bp-close").onclick = function () { bkPeelOneToClose(); };
+    ov.querySelector("#bp-back").onclick = function () { bkPeelOne(); bkSync(); };
     return ov;
   }
   function setHead(title, sub) { var a = document.getElementById("bp-title"), b = document.getElementById("bp-sub"); if (a) a.textContent = title; if (b) b.textContent = sub; }
@@ -239,6 +259,7 @@
         toast("Coming soon", (GAMES.filter(function (x) { return x.id === g; })[0] || {}).name + " is on the way.");
       };
     });
+    if (!BK.inHandler) bkSync();   // view changed → keep held history entries == open layers
   }
 
   // ── QUICK SIGNAL — setup ─────────────────────────────────────────────────────
@@ -354,6 +375,7 @@
         });
     };
     setSymUI(); refresh();
+    if (!BK.inHandler) bkSync();   // entered Quick setup sub-view → resync depth
   }
 
   // ── QUICK SIGNAL — live 60s ──────────────────────────────────────────────────
@@ -475,8 +497,9 @@
       '<div id="bp-fair-body" style="font-size:12px;color:' + t.t2 + '">Loading…</div>' +
       '<button id="bp-fair-x" type="button" class="bp-cta" style="background:' + t.btn + ';color:' + t.t1 + ';margin-top:16px">Close</button></div>';
     document.body.appendChild(scrim);
-    scrim.onclick = function (e) { if (e.target === scrim) scrim.remove(); };
-    scrim.querySelector("#bp-fair-x").onclick = function () { scrim.remove(); };
+    bkSync();   // fairness sheet opened → hold one more history entry for it
+    scrim.onclick = function (e) { if (e.target === scrim) { scrim.remove(); if (!BK.inHandler) bkSync(); } };
+    scrim.querySelector("#bp-fair-x").onclick = function () { scrim.remove(); if (!BK.inHandler) bkSync(); };
     function row(k, v) { return '<div style="display:flex;flex-direction:column;gap:2px;padding:9px 0;border-top:1px solid ' + t.bd + '"><span style="font-size:10px;letter-spacing:.6px;text-transform:uppercase;color:' + t.t4 + ';font-weight:800">' + k + '</span><span style="font-family:ui-monospace,monospace;font-size:11.5px;color:' + t.t1 + ';word-break:break-all">' + ESC(v) + '</span></div>'; }
     API("/babypick/quick/" + encodeURIComponent(id) + "/fairness").then(function (f) {
       var el = scrim.querySelector("#bp-fair-body"); if (!el) return;
