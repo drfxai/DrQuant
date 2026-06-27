@@ -276,14 +276,36 @@
           '<span style="min-width:0"><span style="display:block;font-size:13px;font-weight:800;color:' + t.t1 + '">Leagues</span><span style="display:block;font-size:10px;color:' + t.t3 + '">Ascension</span></span>' +
         '</button>' +
       '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin:6px 2px 14px;position:relative;z-index:1">' +
+        '<span style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:' + hexA(t.pr, .16) + ';color:' + t.pr + ';flex-shrink:0">' + ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 18) + '</span>' +
+        '<div style="line-height:1.1"><div style="font-size:16px;font-weight:800;color:' + t.t1 + '">Baby Trader</div><div style="font-size:11px;color:' + t.t3 + '">Trade smart. Grow fast.</div></div>' +
+      '</div>' +
       '<div class="et-h">' + ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 16) + 'Choose a signal house</div>' +
       '<div style="font-size:11.5px;color:' + t.t4 + ';margin:-6px 2px 13px;line-height:1.5">Pick a house, stake QNTM, then predict whether its next signal hits its <b style="color:' + GREEN + '">target</b> or its <b style="color:' + RED + '">stop</b>. Guess right, win double.</div>' +
       '<div class="et-grid">' + grid + '</div>' +
-      '<div style="text-align:center;margin-top:22px;font-size:10.5px;color:' + t.t4 + ';line-height:1.6">Outcomes are decided by each house\u2019s live TradingView indicator.<br>Predict responsibly \u2014 you can lose your entire stake.</div>';
+      '<div style="text-align:center;margin-top:22px;font-size:10.5px;color:' + t.t4 + ';line-height:1.6">Outcomes are decided by each house\u2019s live TradingView indicator.<br>Predict responsibly \u2014 you can lose your entire stake.</div>' +
+      '<div style="height:1px;background:linear-gradient(90deg,transparent,' + t.bd + ',transparent);margin:26px 0 6px"></div>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin:16px 2px 12px;position:relative;z-index:1">' +
+        '<span style="width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7c5cff,#1c84ff);color:#fff;flex-shrink:0">' + ICO('<rect x="2" y="6" width="20" height="12" rx="3"/><circle cx="8" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none"/>', 18) + '</span>' +
+        '<div style="flex:1;line-height:1.1"><div style="font-size:16px;font-weight:800;color:' + t.t1 + '">Baby Pick</div><div style="font-size:11px;color:' + t.t3 + '">Play. Predict. Win big.</div></div>' +
+        '<span style="font-size:9px;font-weight:800;letter-spacing:.6px;color:' + GREEN + ';background:' + hexA(GREEN, .14) + ';border:1px solid ' + hexA(GREEN, .4) + ';border-radius:6px;padding:3px 8px;display:inline-flex;align-items:center;gap:4px"><span style="width:5px;height:5px;border-radius:50%;background:' + GREEN + '"></span>NEW</span>' +
+      '</div>' +
+      '<button id="et-go-pick" type="button" style="width:100%;position:relative;overflow:hidden;border-radius:18px;padding:16px;cursor:pointer;font-family:inherit;text-align:left;border:1px solid ' + hexA(t.pr, .4) + ';background:linear-gradient(135deg,' + hexA(t.pr, .16) + ',' + hexA('#7c5cff', .08) + ');z-index:1">' +
+        '<div style="position:absolute;top:-40px;right:-30px;width:140px;height:140px;border-radius:50%;background:radial-gradient(circle,' + hexA(t.pr, .3) + ',transparent 70%)"></div>' +
+        '<div style="display:flex;align-items:center;gap:13px;position:relative">' +
+          '<div style="width:50px;height:50px;border-radius:14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1c84ff,#7c5cff);color:#fff;flex-shrink:0;box-shadow:0 8px 22px ' + hexA(t.pr, .5) + '">' + ICO('<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>', 24) + '</div>' +
+          '<div style="flex:1;min-width:0"><div style="font-size:16px;font-weight:800;color:' + t.t1 + '">Quick Signal + more</div><div style="font-size:12px;color:' + t.t2 + ';margin-top:2px">Predict <b style="color:' + GREEN + '">UP</b>/<b style="color:' + RED + '">DOWN</b> in 60s, spin the Wheel of Fortune, and more.</div></div>' +
+          '<span style="color:' + t.pr + ';flex-shrink:0">' + ICO('<polyline points="9 18 15 12 9 6"/>', 22) + '</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:7px;margin-top:13px;position:relative">' +
+          [['#1c84ff', 'Quick Signal'], ['#f5b54a', 'Wheel'], ['#a78bfa', 'Dice'], ['#ef4444', 'Crash']].map(function (g) { return '<span style="flex:1;text-align:center;font-size:10px;font-weight:700;color:' + t.t3 + ';background:' + hexA(g[0], .12) + ';border:1px solid ' + hexA(g[0], .3) + ';border-radius:8px;padding:6px 4px">' + g[1] + '</span>'; }).join("") +
+        '</div>' +
+      '</button>';
 
     body.querySelectorAll(".et-house").forEach(function (c) { c.onclick = function () { openBetSheet(ov, houseById(c.dataset.house)); }; });
     var _goTop = body.querySelector("#et-go-top"); if (_goTop) _goTop.onclick = function () { if (window.dqEtLeaderboard) dqEtLeaderboard.open(); };
     var _goLg = body.querySelector("#et-go-leagues"); if (_goLg) _goLg.onclick = function () { if (window.dqLeagues) dqLeagues.open(); };
+    var _goPick = body.querySelector("#et-go-pick"); if (_goPick) _goPick.onclick = function () { if (window.dqBabyPick) dqBabyPick.open(); };
     var resume = body.querySelector("#et-resume");
     if (resume) resume.onclick = function () {
       API("/easytrade/ticket/" + encodeURIComponent(ET.openTicketId)).then(function (r) {

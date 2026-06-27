@@ -13,6 +13,7 @@ const scoreboard = require("./services/signal-scoreboard");
 const priceBinance = require("./services/price-binance");
 const easytrade = require("./services/easytrade");
 const easytradeAutopilot = require("./services/easytrade-autopilot");
+const babypick = require("./services/babypick");
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -119,6 +120,7 @@ app.use("/api/live", require("./routes/live"));   // live-trading sessions + ICE
 app.use("/api/market", require("./routes/market")); // Market: Explore feed, creators/companies, products, follows/likes
 app.use("/api/signals", require("./routes/signals")); // read-only signals feed (published table + derived auto-detected)
 app.use("/api/easytrade", require("./routes/easytrade")); // Easy Trade (Baby Trader): wallet-connected prediction game + dedicated webhook
+try { app.use("/api/babypick", require("./routes/babypick")); } catch (e) { console.error("Baby Pick route disabled:", e.message); } // Baby Pick: games half of Easy Trade (provably-fair Quick Signal)
 app.use("/api/translate", require("./routes/translate")); // chat translation (provider-agnostic; degrades to no-op if unconfigured)
 app.use("/api/wizard", require("./routes/wizard")); // wizard ("guard") panel: scoped moderation over regular users only
 try { app.use("/api/leagues", require("./routes/leagues")); } catch (e) { console.error("Leagues route disabled:", e.message); } // QNTM Leagues + League Unlock Ritual
@@ -319,6 +321,18 @@ function startSignalScoreboard() {
         }
       })
       .catch((e) => console.error("[easytrade] init failed:", e.message));
+    // ── Baby Pick keeper ──
+    // Settle matured Quick Signal rounds so winners are paid even if they closed
+    // the app mid-round. Lazy settlement (on /me + poll) already covers active
+    // players; this is the backstop. ~15s after boot, then every 30s.
+    babypick.init()
+      .then(() => {
+        const sweepBp = () => babypick.sweepQuick(200).catch((e) => console.error("[babypick] sweep:", e.message));
+        setTimeout(sweepBp, 15 * 1000);
+        setInterval(sweepBp, 30 * 1000);
+        console.log("[babypick] Quick Signal keeper ON (matured rounds settle every 30s)");
+      })
+      .catch((e) => console.error("[babypick] init failed:", e.message));
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);
       console.log(`  ║  📈 DrFX Quant v5.2 on port ${PORT}         ║`);
