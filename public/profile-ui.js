@@ -1,36 +1,36 @@
 /* ============================================================================
- * profile-ui.js — DrFX Quant Profile (spec rebuild — VISUAL PREVIEW PASS)
+ * profile-ui.js — DrFX Quant Profile (high-fidelity 3D, LIVE DATA)
  * ----------------------------------------------------------------------------
  * Self-contained SPA module. Loads as a plain <script> AFTER index.html's main
  * script (and after leagues-ui.js / idcard.js). It REPLACES window.openProfile
- * with a faithful rebuild of the Profile popup that matches the written spec
- * exactly, using flat SVG art (NO 3D / WebGL) for the crown and league crystal.
+ * with the approved 3D profile and wires every field to its real source:
  *
- * ⚠ THIS PASS IS A VISUAL PREVIEW. Per the request, the layout is built first
- *   with the spec's SAMPLE VALUES hard-coded (QNTM "1,190.00", name "DrFX",
- *   "0 / 1000 XP", "12 / 7 / 58%", UID "QNTM-7X9F-2025", etc.). The live-data
- *   reads are intentionally deferred and centralised in the SAMPLE object +
- *   the (commented) wireLiveData() stub at the bottom. After the design is
- *   approved, flip USE_LIVE_DATA to true (and fill in wireLiveData) to connect:
  *       • QNTM Balance  ← GET /api/qntm/wallets/me  (wallet.available_balance)
  *       • Name/@user/avatar/bio/email/role ← S.user.*
  *       • League / XP   ← GET /api/leagues/me
  *       • Account stats ← GET /api/easytrade/leaderboard?sort=xp  (.me)
  *       • UID / since   ← deterministic from S.user (mirrors idcard.js)
+ *       • Save          → PUT /api/auth/profile  (button keeps id "pp-save")
+ *       • Avatar upload → POST /api/upload
  *
- * Structural hooks kept so the rest of the app keeps working even in preview:
+ * The Premium-Tier crown is REAL 3D (WebGL) via window.dq3DCrystal
+ * (crystal3d.js), with a graceful SVG fallback. The page header text + the
+ * QNTM card render immediately from S.user; the three async cards (balance,
+ * league/XP, activity) fill in from their endpoints via wireLiveData().
+ *
+ * Structural hooks kept so the rest of the app keeps working:
  *   • Save button keeps id "pp-save"  (idcard.js / leagues-ui.js inject before it)
  *   • hidden sentinels "dq-lg-card" + "dq-idcard-entry" suppress duplicate cards
- *   • Save / bio-counter / avatar-picker / wallet-chip / upgrade / view-card
- *     handlers are wired to the existing globals (UI behaviour, not data reads)
+ *
+ * Set USE_LIVE_DATA = false to fall back to the hard-coded SAMPLE preview.
  * ========================================================================== */
 (function () {
   "use strict";
   if (window.__dqProfileV2) return;
   window.__dqProfileV2 = true;
 
-  // ── flip to true AFTER the design is approved to connect real endpoints ─────
-  var USE_LIVE_DATA = false;
+  // ── data source: live endpoints (set to false for the hard-coded preview) ───
+  var USE_LIVE_DATA = true;
 
   // ── spec sample values (used while USE_LIVE_DATA === false) ─────────────────
   var SAMPLE = {
@@ -61,6 +61,56 @@
   var CYAN = "#22d3ee", VIOLET = "#a78bfa";
 
   function esc2(s) { return (typeof esc === "function") ? esc(s) : String(s == null ? "" : s); }
+
+  // ── number formatting + deterministic UID/since (mirrors idcard.js) ─────────
+  function num(n) { return Number(n || 0); }
+  function fmtN(n) { return num(n).toLocaleString("en-US"); }
+  function fmt2(n) { return num(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function hash32(str) { var h = 0x811c9dc5; str = String(str); for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0; } return h >>> 0; }
+  function makeUID(seed) {
+    var a = hash32("dfx|" + seed), c = hash32("ax|" + seed);
+    var L = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    var d4 = (a % 9000) + 1000;
+    var two = L[(c >> 3) % 24] + L[(c >> 9) % 24];
+    var d2 = (c % 90) + 10;
+    return "QNTM-" + d4 + "-" + two + d2;
+  }
+  function memberSince(u) {
+    var raw = u && (u.created_at || u.createdAt || u.joined || u.joined_at || u.member_since);
+    var dt = raw ? new Date(raw) : null;
+    if (!dt || isNaN(dt.getTime())) return null;
+    return dt.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  // Build the initial values object. With live data we seed from S.user (sync)
+  // and let wireLiveData() fill the async cards; otherwise we use SAMPLE.
+  function buildValues() {
+    if (!USE_LIVE_DATA) return SAMPLE;
+    var u = (typeof S !== "undefined" && S.user) ? S.user : {};
+    var role = u.role || "member";
+    var roleName = role === "admin" ? "Admin" : role === "wizard" ? "Wizard" : "Member";
+    var seed = String(u.id || u.username || u.name || "member");
+    return {
+      qntm: "\u2026",                                  // filled by wireLiveData
+      name: u.name || u.username || "",
+      username: u.username || "",
+      role: role,
+      roleName: roleName,
+      subtitle: "DrFX Quant " + roleName,
+      email: u.email || "",
+      bio: u.bio || "",
+      avatar: u.avatar || "",
+      uid: makeUID(seed),
+      memberRole: role === "admin" ? "Administrator" : roleName,
+      since: memberSince(u) || "\u2014",
+      league: "\u2026",                                // filled by wireLiveData
+      xpCur: 0,
+      xpMax: 1000,
+      matches: "\u2026",                               // filled by wireLiveData
+      wins: "\u2026",
+      winRate: "\u2026"
+    };
+  }
 
   // ── flat SVG: ice-blue faceted CROWN (no 3D) ────────────────────────────────
   function crownSVG(w) {
@@ -117,8 +167,9 @@
   // ════════════════════════════════════════════════════════════════════════════
   function openProfileV2() {
     modal("Profile", function (body, close) {
-      // values: sample for this preview pass (live wiring deferred)
-      var V = SAMPLE;
+      // values: live (seeded from S.user) or SAMPLE preview
+      var V = buildValues();
+      var LIVE_AVATAR = null;   // set if the user uploads a new avatar this session
 
       // widen + de-pad the host modal so cards reach the edges like the mockup
       var md = body.closest(".dq-modal-md");
@@ -238,9 +289,9 @@
           '<div style="display:flex;align-items:center;gap:16px;margin-top:8px">' +
             '<div style="flex-shrink:0">' + crystalSVG(92) + '</div>' +
             '<div style="flex:1;min-width:0">' +
-              '<div style="color:' + txt1 + ';font-size:24px;font-weight:900">' + esc2(V.league) + '</div>' +
-              '<div style="margin:6px 0 10px"><span style="color:' + BLUE + ';font-size:15px;font-weight:800">' + V.xpCur + '</span><span style="color:' + cap + ';font-size:15px;font-weight:700"> / ' + V.xpMax + ' XP</span></div>' +
-              '<div style="height:12px;border-radius:7px;background:rgba(8,14,34,.8);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)"><div style="height:100%;width:' + pct + '%;min-width:8%;border-radius:7px;background:linear-gradient(90deg,#22c55e,#38bdf8 60%,#7c5cff);box-shadow:0 0 14px ' + BLUE_GLOW + '"></div></div>' +
+              '<div id="pp-league-name" style="color:' + txt1 + ';font-size:24px;font-weight:900">' + esc2(V.league) + '</div>' +
+              '<div style="margin:6px 0 10px"><span id="pp-xp-cur" style="color:' + BLUE + ';font-size:15px;font-weight:800">' + V.xpCur + '</span><span style="color:' + cap + ';font-size:15px;font-weight:700"> / <span id="pp-xp-max">' + V.xpMax + '</span> XP</span></div>' +
+              '<div style="height:12px;border-radius:7px;background:rgba(8,14,34,.8);overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,.4)"><div id="pp-xp-bar" style="height:100%;width:' + pct + '%;min-width:8%;border-radius:7px;background:linear-gradient(90deg,#22c55e,#38bdf8 60%,#7c5cff);box-shadow:0 0 14px ' + BLUE_GLOW + ';transition:width .8s ease"></div></div>' +
               '<div style="color:' + cap + ';font-size:12.5px;margin-top:9px">Play matches to climb the leaderboard</div>' +
             '</div>' +
           '</div>' +
@@ -257,13 +308,13 @@
           '</div>' +
         '</div>';
 
-      var statCell = function (n, label, accent) {
-        return '<div style="flex:1;min-width:0;text-align:center;padding:14px 6px;border-radius:14px;background:rgba(8,14,34,.5);border:1px solid ' + cardB + '"><div style="font-size:24px;font-weight:900;color:' + (accent || txt1) + '">' + n + '</div><div style="color:' + cap + ';font-size:12.5px;margin-top:3px">' + label + '</div></div>';
+      var statCell = function (n, label, accent, id) {
+        return '<div style="flex:1;min-width:0;text-align:center;padding:14px 6px;border-radius:14px;background:rgba(8,14,34,.5);border:1px solid ' + cardB + '"><div' + (id ? ' id="' + id + '"' : '') + ' style="font-size:24px;font-weight:900;color:' + (accent || txt1) + '">' + n + '</div><div style="color:' + cap + ';font-size:12.5px;margin-top:3px">' + label + '</div></div>';
       };
       var activityCard =
         '<div style="padding:16px 18px;border-radius:20px;background:' + cardBg + ';border:1px solid ' + cardB + '">' +
           '<div style="display:flex;align-items:center;justify-content:space-between"><div style="color:' + txt1 + ';font-size:16px;font-weight:900">Account Activity</div><div style="color:' + cap + ';font-size:13px;display:flex;align-items:center;gap:5px">This Month <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></div></div>' +
-          '<div style="display:flex;gap:11px;margin-top:13px">' + statCell(V.matches, "Matches") + statCell(V.wins, "Wins") + statCell(V.winRate + "%", "Win Rate", GREEN) + '</div>' +
+          '<div style="display:flex;gap:11px;margin-top:13px">' + statCell(V.matches, "Matches", null, "pp-st-matches") + statCell(V.wins, "Wins", null, "pp-st-wins") + statCell(V.winRate + (USE_LIVE_DATA ? "" : "%"), "Win Rate", GREEN, "pp-st-wr") + '</div>' +
         '</div>';
 
       var leftCol = leftHeader + emblem + bioEmail + saveBlock + navBar;
@@ -316,36 +367,125 @@
       var idOpen = body.querySelector("#pp-idcard-open");
       if (idOpen) idOpen.onclick = function () { if (window.dqIdCard) dqIdCard.open(); };
 
-      // avatar picker preview (no upload until live pass)
+      // avatar picker: live -> upload to /api/upload; preview -> local FileReader
       var fi = body.querySelector("#pp-fi");
       if (fi) fi.onchange = function () {
         var f = this.files && this.files[0]; if (!f) return;
         if (!/^image\//.test(f.type || "")) { alert("Please choose an image file."); this.value = ""; return; }
-        var rd = new FileReader();
-        rd.onload = function (ev) {
-          var av = body.querySelector("#pp-av");
-          if (av) av.innerHTML = '<img src="' + ev.target.result + '" style="width:144px;height:144px;border-radius:50%;object-fit:cover"/>';
-        };
-        rd.readAsDataURL(f);
-        this.value = "";
+        if (!USE_LIVE_DATA) {
+          var rd = new FileReader();
+          rd.onload = function (ev) {
+            var av = body.querySelector("#pp-av");
+            if (av) av.innerHTML = '<img src="' + ev.target.result + '" style="width:144px;height:144px;border-radius:50%;object-fit:cover"/>';
+          };
+          rd.readAsDataURL(f);
+          this.value = "";
+          return;
+        }
+        var inp = this;
+        var av = body.querySelector("#pp-av"), sv = body.querySelector("#pp-save");
+        var spin = (typeof ce === "function") ? ce("div") : document.createElement("div");
+        spin.style.cssText = "position:absolute;inset:0;border-radius:50%;background:rgba(5,8,20,.62);display:flex;align-items:center;justify-content:center;z-index:5";
+        spin.innerHTML = '<div style="width:26px;height:26px;border:3px solid rgba(255,255,255,.25);border-top-color:#fff;border-radius:50%;animation:ppxSpin .7s linear infinite"></div>';
+        if (av) av.appendChild(spin);
+        if (sv) sv.disabled = true;
+        (async function () {
+          try {
+            var fd = new FormData(); fd.append("file", f);
+            var r = await fetch("/api/upload", { method: "POST", headers: { Authorization: "Bearer " + S.token }, body: fd });
+            var d = await r.json().catch(function () { return {}; });
+            if (!r.ok || !d.url) throw new Error((d && d.error) || "Upload failed");
+            LIVE_AVATAR = d.url;
+            if (av) av.innerHTML = ((typeof avatar === "function") ? avatar(d.url, 144) : '<img src="' + d.url + '" style="width:144px;height:144px;border-radius:50%;object-fit:cover"/>');
+          } catch (e) { if (spin.parentNode) spin.remove(); alert((e && e.message) || "Upload failed. Please try again."); }
+          finally { if (sv) sv.disabled = false; inp.value = ""; }
+        })();
       };
 
-      // Save: in preview, just acknowledge (no PUT). Live pass restores the API.
+      // Save: live -> PUT /api/auth/profile; preview -> toast only
       var saveBtn = body.querySelector("#pp-save");
       if (saveBtn) saveBtn.onclick = function () {
-        if (USE_LIVE_DATA) return;   // live handler installed in the live pass
-        if (typeof showToast === "function") showToast("Preview", "Design preview — saving connects after approval.");
+        if (!USE_LIVE_DATA) {
+          if (typeof showToast === "function") showToast("Preview", "Design preview \u2014 saving connects after approval.");
+          return;
+        }
+        (async function () {
+          try {
+            var nEl = body.querySelector("#pp-n"), bEl = body.querySelector("#pp-b"), uEl = body.querySelector("#pp-u");
+            var payload = {
+              name: nEl ? nEl.value.trim() : (S.user && S.user.name),
+              bio: bEl ? bEl.value.trim() : (S.user && S.user.bio),
+              username: uEl ? uEl.value.trim() : (S.user && S.user.username)
+            };
+            if (LIVE_AVATAR) payload.avatar = LIVE_AVATAR;
+            var up2 = await api("/auth/profile", { method: "PUT", body: JSON.stringify(payload) });
+            S.user = Object.assign({}, S.user, up2);
+            try { localStorage.setItem("dq_u", JSON.stringify(S.user)); } catch (e) { }
+            try { if (window.dq3DCrystal) dq3DCrystal.disposeAll(); } catch (e) { }
+            close();
+            if (typeof renderApp === "function") renderApp();
+          } catch (e) { alert((e && (e.error || e.message)) || "Could not save changes."); }
+        })();
       };
 
-      // ── LIVE DATA (deferred) ────────────────────────────────────────────────
-      // After you approve the look, set USE_LIVE_DATA = true and implement this:
-      //   - read S.user for name/username/avatar/bio/email/role + subtitle
-      //   - api("/qntm/wallets/me") -> #dq-wc-bal
-      //   - api("/leagues/me") -> league name + XP bar
-      //   - api("/easytrade/leaderboard?sort=xp").me -> matches/wins/winRate
-      //   - restore Save -> PUT /api/auth/profile and avatar -> POST /api/upload
-      // if (USE_LIVE_DATA) wireLiveData(body, close);
+      // fill the three async cards (balance, league/XP, activity) from endpoints
+      if (USE_LIVE_DATA) wireLiveData(body);
     });
+  }
+
+  // ── live data: fill the async cards (balance, league/XP, activity) ──────────
+  // Called after render when USE_LIVE_DATA is true. Each read is independent and
+  // best-effort: a failure leaves that card showing its placeholder.
+  function wireLiveData(body) {
+    // QNTM balance
+    (async function () {
+      try {
+        var r = await api("/qntm/wallets/me");
+        var el = body.querySelector("#dq-wc-bal");
+        if (el && r && r.wallet) el.textContent = fmt2(r.wallet.available_balance);
+        else if (el) el.textContent = "0.00";
+      } catch (e) { var el2 = body.querySelector("#dq-wc-bal"); if (el2) el2.textContent = "0.00"; }
+    })();
+
+    // League name + XP bar
+    (async function () {
+      try {
+        var me = await api("/leagues/me");
+        var nm = body.querySelector("#pp-league-name");
+        if (nm) nm.textContent = (me && me.currentLeagueName) || "Unranked";
+        var cur = num(me && (me.xp != null ? me.xp : (me.currentXp != null ? me.currentXp : me.points)));
+        var max = num(me && (me.nextLevelXp != null ? me.nextLevelXp : me.xpToNext)) || 1000;
+        var c = body.querySelector("#pp-xp-cur"), m = body.querySelector("#pp-xp-max"), bar = body.querySelector("#pp-xp-bar");
+        if (c) c.textContent = fmtN(cur);
+        if (m) m.textContent = fmtN(max);
+        if (bar) bar.style.width = Math.max(0, Math.min(100, max ? (cur / max) * 100 : 0)) + "%";
+      } catch (e) {
+        var nm2 = body.querySelector("#pp-league-name"); if (nm2) nm2.textContent = "Unranked";
+        var c2 = body.querySelector("#pp-xp-cur"); if (c2) c2.textContent = "0";
+      }
+    })();
+
+    // Account activity (Easy Trade leaderboard .me)
+    (async function () {
+      try {
+        var d = await api("/easytrade/leaderboard?sort=xp");
+        var me = d && d.me;
+        var mEl = body.querySelector("#pp-st-matches"), wEl = body.querySelector("#pp-st-wins"), wrEl = body.querySelector("#pp-st-wr");
+        if (me) {
+          if (mEl) mEl.textContent = fmtN(me.settled != null ? me.settled : (num(me.wins) + num(me.losses)));
+          if (wEl) wEl.textContent = fmtN(me.wins);
+          if (wrEl) wrEl.textContent = (me.winRate != null ? me.winRate : 0) + "%";
+        } else {
+          if (mEl) mEl.textContent = "0";
+          if (wEl) wEl.textContent = "0";
+          if (wrEl) wrEl.textContent = "0%";
+        }
+      } catch (e) {
+        var mEl2 = body.querySelector("#pp-st-matches"); if (mEl2) mEl2.textContent = "0";
+        var wEl2 = body.querySelector("#pp-st-wins"); if (wEl2) wEl2.textContent = "0";
+        var wrEl2 = body.querySelector("#pp-st-wr"); if (wrEl2) wrEl2.textContent = "0%";
+      }
+    })();
   }
 
   // winged DrFX crest used inside the emblem when no avatar image is set
