@@ -271,7 +271,7 @@
 
     var ov = document.createElement("div");
     ov.id = "sigfeed-ov";
-    ov.style.cssText = "position:fixed;inset:0;z-index:5000;background:" + t.bg + ";display:flex;flex-direction:column;animation:fi .2s;padding-top:var(--sat);padding-bottom:var(--sab);padding-left:var(--sal);padding-right:var(--sar)";
+    ov.style.cssText = "position:fixed;inset:0;z-index:5000;background:" + t.bg + ";display:flex;flex-direction:column;animation:fi .2s;padding-top:var(--sat);padding-left:var(--sal);padding-right:var(--sar)";
 
     var seg = function (id, label) {
       var on = ST.tab === id;
@@ -288,12 +288,13 @@
         '<button id="sf-refresh" style="width:36px;height:36px;border-radius:10px;border:1px solid ' + t.bd + ';background:' + t.btn + ';color:' + t.t2 + ';cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + ic('<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>', 18) + '</button>' +
       '</div>' +
       '<div style="display:flex;gap:8px;padding:10px 14px;background:' + t.ch + ';border-bottom:1px solid ' + t.bd + ';flex-shrink:0">' + seg("published", "Published") + seg("detected", "Auto-detected") + seg("scoreboard", "Scoreboard") + '</div>' +
-      '<div id="sf-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px"></div>';
+      '<div id="sf-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px"></div>' + (window.dqAppNav ? window.dqAppNav.html("signals") : "");
 
     document.body.appendChild(ov);
     ov.querySelector("#sf-back").onclick = function () { ov.remove(); };
     ov.querySelector("#sf-refresh").onclick = function () { loadActive(ov, true); };
     ov.querySelectorAll(".sf-seg").forEach(function (b) { b.onclick = function () { setTab(ov, b.dataset.seg); }; });
+    if (window.dqAppNav) window.dqAppNav.wire(ov, "signals", function () { ov.remove(); });
 
     loadActive(ov, false);
   }

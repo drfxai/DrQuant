@@ -417,7 +417,7 @@
         '<div id="dq-lg-card" style="display:none"></div><div id="dq-idcard-entry" style="display:none"></div>';
 
       // bottom mobile nav strip (baked into the design per the spec)
-      var navBar =
+      var navBar = (window.dqAppNav ? window.dqAppNav.html("profile") : ""); var _ignoredNav =
         '<div style="display:flex;align-items:center;justify-content:space-around;margin-top:20px;padding:12px 8px calc(12px + var(--sab));border-top:1px solid ' + cardB + ';background:rgba(6,12,28,.6)">' +
           navIcon('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>', BLUE, true) +
           navIcon('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>', cap, false) +
@@ -558,6 +558,7 @@
       if (up) up.onclick = function () { close(); if (window.openSub) openSub(); };
       var la = body.querySelector("#pp-league-all");
       if (la) la.onclick = function () { close(); if (window.dqLeagues) dqLeagues.open(); };
+      if (window.dqAppNav) window.dqAppNav.wire(body, "profile", close);
       var idOpen = body.querySelector("#pp-idcard-open");
       if (idOpen) idOpen.onclick = function () { if (window.dqIdCard) dqIdCard.open(); };
 
