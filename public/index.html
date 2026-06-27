@@ -1504,6 +1504,7 @@ function openMarket(){
     <div id="mk-searchbar" style="display:none;padding:8px 14px;background:${t.p};border-bottom:1px solid ${t.bd};flex-shrink:0"><input id="mk-search-input" class="gi" placeholder="Search posts, creators, products..." style="width:100%;font-size:14px"/></div>
     <div id="mk-body" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
     <div id="mk-nav" style="display:flex;border-top:1px solid ${t.bd};background:${t.p};backdrop-filter:blur(20px);flex-shrink:0">
+      <button id="mk-nav-chat" type="button" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:9px 0 8px;color:${t.t4};-webkit-tap-highlight-color:transparent"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg><span style="font-size:10px;font-weight:500">Chat</span></button>
       ${mkNavBtn('explore','Explore','<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>')}
       ${mkNavBtn('companies','Companies','<path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><line x1="9" y1="9" x2="9" y2="9.01"/><line x1="9" y1="13" x2="9" y2="13.01"/>')}
       ${mkNavBtn('create','Create','<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>')}
@@ -1516,6 +1517,7 @@ function openMarket(){
   sBtn.onclick=()=>{const open=sBar.style.display==='none';sBar.style.display=open?'block':'none';if(open){setTimeout(()=>sInp.focus(),50);}else{sInp.value='';if(MK.q){MK.q='';mkRender();}}};
   let sTimer=null;sInp.addEventListener('input',()=>{clearTimeout(sTimer);sTimer=setTimeout(()=>{MK.q=sInp.value.trim();if(MK.handle){MK.handle=null;MK.cur=null;}if(MK.tab==='create'||MK.tab==='store')MK.tab='explore';mkRender();},350);});
   ov.querySelectorAll('.mk-navbtn').forEach(b=>{b.onclick=()=>mkSetTab(b.dataset.mktab);});
+  { const _chatBtn=ov.querySelector('#mk-nav-chat'); if(_chatBtn)_chatBtn.onclick=()=>{ MK=null; ov.remove(); }; }
   body.addEventListener('click',mkBodyClick);
   document.addEventListener('play',mkVideoGuard,true);
   mkRender();
