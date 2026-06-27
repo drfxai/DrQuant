@@ -21,12 +21,12 @@
 //   The price ticker shown during the round is illustrative; the verdict is the
 //   provably-fair roll above (see /quick/:id/fairness).
 //
-// Solvency: a DEDICATED Baby Pick reward pool wallet (separate from Baby Trader's
-// pool) escrows stakes and pays wins. The ledger's non-negative trigger is the
-// ultimate backstop; on top of it placeQuick() enforces the same exposure
-// invariant Baby Trader uses (pool ≥ 2·openStakes + newStake) so any winnable
-// round can always be paid. The pool is topped up to an optional floor from
-// treasury, lazily (no boot wiring required).
+// Solvency: stakes and wins flow through the SHARED Easy Trade Reward Pool wallet
+// (the same pool Baby Trader uses — there is only one). The ledger's non-negative
+// trigger is the ultimate backstop; on top of it placeQuick() enforces the same
+// exposure invariant Baby Trader uses (pool ≥ 2·openStakes + newStake) so any
+// winnable round can always be paid. The pool is kept topped up to a floor from
+// treasury by the Easy Trade keeper (EASYTRADE_POOL_FLOOR).
 // ============================================================================
 "use strict";
 
@@ -40,7 +40,12 @@ const MIN_STAKE = 10;
 const MAX_STAKE = 1000000;
 const PAYOUT_MULT = 2;
 const ROUND_SECONDS = 60;
-const POOL_OWNER = ["platform", "babypick", "reward_pool"]; // dedicated, separate from easytrade's pool
+// SHARED pool: Baby Pick and Baby Trader (Easy Trade) escrow stakes and pay wins
+// from ONE wallet. Pointing this at easytrade's triple means there is a single
+// Reward Pool across the whole Easy Trade section, kept funded by the existing
+// EASYTRADE_POOL_FLOOR keeper. (Exposure is still checked per game against the
+// shared balance; the ledger's non-negative trigger is the ultimate backstop.)
+const POOL_OWNER = ["platform", "easytrade", "reward_pool"]; // shared with Easy Trade
 
 // House edge knob: probability a prediction wins. 0.50 = no edge (fair coin at
 // 2×); 0.49 leaves a small sustainable margin for the pool. Clamped to a sane band.
@@ -49,7 +54,10 @@ const WIN_CHANCE = (() => {
   if (!Number.isFinite(v)) return 0.49;
   return Math.max(0.05, Math.min(0.95, v));
 })();
-// Optional pool floor (treasury -> pool), funded lazily. 0/unset disables.
+// Pool funding is owned by the SHARED Easy Trade keeper (EASYTRADE_POOL_FLOOR).
+// Baby Pick does not top up independently by default, so the two halves never
+// fight over the same wallet. Set BABYPICK_POOL_FLOOR only if you deliberately
+// want Baby Pick to also raise the shared floor.
 const POOL_FLOOR = Math.floor(Number(process.env.BABYPICK_POOL_FLOOR) || 0);
 
 // Themed markets for the Quick Signal ticker (base prices are illustrative).
