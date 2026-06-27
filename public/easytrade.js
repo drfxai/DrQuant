@@ -127,6 +127,20 @@
       '@keyframes etRing{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1);opacity:0}}' +
       '@keyframes etStamp{0%{transform:scale(.3) rotate(-12deg);opacity:0}60%{transform:scale(1.12) rotate(3deg)}100%{transform:scale(1) rotate(0);opacity:1}}' +
       '@keyframes etSpin{to{transform:rotate(360deg)}}' +
+      '.et-spark{position:absolute;top:12px;right:12px;width:96px;height:46px;pointer-events:none;z-index:0;opacity:.96}' +
+      '.et-spark svg{display:block;width:100%;height:100%;overflow:visible}' +
+      '.et-spark .etln{stroke-dasharray:240;stroke-dashoffset:240;animation:etDraw 1.5s ease-out forwards}' +
+      '.et-spark .etdot{animation:etDotF 1.1s ease-in-out infinite alternate}' +
+      '.et-spark .etrun{opacity:0;animation:etRun 2.6s linear infinite}' +
+      '.et-spark .etbar{transform-origin:bottom;transform:scaleY(0);animation:etGrow .6s cubic-bezier(.2,1,.3,1) forwards}' +
+      '.et-spark .etwk{animation:etWick .6s ease-out forwards;opacity:0}' +
+      '.et-spark .etsh{animation:etShim 2.8s ease-in-out infinite}' +
+      '@keyframes etDraw{to{stroke-dashoffset:0}}' +
+      '@keyframes etDotF{0%{opacity:.55;r:2.4}100%{opacity:1;r:3.4}}' +
+      '@keyframes etRun{0%{opacity:0;transform:translateX(0)}8%{opacity:1}92%{opacity:1}100%{opacity:0;transform:translateX(0)}}' +
+      '@keyframes etGrow{to{transform:scaleY(1)}}' +
+      '@keyframes etWick{to{opacity:1}}' +
+      '@keyframes etShim{0%,100%{opacity:.35}50%{opacity:.9}}' +
       '@keyframes etMsIn{0%{transform:translateX(-50%) translateY(-26px);opacity:0}100%{transform:translateX(-50%) translateY(0);opacity:1}}' +
       '@keyframes etMsBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}' +
       '@keyframes etConf{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(112vh) rotate(680deg);opacity:.15}}' +
@@ -253,6 +267,7 @@
       var winCol = h.win == null ? t.t3 : h.win >= 60 ? GREEN : h.win >= 50 ? GOLD : t.t2;
       return '<div class="et-house" data-house="' + ESC(h.id) + '">' +
         '<div style="position:absolute;top:-30px;right:-30px;width:90px;height:90px;border-radius:50%;background:radial-gradient(circle,' + hexA(h.accent, .22) + ',transparent 70%)"></div>' +
+        houseChart(h, t) +
         '<div class="et-mono" style="background:linear-gradient(135deg,' + h.accent + ',' + hexA(h.accent, .55) + ')">' + ESC((h.name || "?")[0]) + '</div>' +
         '<div style="font-size:14.5px;font-weight:800;color:' + t.t1 + ';line-height:1.15">' + ESC(h.name) + '</div>' +
         '<div style="font-size:11px;color:' + t.t3 + ';margin-top:2px">' + ESC(h.tag || "") + '</div>' +
@@ -729,6 +744,70 @@
       ov.appendChild(layer);
       setTimeout(function () { if (layer.parentNode) layer.remove(); }, 3400);
     } catch (e) {}
+  }
+
+  // ── per-house animated mini-chart (the glow area in each card's top-right) ──
+  // Deterministic from the house id so each card is distinct but stable across
+  // renders; tinted to the house accent; trend slope nudged by win-rate. Three
+  // styles (area / candles / bars) rotate by seed. Pure SVG + CSS animation.
+  function houseSeed(id) { var s = 0, str = String(id || "x"); for (var i = 0; i < str.length; i++) s = (s * 31 + str.charCodeAt(i)) >>> 0; return s; }
+  function houseChart(h, t) {
+    var W = 96, H = 46, seed = houseSeed(h.id);
+    var rnd = (function () { var x = seed || 1; return function () { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; x >>>= 0; return x / 4294967296; }; })();
+    var accent = h.accent || t.pr;
+    var style = seed % 3; // 0 area-line, 1 candles, 2 bars
+    var up = (h.win == null ? 60 : h.win) >= 50;
+    var trend = ((h.win == null ? 60 : h.win) - 50) / 50; // -1..1 slope bias
+    var uid = "etg" + (seed % 100000);
+    var N = 24, pts = [], v = 0.5;
+    for (var i = 0; i < N; i++) {
+      v += (rnd() - 0.5) * 0.34 + trend * 0.05;
+      if (v < 0.08) v = 0.08 + rnd() * 0.1; if (v > 0.92) v = 0.92 - rnd() * 0.1;
+      pts.push(v);
+    }
+    var xF = function (i) { return (i / (N - 1)) * W; };
+    var yF = function (val) { return H - 4 - val * (H - 9); };
+    var grad = '<defs><linearGradient id="' + uid + '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="' + hexA(accent, .42) + '"/><stop offset="1" stop-color="' + hexA(accent, 0) + '"/></linearGradient>' +
+      '<linearGradient id="' + uid + 'l" x1="0" y1="0" x2="1" y2="0">' +
+      '<stop offset="0" stop-color="' + hexA(accent, .5) + '"/><stop offset="1" stop-color="' + accent + '"/></linearGradient></defs>';
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + grad;
+
+    if (style === 1) {
+      // candlesticks
+      var step = W / 7, cw = step * 0.46;
+      for (var c = 0; c < 7; c++) {
+        var a = pts[c * 3] != null ? pts[c * 3] : 0.5, b = pts[c * 3 + 2] != null ? pts[c * 3 + 2] : a;
+        var hi = Math.max(a, b) + 0.08 + rnd() * 0.06, loo = Math.min(a, b) - 0.08 - rnd() * 0.06;
+        var bull = b >= a, col = bull ? accent : hexA(accent, .45);
+        var cx = step * c + step / 2;
+        var oY = yF(a), cY = yF(b), hY = yF(Math.min(1, hi)), lY = yF(Math.max(0, loo));
+        var top = Math.min(oY, cY), bh = Math.max(3, Math.abs(cY - oY));
+        svg += '<line class="etwk" x1="' + cx.toFixed(1) + '" y1="' + hY.toFixed(1) + '" x2="' + cx.toFixed(1) + '" y2="' + lY.toFixed(1) + '" stroke="' + col + '" stroke-width="1" style="animation-delay:' + (c * 0.07).toFixed(2) + 's"/>';
+        svg += '<rect class="etbar" x="' + (cx - cw / 2).toFixed(1) + '" y="' + top.toFixed(1) + '" width="' + cw.toFixed(1) + '" height="' + bh.toFixed(1) + '" rx="1" fill="' + col + '" style="animation-delay:' + (c * 0.07).toFixed(2) + 's"/>';
+      }
+    } else if (style === 2) {
+      // bars
+      var bn = 11, bw = W / bn * 0.62, gap = W / bn;
+      for (var k = 0; k < bn; k++) {
+        var bv = pts[k * 2] != null ? pts[k * 2] : 0.5;
+        var bx = gap * k + (gap - bw) / 2, by = yF(bv), bhh = H - 3 - by;
+        svg += '<rect class="etbar" x="' + bx.toFixed(1) + '" y="' + by.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + Math.max(2, bhh).toFixed(1) + '" rx="1.5" fill="url(#' + uid + 'l)" style="animation-delay:' + (k * 0.05).toFixed(2) + 's"/>';
+      }
+      var ly2 = yF(pts[bn * 2 - 2] != null ? pts[bn * 2 - 2] : 0.6);
+      svg += '<circle class="etdot" cx="' + (W - 3) + '" cy="' + ly2.toFixed(1) + '" r="3" fill="' + accent + '"/>';
+    } else {
+      // area + line (glossy, like the live BTC chart)
+      var dLine = pts.map(function (p, i) { return (i ? "L" : "M") + xF(i).toFixed(1) + " " + yF(p).toFixed(1); }).join(" ");
+      var dArea = dLine + " L" + W + " " + H + " L0 " + H + " Z";
+      svg += '<path class="etsh" d="' + dArea + '" fill="url(#' + uid + ')"/>';
+      svg += '<path class="etln" d="' + dLine + '" fill="none" stroke="url(#' + uid + 'l)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" style="filter:drop-shadow(0 0 3px ' + hexA(accent, .7) + ')"/>';
+      var lx = xF(N - 1), lyy = yF(pts[N - 1]);
+      svg += '<circle class="etrun" r="2.5" fill="#fff"><animateMotion dur="2.6s" repeatCount="indefinite" path="' + dLine + '"/></circle>';
+      svg += '<circle class="etdot" cx="' + lx.toFixed(1) + '" cy="' + lyy.toFixed(1) + '" r="3" fill="' + accent + '" style="filter:drop-shadow(0 0 5px ' + accent + ')"/>';
+    }
+    svg += '</svg>';
+    return '<div class="et-spark">' + svg + '</div>';
   }
 
   // ── signal chart (SVG): entry + SL/TP levels + price path ──────────────────
