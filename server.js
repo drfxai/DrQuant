@@ -14,6 +14,7 @@ const priceBinance = require("./services/price-binance");
 const easytrade = require("./services/easytrade");
 const easytradeAutopilot = require("./services/easytrade-autopilot");
 const babypick = require("./services/babypick");
+const quantoption = require("./services/quantoption");
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -121,6 +122,7 @@ app.use("/api/market", require("./routes/market")); // Market: Explore feed, cre
 app.use("/api/signals", require("./routes/signals")); // read-only signals feed (published table + derived auto-detected)
 app.use("/api/easytrade", require("./routes/easytrade")); // Easy Trade (Baby Trader): wallet-connected prediction game + dedicated webhook
 try { app.use("/api/babypick", require("./routes/babypick")); } catch (e) { console.error("Baby Pick route disabled:", e.message); } // Baby Pick: games half of Easy Trade (provably-fair Quick Signal)
+try { app.use("/api/quantoption", require("./routes/quantoption")); } catch (e) { console.error("Quant Option route disabled:", e.message); } // Quant Option: server-authoritative, wallet-connected options simulation
 app.use("/api/translate", require("./routes/translate")); // chat translation (provider-agnostic; degrades to no-op if unconfigured)
 app.use("/api/wizard", require("./routes/wizard")); // wizard ("guard") panel: scoped moderation over regular users only
 try { app.use("/api/leagues", require("./routes/leagues")); } catch (e) { console.error("Leagues route disabled:", e.message); } // QNTM Leagues + League Unlock Ritual
@@ -333,6 +335,28 @@ function startSignalScoreboard() {
         console.log("[babypick] Quick Signal keeper ON (matured rounds settle every 30s)");
       })
       .catch((e) => console.error("[babypick] init failed:", e.message));
+    // ── Quant Option keeper ──
+    // Settle matured option positions so winners are paid even if they closed the
+    // app mid-position (lazy settlement on /me + poll already covers active
+    // players; this is the backstop). ~18s after boot, then every 20s. Also
+    // auto-replenishes the dedicated pool to QUANTOPTION_POOL_FLOOR (treasury →
+    // pool), mirroring EASYTRADE_POOL_FLOOR; unset or 0 disables top-ups.
+    quantoption.init()
+      .then(() => {
+        const sweepQo = () => quantoption.sweepMatured(200).catch((e) => console.error("[quantoption] sweep:", e.message));
+        setTimeout(sweepQo, 18 * 1000);
+        setInterval(sweepQo, 20 * 1000);
+        console.log("[quantoption] matured-position keeper ON (settles every 20s)");
+        const qoFloor = Math.floor(Number(process.env.QUANTOPTION_POOL_FLOOR) || 0);
+        if (qoFloor > 0) {
+          const everyMs = Math.max(15, Number(process.env.QUANTOPTION_POOL_TOPUP_INTERVAL_SEC) || 60) * 1000;
+          const runTopup = () => quantoption.topUpPool(qoFloor, null).catch((e) => console.error("[quantoption] pool top-up:", e.message));
+          setTimeout(runTopup, 14 * 1000);
+          setInterval(runTopup, everyMs);
+          console.log(`[quantoption] pool auto-topup ON - floor ${qoFloor} QNTM every ${Math.round(everyMs / 1000)}s`);
+        }
+      })
+      .catch((e) => console.error("[quantoption] init failed:", e.message));
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);
       console.log(`  ║  📈 DrFX Quant v5.2 on port ${PORT}         ║`);
