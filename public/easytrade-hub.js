@@ -98,7 +98,8 @@
     document.removeEventListener("keydown", onKey);
   }
   function onKey(e) { if (e.key === "Escape") closeHub(); }
-  function route(fn) { closeHub(); setTimeout(function () { try { fn(); } catch (e) {} }, 0); }
+  var _routed = false;
+  function route(fn) { if (_routed) return; _routed = true; closeHub(); setTimeout(function () { try { fn(); } catch (e) {} }, 0); }
 
   function goLeagues() { if (window.dqLeagues && window.dqLeagues.open) window.dqLeagues.open(); }
   function goBabyTrader() {
@@ -109,6 +110,7 @@
 
   function openHub() {
     closeHub();
+    _routed = false;
     var ov = document.createElement("div");
     ov.id = OV_ID;
     ov.style.cssText = "position:fixed;inset:0;z-index:5000;display:flex;flex-direction:column;background:rgba(4,7,18,.93);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);padding-top:var(--sat)";
@@ -122,6 +124,7 @@
         '.ezh-card img{width:100%;height:auto;display:block;-webkit-user-select:none;user-select:none}' +
         '.ezh-card:hover{transform:translateY(-3px)}' +
         '.ezh-card:active{transform:translateY(-1px) scale(.992)}' +
+        '.ezh-league img{aspect-ratio:534 / 545;object-fit:cover}' +
         '.ezh-league:hover{border-color:rgba(245,200,90,.85);box-shadow:0 16px 42px rgba(220,170,40,.42)}' +
         '.ezh-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
         '.ezh-row .ezh-card img{aspect-ratio:283 / 334;object-fit:cover;height:auto}' +
