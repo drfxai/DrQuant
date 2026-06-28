@@ -475,21 +475,51 @@
     });
     return live.length ? live[0] : null;
   }
+  function officialSignalContext(m) {
+    if (m && (m.sender_role === "admin" || m.sender_role === "superadmin")) return true;
+    if (typeof S !== "undefined" && S && S.chatInfo && S.chatInfo.type === "channel") return true;
+    return false;
+  }
   function tradeButtonHTML(m) {
-    var s = matchForMessage(m); if (!s) return "";
+    if (!m || !m.content || !window.DQSignal) return "";
+    if (!officialSignalContext(m)) return "";
+    var sig; try { sig = window.DQSignal.extract(m.content); } catch (e) { return ""; }
+    if (!sig || !sig.symbol || !sig.direction) return "";
     var c = TH();
-    return '<button class="qs-trade-btn" data-ext="' + ESC(s.extId) + '" type="button" style="margin-top:5px;width:100%;padding:9px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;gap:7px;background:linear-gradient(180deg,' + c.blue + ',#2456d8)">' +
+    return '<button class="qs-trade-btn" data-sym="' + ESC(String(sig.symbol).toUpperCase()) + '" data-dir="' + ESC(sig.direction) + '" type="button" style="margin-top:5px;width:100%;padding:9px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;gap:7px;background:linear-gradient(180deg,' + c.blue + ',#2456d8)">' +
       ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 14) + 'Trade on Quant Option</button>';
   }
-  // Delegated click for chat trade buttons (rendered into chat by msgBubble).
+  // Open the confirm sheet by matching a chat signal to a live STORED signal
+  // (symbol+direction), always re-fetched — so the position opens from the
+  // trusted store, never the message text.
+  function openForSignalByMatch(sym, dir) {
+    var nsym = String(sym || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    var go = function () {
+      var live = SG.signals.filter(function (s) {
+        if (s.status !== "live") return false;
+        var ssym = String(s.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+        return ssym === nsym && s.direction === dir;
+      });
+      if (!live.length) {
+        toast("No live Quant Option signal for this yet", "error");
+        if (document.getElementById(OV_ID)) { SG.screen = "list"; rerender(); }
+        return;
+      }
+      SG.sel = live[0]; SG.screen = "confirm"; rerender();
+    };
+    if (document.getElementById(OV_ID)) { refresh().then(go).catch(go); return; }
+    SG.screen = "list"; SG.sel = null; SG.pos = null;
+    buildOverlay();
+    loadList().then(go).catch(go);
+  }
+  // Delegated click for chat trade buttons (rendered under signal messages).
   if (typeof document !== "undefined" && !window.__qsTradeBtnBound) {
     window.__qsTradeBtnBound = true;
     document.addEventListener("click", function (e) {
       var btn = e.target && e.target.closest ? e.target.closest(".qs-trade-btn") : null;
       if (!btn) return;
       e.preventDefault(); e.stopPropagation();
-      var ext = btn.getAttribute("data-ext");
-      openForSignal(ext);
+      openForSignalByMatch(btn.getAttribute("data-sym"), btn.getAttribute("data-dir"));
     });
   }
 

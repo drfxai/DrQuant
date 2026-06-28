@@ -45,7 +45,7 @@
     var caret = ic('<polyline points="9 18 15 12 9 6"/>', 13);
     var spark = ic('<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4"/>', 12);
 
-    return '' +
+    var __chip = '' +
       '<div class="dqsig" style="margin-top:5px;border:1px solid ' + col + '44;background:' + col + '12;border-radius:11px;padding:8px 10px;max-width:100%;-webkit-user-select:none;user-select:none">' +
         '<div class="dqsig-head" style="display:flex;align-items:center;gap:7px;cursor:pointer">' +
           '<span style="display:inline-flex;width:18px;height:18px;align-items:center;justify-content:center;border-radius:5px;background:' + col + '26;color:' + col + ';flex-shrink:0">' + spark + '</span>' +
@@ -61,6 +61,8 @@
           '<div style="color:' + t.t4 + ';font-size:10.5px;margin-top:7px;line-height:1.5">Auto-detected by DrFX from this message · ' + conf + '% match. A platform interpretation — not the author\'s words, and not financial advice.</div>' +
         '</div>' +
       '</div>';
+    var __tb = (window.dqQOSignals && window.dqQOSignals.tradeButtonHTML) ? window.dqQOSignals.tradeButtonHTML(m) : "";
+    return __chip + __tb;
   }
 
   // One global delegated toggle for every chip (chat now, feed later). Callers
