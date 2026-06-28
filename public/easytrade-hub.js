@@ -30,6 +30,7 @@
       ["market", "Market", '<line x1="6" y1="3" x2="6" y2="6"/><rect x="4" y="6" width="4" height="7" rx="1"/><line x1="6" y1="13" x2="6" y2="17"/><line x1="12" y1="6" x2="12" y2="9"/><rect x="10" y="9" width="4" height="8" rx="1"/><line x1="12" y1="17" x2="12" y2="20"/><line x1="18" y1="4" x2="18" y2="7"/><rect x="16" y="7" width="4" height="6" rx="1"/><line x1="18" y1="13" x2="18" y2="16"/>'],
       ["signals", "Signals", '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'],
       ["easytrade", "Easy Trade", '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>'],
+      ["quant", "Options", '<line x1="8" y1="20" x2="8" y2="5"/><polyline points="4 9 8 5 12 9"/><line x1="16" y1="4" x2="16" y2="19"/><polyline points="12 15 16 19 20 15"/>'],
       ["profile", "Profile", '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>']
     ];
     function theme() {
@@ -65,6 +66,7 @@
           else if (target === "signals") { if (window.openSignalsFeed) window.openSignalsFeed(); else if (window.openLiveTrading) window.openLiveTrading(); }
           else if (target === "easytrade") { if (window.openEasyTrade) window.openEasyTrade(); }
           else if (target === "profile") { if (window.openProfile) window.openProfile(); }
+          else if (target === "quant") { if (window.openQuantOption) window.openQuantOption(); }
         } catch (e) {}
       }, 0);
     }
