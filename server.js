@@ -52,6 +52,9 @@ app.use("/api/webhooks", require("./routes/webhooks"));
 // its own raw body (TradingView's Content-Type is inconsistent; a text alert
 // labelled application/json would otherwise make the global parser 400).
 app.use("/api/easytrade/webhook", require("./routes/easytrade-webhook"));
+// Quant Option dedicated webhook — also BEFORE express.json() so it captures its
+// own raw body (Pine alert text). Wrapped so a fault here can never crash boot.
+try { app.use("/api/quantoption/webhook", require("./routes/quantoption-webhook")); } catch (e) { console.error("Quant Option webhook disabled:", e.message); }
 
 app.use(express.json({ limit: "12mb" }));
 // Uploaded files are user-controlled: force the browser to honor the declared
@@ -357,6 +360,21 @@ function startSignalScoreboard() {
         }
       })
       .catch((e) => console.error("[quantoption] init failed:", e.message));
+    // ── Quant Option SIGNAL keeper ──
+    // Settle signal-bound positions whose God Mode trade resolved, and refund any
+    // whose optional time limit elapsed with no real outcome. Wrapped so a fault
+    // in the signals module can never crash boot. ~22s after boot, then every 30s.
+    try {
+      const quantoptionSignals = require("./services/quantoption-signals");
+      quantoptionSignals.init()
+        .then(() => {
+          const sweepSig = () => quantoptionSignals.sweepExpired(200).catch((e) => console.error("[quantoption-signals] sweep:", e.message));
+          setTimeout(sweepSig, 22 * 1000);
+          setInterval(sweepSig, 30 * 1000);
+          console.log("[quantoption-signals] signal-position keeper ON (settles every 30s)");
+        })
+        .catch((e) => console.error("[quantoption-signals] init failed:", e.message));
+    } catch (e) { console.error("[quantoption-signals] disabled:", e.message); }
     server.listen(PORT, () => {
       console.log(`\n  ╔════════════════════════════════════════╗`);
       console.log(`  ║  📈 DrFX Quant v5.2 on port ${PORT}         ║`);

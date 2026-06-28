@@ -104,6 +104,36 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS qo_pos_user ON quantoption_positions(user_id, status, id DESC);
     CREATE INDEX IF NOT EXISTS qo_pos_open ON quantoption_positions(status, expires_at) WHERE status = 'open';
   `);
+  // Signal-bound positions (real God Mode trades) live in their OWN table so the
+  // simulated-engine queries in this file never touch a seedless signal row. The
+  // pool is shared (same wallet), so exposureOk() below counts BOTH tables.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS quantoption_signal_positions (
+      id             BIGSERIAL PRIMARY KEY,
+      user_id        TEXT NOT NULL,
+      signal_ext_id  TEXT NOT NULL,
+      symbol         TEXT NOT NULL,
+      direction      TEXT NOT NULL,
+      stake          NUMERIC NOT NULL,
+      entry_price    NUMERIC,
+      target_price   NUMERIC,
+      stop_price     NUMERIC,
+      tier           INT NOT NULL DEFAULT 1,
+      time_limit_sec INT,
+      status         TEXT NOT NULL DEFAULT 'open',
+      outcome        TEXT,
+      exit_price     NUMERIC,
+      payout         NUMERIC NOT NULL DEFAULT 0,
+      stake_txn      TEXT,
+      payout_txn     TEXT,
+      opened_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at     TIMESTAMPTZ,
+      settled_at     TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS qo_sigpos_user ON quantoption_signal_positions(user_id, status, id DESC);
+    CREATE INDEX IF NOT EXISTS qo_sigpos_bind ON quantoption_signal_positions(signal_ext_id, status);
+    CREATE INDEX IF NOT EXISTS qo_sigpos_exp ON quantoption_signal_positions(status, expires_at) WHERE status = 'open';
+  `);
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -157,7 +187,8 @@ async function me(userId) {
 // ── EXPOSURE GUARD — pool must hold 1.85 × all open stakes ───────────────────
 async function exposureOk(client, addStake) {
   const { rows } = await client.query(
-    `SELECT COALESCE(SUM(stake),0) AS s FROM quantoption_positions WHERE status='open'`);
+    `SELECT (COALESCE((SELECT SUM(stake) FROM quantoption_positions WHERE status='open'),0)
+           + COALESCE((SELECT SUM(stake) FROM quantoption_signal_positions WHERE status='open'),0)) AS s`);
   const totalAfter = decimal.add(rows[0].s, addStake);          // S + s
   const required = engine.requiredPool(totalAfter);             // 1.85 · (S + s)
   const haveAfter = decimal.add(await poolBalance(client), addStake); // pool gains +s on open
