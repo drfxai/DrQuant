@@ -2126,11 +2126,24 @@ function initNotify(){
   document.addEventListener("click",ask,{once:true});
   document.addEventListener("touchstart",ask,{once:true});
 }
+function dqCloseOverlays(){
+  try{
+    var keep={app:1,"toast-wrap":1,"dq-toast-gold-style":1};
+    var kids=Array.prototype.slice.call(document.body.children);
+    for(var i=0;i<kids.length;i++){
+      var el=kids[i];
+      if(!el||(el.id&&keep[el.id]))continue;
+      var cs;try{cs=getComputedStyle(el);}catch(e){continue;}
+      if(cs&&cs.position==="fixed"){var z=parseInt(cs.zIndex,10);if(!isNaN(z)&&z>=400&&el.parentNode)el.parentNode.removeChild(el);}
+    }
+  }catch(e){}
+}
+function dqGoToChat(id){dqCloseOverlays();if(typeof openChat==="function")openChat(id);}
 function osNotify(title,body,chatId){
   try{
     if(!("Notification" in window)||Notification.permission!=="granted")return;
     const n=new Notification(title,{body:body||"New message",icon:"/icon.svg",badge:"/icon.svg",tag:"dq-"+chatId,renotify:true});
-    n.onclick=()=>{try{window.focus();}catch(e){}if(chatId)openChat(chatId);n.close();};
+    n.onclick=()=>{try{window.focus();}catch(e){}if(chatId)dqGoToChat(chatId);n.close();};
   }catch(e){}
 }
 function showToast(title,body,onClick){
@@ -2162,7 +2175,7 @@ function connectSocket(){
       const fromName=msg.sender_name||"New message";
       const preview=msg.image?(msg.content?("📷 "+msg.content):"📷 Photo"):(msg.content||"");
       if(document.hidden)osNotify(fromName,preview,msg.chat_id);
-      else if(msg.chat_id!==S.activeChat)showToast(fromName,preview,()=>openChat(msg.chat_id));
+      else if(msg.chat_id!==S.activeChat)showToast(fromName,preview,()=>dqGoToChat(msg.chat_id));
     }
   });
   S.socket.on("message_edited",msg=>{const idx=S.chatMsgs.findIndex(m=>m.id===msg.id);if(idx>=0){msg.reactions=S.chatMsgs[idx]?.reactions||[];S.chatMsgs[idx]=msg;const mc=$("#cv-msgs");if(mc){mc.innerHTML=msgsHTML(S.chatMsgs);scrollB(mc);bindMsgEvents(mc);wireVoice(mc);}}const pi=(S.pinnedMsgs||[]).findIndex(p=>p.id===msg.id);if(pi>=0){S.pinnedMsgs[pi]={...S.pinnedMsgs[pi],content:msg.content,image:msg.image};updatePinBar();}});
