@@ -523,6 +523,7 @@
     var tabs =
       '<div class="qo-tabs">' +
         '<button class="qo-tab ' + (QO.view === "trade" ? "on" : "") + '" id="qo-tab-trade" type="button">Trade</button>' +
+        '<button class="qo-tab" id="qo-tab-signals" type="button">Signals</button>' +
         '<button class="qo-tab ' + (QO.view === "history" ? "on" : "") + '" id="qo-tab-history" type="button">History</button>' +
       '</div>';
     var body;
@@ -542,6 +543,7 @@
     var st = document.getElementById("qo-stage"); if (!st) return;
     var T = function (id) { return st.querySelector(id); };
     var tt = T("#qo-tab-trade"); if (tt) tt.onclick = function () { if (QO.view !== "trade") { QO.view = "trade"; rerender(); } };
+    var tsig = T("#qo-tab-signals"); if (tsig) tsig.onclick = function () { if (window.dqQOSignals) window.dqQOSignals.open(); else toast("Signal trading is loading — try again", "error"); };
     var th = T("#qo-tab-history"); if (th) th.onclick = function () { QO.view = "history"; rerender(); loadHistory(); };
 
     st.querySelectorAll(".qo-sym").forEach(function (b) {
