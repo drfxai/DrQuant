@@ -35,11 +35,12 @@ const { postTransaction } = require("../qntm-ledger/src/ledger");
 const wallets = require("../qntm-ledger/src/wallets");
 const decimal = require("../qntm-ledger/src/decimal");
 const engine = require("./quantoption-engine"); // pure money math only (profitOf/settleAmounts/requiredPool)
+const priceFeed = require("./quantoption-pricefeed"); // real spot for early cash-out
 
 const MIN_STAKE = 10;
 const MAX_STAKE = 1000000;
 const POOL_OWNER = ["platform", "quantoption", "reward_pool"]; // SAME pool wallet as services/quantoption.js
-const DEFAULT_TIER = 1;                 // win = trade reaches its first target (tp1) before sl
+const DEFAULT_TIER = 3;                 // win = trade reaches its FINAL target (tp3) before sl
 const MIN_TIME_LIMIT = 30;              // seconds, if a time limit is chosen
 const MAX_TIME_LIMIT = 86400;           // 24h ceiling on the optional auto-close
 
@@ -273,7 +274,7 @@ async function openSignalPosition(userId, input) {
     const signal = srows[0];
     if (!signal) { const e = new Error("signal not found"); e.code = "not_found"; throw e; }
     if (signal.status !== "live") { const e = new Error("this signal has already resolved"); e.code = "signal_closed"; throw e; }
-    if (signal.entry == null || signal.tp1 == null || signal.sl == null || !signal.direction) {
+    if (signal.entry == null || signal.tp3 == null || signal.sl == null || !signal.direction) {
       const e = new Error("signal is missing entry, target, or stop"); e.code = "bad_signal"; throw e;
     }
 
@@ -292,7 +293,7 @@ async function openSignalPosition(userId, input) {
          (user_id, signal_ext_id, symbol, direction, stake, entry_price, target_price, stop_price, tier, time_limit_sec, expires_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [String(userId), extId, signal.symbol, signal.direction, stake,
-       signal.entry, signal.tp1, signal.sl, DEFAULT_TIER, timeLimit, expiresAt]);
+       signal.entry, signal.tp3, signal.sl, DEFAULT_TIER, timeLimit, expiresAt]);
     const p = pr[0];
     const txn = await postTransaction({
       type: "tournament_entry", amount: stake,
@@ -439,6 +440,9 @@ function signalPositionView(p, signal) {
     id: p.id, kind: "signal", signalExtId: p.signal_ext_id,
     symbol: p.symbol, dir: p.direction, stake: p.stake, status: p.status, outcome: p.outcome,
     entry: p.entry_price, target: p.target_price, stop: p.stop_price, tier: Number(p.tier || 1),
+    tp1: signal && signal.tp1 != null ? String(signal.tp1) : null,
+    tp2: signal && signal.tp2 != null ? String(signal.tp2) : null,
+    tp3: signal && signal.tp3 != null ? String(signal.tp3) : (p.target_price != null ? String(p.target_price) : null),
     timeLimitSec: p.time_limit_sec, expiresAt: p.expires_at,
     exitPrice: p.exit_price, payout: p.payout,
     openedAt: p.opened_at, settledAt: p.settled_at,
@@ -452,8 +456,52 @@ function webhookConfigured() {
   return !!(process.env.QUANTOPTION_WEBHOOK_SECRET || process.env.EASYTRADE_WEBHOOK_SECRET || process.env.TRADINGVIEW_WEBHOOK_SECRET);
 }
 
+// early cash-out for a signal position (mirrors services/quantoption.js cashOut):
+// settle NOW at the live spot, pool-funded by engine.cashoutMultiplier()*stake.
+async function cashOutSignal(userId, id) {
+  await init();
+  return withTransaction(async (cx) => {
+    const { rows } = await cx.query(`SELECT * FROM quantoption_signal_positions WHERE id=$1 AND user_id=$2 FOR UPDATE`, [id, String(userId)]);
+    if (!rows.length) { const e = new Error("position not found"); e.code = "not_found"; throw e; }
+    const p = rows[0];
+    if (p.status !== "open") { const e = new Error("position already settled"); e.code = "not_open"; throw e; }
+    if (p.entry_price == null || p.target_price == null || p.stop_price == null) { const e = new Error("this position can't be cashed out"); e.code = "bad_signal"; throw e; }
+    let live = await priceFeed.getSpot(p.symbol).catch(() => null);
+    if (!Number.isFinite(Number(live))) { const e = new Error("Live price unavailable — try again in a moment"); e.code = "feed_unavailable"; throw e; }
+    live = Number(live);
+    const m = engine.cashoutMultiplier(p.entry_price, p.target_price, p.stop_price, live);
+    if (m == null) { const e = new Error("Live price unavailable — try again in a moment"); e.code = "feed_unavailable"; throw e; }
+    const credit = engine.cashoutCredit(p.stake, m);
+    const c = decimal.cmp(credit, String(p.stake));
+    const status = c > 0 ? "won" : c === 0 ? "draw" : "lost";
+    const outcome = c > 0 ? "win" : c === 0 ? "draw" : "lose";
+    let payoutTxnId = null;
+    if (decimal.isPositive(credit)) {
+      const txn = await postTransaction({
+        type: "refund", amount: credit,
+        movements: [
+          { walletId: _poolWalletId, direction: "debit", amount: credit, description: "Quant Option signal cash-out" },
+          { walletId: await userWalletId(p.user_id, cx), direction: "credit", amount: credit, description: "Quant Option signal cash-out" },
+        ],
+        initiatorUserId: p.user_id,
+        reference: { type: "quantoption_signal_position", id: p.id },
+        idempotencyKey: "qo:sigcashout:" + p.id,
+        metadata: { app: "quantoption", kind: "signal_cashout", multiplierBps: Math.round(m * 10000) },
+      }, cx);
+      payoutTxnId = txn.public_id;
+    }
+    await cx.query(
+      `UPDATE quantoption_signal_positions SET status=$2, outcome=$3, exit_price=$4, payout=$5, payout_txn=$6, settled_at=now() WHERE id=$1`,
+      [p.id, status, outcome, String(live), credit, payoutTxnId]);
+    const { rows: srows } = await cx.query(`SELECT * FROM quantoption_signals WHERE ext_id=$1`, [p.signal_ext_id]);
+    const view = signalPositionView({ ...p, status, outcome, exit_price: String(live), payout: credit, payout_txn: payoutTxnId, settled_at: new Date().toISOString() }, srows[0] || null);
+    view.cashedOut = true; view.cashoutMult = m;
+    return view;
+  });
+}
+
 module.exports = {
-  init, ingestSignalEvent, openSignalPosition, getSignalPosition, getOpenSignalPosition, sweepExpired,
+  init, ingestSignalEvent, openSignalPosition, getSignalPosition, getOpenSignalPosition, cashOutSignal, sweepExpired,
   listLiveSignals, getSignalByExt, history, webhookConfigured,
   MIN_STAKE, MAX_STAKE, MIN_TIME_LIMIT, MAX_TIME_LIMIT,
 };

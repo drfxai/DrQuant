@@ -484,6 +484,50 @@ async function resolve(positionId, outcome, exitPrice) {
   });
 }
 
+// ── early cash-out: settle an OPEN position NOW at the live price ─────────────
+// Pool-funded amount = engine.cashoutMultiplier()*stake (stop 0x -> entry 1.0x ->
+// target 1.85x, clamped). Solvency-safe: credit <= 1.85*stake, the ceiling the
+// exposure guard reserved at open. Status maps by result so lifetime stats stay
+// coherent: profit -> won, break-even -> draw, loss -> lost (metadata.kind tags it).
+async function cashOut(userId, id) {
+  await init();
+  return withTransaction(async (cx) => {
+    const { rows } = await cx.query(`SELECT * FROM quantoption_positions WHERE id=$1 AND user_id=$2 FOR UPDATE`, [id, String(userId)]);
+    if (!rows.length) { const e = new Error("position not found"); e.code = "not_found"; throw e; }
+    const p = rows[0];
+    if (p.status !== "open") { const e = new Error("position already settled"); e.code = "not_open"; throw e; }
+    let live = REAL_PRICES ? await priceFeed.getSpot(p.symbol).catch(() => null) : ambientPrice(p.symbol);
+    if (!Number.isFinite(Number(live))) { const e = new Error("Live price unavailable — try again in a moment"); e.code = "feed_unavailable"; throw e; }
+    live = Number(live);
+    const m = engine.cashoutMultiplier(p.entry_price, p.target_price, p.stop_price, live);
+    if (m == null) { const e = new Error("Live price unavailable — try again in a moment"); e.code = "feed_unavailable"; throw e; }
+    const credit = engine.cashoutCredit(p.stake, m);
+    const c = decimal.cmp(credit, String(p.stake));
+    const status = c > 0 ? "won" : c === 0 ? "draw" : "lost";
+    let payoutTxnId = null;
+    if (decimal.isPositive(credit)) {
+      const txn = await postTransaction({
+        type: "refund", amount: credit,
+        movements: [
+          { walletId: _poolWalletId, direction: "debit", amount: credit, description: "Quant Option cash-out" },
+          { walletId: await userWalletId(p.user_id, cx), direction: "credit", amount: credit, description: "Quant Option cash-out" },
+        ],
+        initiatorUserId: p.user_id,
+        reference: { type: "quantoption_position", id: p.id },
+        idempotencyKey: "qo:cashout:" + p.id,
+        metadata: { app: "quantoption", kind: "cashout", multiplierBps: Math.round(m * 10000) },
+      }, cx);
+      payoutTxnId = txn.public_id;
+    }
+    await cx.query(
+      `UPDATE quantoption_positions SET status=$2, exit_price=$3, payout=$4, payout_txn=$5, settled_at=now() WHERE id=$1`,
+      [p.id, status, String(live), credit, payoutTxnId]);
+    const view = positionView({ ...p, status, exit_price: String(live), payout: credit, payout_txn: payoutTxnId, settled_at: new Date().toISOString() }, { now: Date.now() });
+    view.cashedOut = true; view.cashoutMult = m;
+    return view;
+  });
+}
+
 // ── keeper: settle positions whose expiry has passed (app-closed backstop) ──
 async function sweepMatured(limitInput) {
   await init();
@@ -685,6 +729,9 @@ function positionView(p, extra) {
     id: p.id, symbol: p.symbol, label: (symCfg(p.symbol) || {}).label || p.symbol,
     dir: p.direction, stake: p.stake, status: p.status,
     entry: p.entry_price, target: p.target_price, stop: p.stop_price,
+    tp1: roundPx(p.symbol, Number(p.entry_price) + (Number(p.target_price) - Number(p.entry_price)) / 3),
+    tp2: roundPx(p.symbol, Number(p.entry_price) + (Number(p.target_price) - Number(p.entry_price)) * 2 / 3),
+    tp3: roundPx(p.symbol, Number(p.target_price)),
     expirySec: Number(p.expiry_sec), stepMs: Number(p.step_ms), dp: (symCfg(p.symbol) || {}).dp,
     openedAt: p.opened_at, expiresAt: p.expires_at, settledAt: p.settled_at,
     seedHash: p.seed_hash,                                  // commitment (always visible)
@@ -723,7 +770,7 @@ function positionView(p, extra) {
 }
 
 module.exports = {
-  init, me, openPosition, getPosition, listOpenPositions, chartData, prices,
+  init, me, openPosition, getPosition, listOpenPositions, chartData, prices, cashOut,
   resolve, sweepMatured, history,
   fundPool, topUpPool, poolStats, leaderboard,
   MIN_STAKE, MAX_STAKE, EXPIRIES, SYMBOLS, STEP_MS, REAL_PRICES,

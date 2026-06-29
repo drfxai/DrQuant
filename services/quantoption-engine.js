@@ -168,6 +168,50 @@ function requiredPool(totalOpenStake) {
   return decimal.add(totalOpenStake, profitOf(totalOpenStake));
 }
 
+// ── early cash-out value ────────────────────────────────────────────────────
+// Indicative value of an OPEN position closed before expiry at price `live`:
+// linear in price — at the stop -> 0x, at entry -> 1.0x (break-even refund), at
+// the target -> full PAYOUT (1.85x); clamped to [0, PAYOUT]. Long vs short is
+// inferred from whether the target sits above (long) or below (short) entry,
+// matching how progress is computed in the position view. Returns a Number, or
+// null if `live` is unusable.
+function cashoutMultiplier(entry, target, stop, live) {
+  entry = Number(entry); target = Number(target); stop = Number(stop); live = Number(live);
+  if (![entry, target, stop, live].every(Number.isFinite)) return null;
+  const PAYOUT = 1 + PAYOUT_BPS / 10000; // 1.85
+  let m;
+  if (target >= entry) {                 // long: target above entry, stop below
+    if (live >= target) m = PAYOUT;
+    else if (live >= entry) m = target > entry ? 1 + (PAYOUT - 1) * (live - entry) / (target - entry) : 1;
+    else if (live > stop)  m = entry > stop ? (live - stop) / (entry - stop) : 0;
+    else m = 0;
+  } else {                               // short: target below entry, stop above
+    if (live <= target) m = PAYOUT;
+    else if (live <= entry) m = entry > target ? 1 + (PAYOUT - 1) * (entry - live) / (entry - target) : 1;
+    else if (live < stop)  m = stop > entry ? (stop - live) / (stop - entry) : 0;
+    else m = 0;
+  }
+  return Math.max(0, Math.min(PAYOUT, m));
+}
+// Pool-funded credit for a cash-out at multiplier m (in [0, PAYOUT]). Ledger-safe:
+// computed in BigInt base units via splitByBps (no float drift), never exceeding
+// 1.85*stake (the ceiling the exposure guard already reserves for the position).
+function cashoutCredit(stake, m) {
+  const PAYOUT = 1 + PAYOUT_BPS / 10000;
+  m = Math.max(0, Math.min(PAYOUT, Number(m) || 0));
+  if (m <= 1) {
+    const bps = Math.round(m * 10000);
+    if (bps <= 0) return "0";
+    if (bps >= 10000) return String(stake);
+    return decimal.splitByBps(String(stake), [{ key: "c", bps: bps }, { key: "r", bps: 10000 - bps, remainder: true }]).c;
+  }
+  const extraBps = Math.round((m - 1) * 10000);
+  if (extraBps <= 0) return String(stake);
+  if (extraBps >= PAYOUT_BPS) return decimal.add(String(stake), profitOf(String(stake)));
+  const part = decimal.splitByBps(String(stake), [{ key: "p", bps: extraBps }, { key: "r", bps: 10000 - extraBps, remainder: true }]).p;
+  return decimal.add(String(stake), part);
+}
+
 // ── provably-fair seed pair ─────────────────────────────────────────────────
 function newSeed() {
   const seed = crypto.randomBytes(32).toString("hex");
@@ -238,6 +282,6 @@ module.exports = {
   PAYOUT_BPS,
   gauss, stepsFor, offsetFor, pathAt, hitOutcome, expiryOutcome, evaluate,
   detectBarrierTouch,
-  profitOf, settleAmounts, requiredPool,
+  profitOf, settleAmounts, requiredPool, cashoutMultiplier, cashoutCredit,
   newSeed, seedHash, deriveWave, clockPrice,
 };

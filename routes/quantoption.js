@@ -55,7 +55,7 @@ function fail(res, err) {
   const map = {
     bad_symbol: 400, bad_dir: 400, bad_expiry: 400, bad_stake: 400, bad_amount: 400,
     bad_signal: 400, bad_time: 400, signal_closed: 409,
-    has_open: 409, capacity: 409, insufficient: 402, not_found: 404,
+    has_open: 409, capacity: 409, insufficient: 402, not_found: 404, not_open: 409,
     feed_unavailable: 503, feed_unconfigured: 503,
   };
   const status = map[code] || 500;
@@ -92,6 +92,16 @@ router.get("/history", auth, async (req, res) => {
 // all open positions for the user (REAL mode can have several at once)
 router.get("/positions", auth, async (req, res) => {
   try { res.json(await quantoption.listOpenPositions(req.user.id)); }
+  catch (e) { fail(res, e); }
+});
+
+// early cash-out: settle a still-open position NOW at the live price
+router.post("/cashout/:id", auth, async (req, res) => {
+  try { res.json({ position: await quantoption.cashOut(req.user.id, Number(req.params.id)) }); }
+  catch (e) { fail(res, e); }
+});
+router.post("/cashout-signal/:id", auth, async (req, res) => {
+  try { res.json({ position: await quantoptionSignals.cashOutSignal(req.user.id, Number(req.params.id)) }); }
   catch (e) { fail(res, e); }
 });
 
