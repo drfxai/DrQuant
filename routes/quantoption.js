@@ -26,6 +26,30 @@ const quantoptionSignals = require("../services/quantoption-signals");
 const auth = (req, res, next) => req.app.get("authMiddleware")(req, res, next);
 const admin = (req, res, next) => req.app.get("adminMiddleware")(req, res, next);
 
+// Quant Option is a Pro-only feature. `pro` runs after `auth` (so req.user is
+// set) and requires an ACTIVE subscription; the platform admin always bypasses.
+// Gating is applied at the router level below, so every Quant Option endpoint is
+// covered in one place. (The TradingView webhook POST is NOT in this router, so
+// it is unaffected.) Non-Pro users get 403 { code: "pro_required" }.
+async function pro(req, res, next) {
+  try {
+    if (req.user && req.user.role === "admin") return next();
+    const db = req.app.get("pool");
+    const { rows: [u] } = await db.query(
+      "SELECT subscription_status, subscription_expiry FROM users WHERE id=$1", [req.user.id]);
+    const active = !!(u && u.subscription_status === "active" &&
+      (!u.subscription_expiry || new Date(u.subscription_expiry) > new Date()));
+    if (active) return next();
+    return res.status(403).json({ error: "Quant Option is a Pro feature \u2014 upgrade to access.", code: "pro_required" });
+  } catch (e) {
+    return res.status(503).json({ error: "Pro check unavailable", code: "pro_check_failed" });
+  }
+}
+
+// gate EVERY Quant Option route behind auth + Pro (admin bypasses Pro; admin
+// routes below additionally enforce the admin role)
+router.use(auth, pro);
+
 function fail(res, err) {
   const code = err && err.code;
   const map = {
@@ -75,6 +99,12 @@ router.get("/positions", auth, async (req, res) => {
 //   GET /api/quantoption/chart?symbol=BTCUSDT&limit=200
 router.get("/chart", auth, async (req, res) => {
   try { res.json(await quantoption.chartData(req.query.symbol, { limit: req.query.limit })); }
+  catch (e) { fail(res, e); }
+});
+
+// lightweight symbol-strip prices for the real-mode picker poller (cheaper than /me)
+router.get("/prices", auth, async (req, res) => {
+  try { res.json(await quantoption.prices()); }
   catch (e) { fail(res, e); }
 });
 

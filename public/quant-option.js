@@ -105,7 +105,7 @@
     view: "trade",          // 'trade' | 'history'
     pos: null,              // open/most-recent position view (focused, in real mode)
     amb: {},                // symbol -> rolling [{t,price}]  (simulated mode only)
-    ambTimer: null, pollTimer: null, overlayOpen: false, busy: false,
+    ambTimer: null, pollTimer: null, symTimer: null, overlayOpen: false, busy: false,
     history: null,
     // -- real-price mode (QUANTOPTION_REAL_PRICES=true on the server) --
     realPrices: false,        // server settles on real market prices
@@ -881,6 +881,23 @@
   }
   function startChartPoll() { stopChartPoll(); if (!QO.realPrices) return; QO.chartTimer = setInterval(function () { fetchChart(false); }, chartCadence()); }
   function stopChartPoll() { if (QO.chartTimer) { clearInterval(QO.chartTimer); QO.chartTimer = null; } }
+  /* real-mode: keep the symbol-picker strip prices live (real spots, server-cached) */
+  function updateStripPrices() {
+    var els = document.querySelectorAll(".qo-symp");
+    for (var i = 0; i < els.length; i++) {
+      var idx = +els[i].getAttribute("data-i"); var s2 = QO.symbols[idx];
+      if (s2 && s2.price != null) els[i].textContent = fmtP(s2.price, s2.dp);
+    }
+  }
+  function fetchPrices() {
+    return API("/quantoption/prices").then(function (r) {
+      if (!r || !Array.isArray(r.symbols) || !r.symbols.length) return;
+      QO.symbols = r.symbols;                       // same order as SYMBOLS, indices stay valid
+      if (document.getElementById("qo-stage") && QO.view === "trade") updateStripPrices();
+    }).catch(function () {});
+  }
+  function startSymPoll() { stopSymPoll(); if (!QO.realPrices) return; fetchPrices(); QO.symTimer = setInterval(fetchPrices, 5000); }
+  function stopSymPoll() { if (QO.symTimer) { clearInterval(QO.symTimer); QO.symTimer = null; } }
   function startPosPoll() {
     stopPosPoll(); if (!QO.realPrices) return;
     var tick = function () {
@@ -920,9 +937,10 @@
   function startRealEngine() {
     if (!QO.realPrices) return;
     startChartPoll();
+    startSymPoll();
     if (QO.openPositions && QO.openPositions.length) { startPosPoll(); startCountdown(); }
   }
-  function stopRealEngine() { stopChartPoll(); stopPosPoll(); stopCountdown(); }
+  function stopRealEngine() { stopChartPoll(); stopSymPoll(); stopPosPoll(); stopCountdown(); }
 
   window.openQuantOption = openQO;
   window.dqQuantOption = {

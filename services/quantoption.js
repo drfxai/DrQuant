@@ -73,6 +73,15 @@ for (const s of SYMBOLS) SYM[s.symbol] = Object.assign({}, s, { wave: engine.der
 let _ready = null;
 let _poolWalletId = null;
 
+// REAL-mode symbol-strip price state. The picker tiles show real spot prices in
+// real mode; to keep the TwelveData free tier (8 req/min) safe we (a) cache the
+// whole strip for a few seconds and (b) remember each symbol's last real spot so
+// a momentarily rate-limited FX/metal tile holds its last real price instead of
+// flickering back to the simulated curve.
+const STRIP_TTL_MS = 4000;
+let _stripCache = { at: 0, data: null };
+const _lastRealSpot = new Map(); // SYMBOL -> last good real spot (Number)
+
 async function init() {
   if (_ready) return _ready;
   _ready = (async () => {
@@ -163,14 +172,45 @@ function roundPx(symbol, price) {
 }
 
 // public symbol descriptors for the client (base + wave so it can animate the
-// pre-trade chart locally, plus a fresh server price snapshot)
-function symbolList() {
+// pre-trade chart locally, plus a price snapshot). SIMULATED mode = ambient clock
+// price (as before). REAL mode = real spot from the feed with graceful fallback
+// (last-known real spot -> ambient) so a tile is never blank and an FX/metal
+// symbol rate-limited by TwelveData holds its last real price rather than
+// dropping back to the simulated curve. `real` flags which.
+function ambientStrip() {
   const now = Date.now();
   return SYMBOLS.map((s) => ({
     symbol: s.symbol, label: s.label, base: s.base, dp: s.dp, vol: s.vol, stepMs: STEP_MS,
     price: roundPx(s.symbol, ambientPrice(s.symbol, now)),
     wave: SYM[s.symbol].wave,
   }));
+}
+async function symbolList() {
+  if (!REAL_PRICES) return ambientStrip();
+  const now = Date.now();
+  if (_stripCache.data && (now - _stripCache.at) < STRIP_TTL_MS) return _stripCache.data;
+  const spots = await Promise.all(SYMBOLS.map(async (s) => {
+    try {
+      const p = await priceFeed.getSpot(s.symbol);
+      if (Number.isFinite(p) && p > 0) { _lastRealSpot.set(s.symbol, p); return { real: true, p }; }
+    } catch (e) { /* fall through to last-known / ambient */ }
+    if (_lastRealSpot.has(s.symbol)) return { real: true, p: _lastRealSpot.get(s.symbol) };
+    return { real: false, p: ambientPrice(s.symbol, now) };
+  }));
+  const data = SYMBOLS.map((s, i) => ({
+    symbol: s.symbol, label: s.label, base: s.base, dp: s.dp, vol: s.vol, stepMs: STEP_MS,
+    price: roundPx(s.symbol, spots[i].p), real: spots[i].real,
+    wave: SYM[s.symbol].wave,
+  }));
+  _stripCache = { at: now, data };
+  return data;
+}
+
+// lightweight payload for the client's real-mode strip poller: just the symbol
+// list (real spots). Much cheaper than /me, which also re-evaluates positions.
+async function prices() {
+  await init();
+  return { realPrices: REAL_PRICES, symbols: await symbolList() };
 }
 
 // ── snapshot for the section header: wallet + pool + open position + config ──
@@ -188,7 +228,7 @@ async function me(userId) {
   return {
     balance, pool: poolBal, min: MIN_STAKE, max: MAX_STAKE,
     payoutBps: engine.PAYOUT_BPS, payoutMult: PAYOUT_MULT, stepMs: STEP_MS,
-    expiries: EXPIRIES, symbols: symbolList(),
+    expiries: EXPIRIES, symbols: await symbolList(),
     realPrices: REAL_PRICES,
     open: stillOpen[0] || null,        // newest open (backward-compatible single)
     openPositions: stillOpen,          // full list (real mode can stack positions)
@@ -683,7 +723,7 @@ function positionView(p, extra) {
 }
 
 module.exports = {
-  init, me, openPosition, getPosition, listOpenPositions, chartData,
+  init, me, openPosition, getPosition, listOpenPositions, chartData, prices,
   resolve, sweepMatured, history,
   fundPool, topUpPool, poolStats, leaderboard,
   MIN_STAKE, MAX_STAKE, EXPIRIES, SYMBOLS, STEP_MS, REAL_PRICES,
