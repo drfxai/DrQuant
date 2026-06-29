@@ -593,7 +593,7 @@
       var col = win ? c.green : draw ? c.gold : open ? c.blue : c.red;
       var tag = win ? "WIN" : draw ? "DRAW" : open ? "LIVE" : "LOSS";
       var prof = win ? "+" + fmtQ(Number(p.payout) - Number(p.stake)) : draw ? "0" : open ? "—" : "-" + fmtQ(p.stake);
-      return '<div style="display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:12px;background:' + c.panel + ';border:1px solid ' + c.bd + ';margin-bottom:7px">' +
+      return '<div style="display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:8px;background:' + c.panel + ';border:1px solid ' + c.bd + ';margin-bottom:7px">' +
         '<span class="qo-badge" style="background:' + hexA(col, .14) + ';color:' + col + ';flex-shrink:0">' + tag + '</span>' +
         '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:800;color:' + c.t1 + '">' + ESC(p.label || p.symbol) + ' · ' + (p.dir === "long" ? "Long" : "Short") + '</div>' +
         '<div style="font-size:10px;color:' + c.t4 + '">' + fmtQ(p.stake) + ' QNTM · ' + expLabel(p.expirySec) + '</div></div>' +
@@ -788,7 +788,7 @@
     ov.id = "qo-result";
     ov.style.cssText = "position:fixed;inset:0;z-index:6300;display:flex;align-items:center;justify-content:center;padding:22px;background:rgba(3,6,14,.76);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px)";
     ov.innerHTML =
-      '<div style="width:min(370px,93vw);max-height:90vh;overflow-y:auto;border-radius:22px;background:' + c.panel + ';border:1px solid ' + c.bd + ';box-shadow:0 24px 70px rgba(0,0,0,.6);animation:qoPop .26s cubic-bezier(.2,.8,.3,1)">' +
+      '<div style="width:min(370px,93vw);max-height:90vh;overflow-y:auto;border-radius:16px;background:' + c.panel + ';border:1px solid ' + c.bd + ';box-shadow:0 24px 70px rgba(0,0,0,.6);animation:qoPop .26s cubic-bezier(.2,.8,.3,1)">' +
         '<div style="padding:26px 22px 16px;text-align:center;background:radial-gradient(120% 100% at 50% 0%,' + hexA(col, .22) + ',transparent)">' +
           '<div style="width:58px;height:58px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:' + hexA(col, .16) + ';animation:qoStamp .5s cubic-bezier(.2,1.2,.3,1)">' +
             '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="' + col + '" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg></div>' +
@@ -805,14 +805,14 @@
           kv("New balance", fmtQ(QO.balance) + " QNTM", c) +
         '</div>' +
         (QO.realPrices
-          ? '<div style="margin:8px 18px 0;padding:11px 12px;border-radius:11px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + '">' +
+          ? '<div style="margin:8px 18px 0;padding:11px 12px;border-radius:8px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + '">' +
               '<div class="qo-fair"><span>Settled on real ' + realFeedWord() + ' market prices — exit ' + fmtP(Number(p.exitPrice != null ? p.exitPrice : p.entry), p.dp) + '</span></div>' +
             '</div>'
-          : '<div style="margin:8px 18px 0;padding:11px 12px;border-radius:11px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + '">' +
+          : '<div style="margin:8px 18px 0;padding:11px 12px;border-radius:8px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + '">' +
               '<div class="qo-fair" style="margin-bottom:6px">' + ICO('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) + '<span>Provably fair — verify the path</span></div>' +
               '<div style="font-family:ui-monospace,monospace;font-size:9px;color:' + c.t3 + ';word-break:break-all;line-height:1.5"><b style="color:' + c.t4 + '">hash</b> ' + ESC(p.seedHash || "") + '<br><b style="color:' + c.t4 + '">seed</b> ' + ESC(p.serverSeed || "(revealed at settle)") + '</div>' +
             '</div>') +
-        '<div style="padding:14px 18px 18px"><button type="button" id="qo-result-x" style="width:100%;padding:13px 0;border-radius:13px;border:none;cursor:pointer;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(180deg,' + c.blue + ',#2456d8)">Back to Trade</button></div>' +
+        '<div style="padding:14px 18px 18px"><button type="button" id="qo-result-x" style="width:100%;padding:13px 0;border-radius:9px;border:none;cursor:pointer;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(180deg,' + c.blue + ',#2456d8)">Back to Trade</button></div>' +
       '</div>';
     document.body.appendChild(ov);
     function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }

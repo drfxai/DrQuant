@@ -93,34 +93,40 @@
     var css =
       '#qs-ov{position:fixed;inset:0;z-index:5200;display:flex;flex-direction:column;background:' + c.bg + ';font-family:Outfit,system-ui,sans-serif;padding-top:var(--sat);padding-left:var(--sal);padding-right:var(--sar);animation:qsIn .2s ease}' +
       '#qs-ov *{box-sizing:border-box}' +
-      '.qs-hd{display:flex;align-items:center;gap:11px;padding:10px 14px;border-bottom:1px solid ' + c.bd + ';background:' + c.panel3 + ';flex-shrink:0}' +
-      '.qs-ib{width:36px;height:36px;border-radius:10px;border:1px solid ' + c.bd + ';background:' + c.panel2 + ';color:' + c.t1 + ';cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}' +
+      '.qs-hd{display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid ' + c.bd + ';background:' + c.panel3 + ';flex-shrink:0}' +
+      '.qs-ib{width:36px;height:36px;border-radius:9px;border:1px solid ' + c.bd + ';background:' + c.panel2 + ';color:' + c.t1 + ';cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:border-color .15s,transform .12s}' +
+      '.qs-ib:hover{border-color:' + hexA(c.blue, .4) + '}' +
       '.qs-ib:active{transform:scale(.92)}' +
       '.qs-stage{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding:13px}' +
-      '.qs-card{border-radius:14px;background:' + c.panel + ';border:1px solid ' + c.bd + ';padding:13px;margin-bottom:11px}' +
+      '.qs-card{border-radius:10px;background:' + c.panel + ';border:1px solid ' + c.bd + ';padding:13px;margin-bottom:12px}' +
       '.qs-lab{font-size:9.5px;letter-spacing:1px;text-transform:uppercase;font-weight:800;color:' + c.t3 + ';margin-bottom:8px}' +
-      '.qs-sigcard{border-radius:14px;background:' + c.panel + ';border:1px solid ' + c.bd + ';padding:12px 13px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,transform .1s}' +
+      '.qs-sigcard{border-radius:10px;background:' + c.panel + ';border:1px solid ' + c.bd + ';padding:12px 13px;margin-bottom:10px;cursor:pointer;transition:border-color .15s,transform .1s}' +
+      '.qs-sigcard:hover{border-color:' + hexA(c.blue, .35) + '}' +
       '.qs-sigcard:active{transform:scale(.99)}' +
       '.qs-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.3px}' +
       '.qs-lv{display:flex;gap:8px;margin-top:10px}' +
-      '.qs-lvc{flex:1;border-radius:10px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + ';padding:8px;text-align:center}' +
-      '.qs-lvc .k{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:800;margin-bottom:3px}' +
+      '.qs-lvc{flex:1;border-radius:8px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + ';padding:8px;text-align:center}' +
+      '.qs-lvc .k{font-size:8.5px;letter-spacing:.6px;text-transform:uppercase;font-weight:800;margin-bottom:4px}' +
       '.qs-lvc .v{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:' + c.t1 + '}' +
-      '.qs-inp{width:100%;padding:11px 13px;border-radius:11px;background:' + c.panel3 + ';border:1px solid ' + c.bd + ';color:' + c.t1 + ';font-size:18px;font-weight:800;font-family:inherit;outline:none;font-variant-numeric:tabular-nums}' +
-      '.qs-inp:focus{border-color:' + c.blue + '}' +
+      '.qs-inp{width:100%;padding:11px 13px;border-radius:8px;background:' + c.panel3 + ';border:1px solid ' + c.bd + ';color:' + c.t1 + ';font-size:18px;font-weight:800;font-family:inherit;outline:none;font-variant-numeric:tabular-nums;transition:border-color .15s,box-shadow .15s}' +
+      '.qs-inp:focus{border-color:' + c.blue + ';box-shadow:0 0 0 3px ' + hexA(c.blue, .14) + '}' +
       '.qs-chips{display:flex;gap:6px;margin-top:9px}' +
-      '.qs-chip{flex:1;padding:8px 0;border-radius:9px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}' +
+      '.qs-chip{flex:1;padding:8px 0;border-radius:7px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,transform .1s}' +
+      '.qs-chip:hover{border-color:' + hexA(c.blue, .35) + ';color:' + c.t1 + '}' +
       '.qs-chip:active{transform:scale(.95)}' +
       '.qs-tl{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:9px}' +
-      '.qs-tlb{padding:9px 0;border-radius:10px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;text-align:center}' +
-      '.qs-tlb.on{border-color:' + hexA(c.blue, .6) + ';background:' + hexA(c.blue, .14) + ';color:' + c.blue + '}' +
-      '.qs-cta{width:100%;padding:15px;border:none;border-radius:13px;font-weight:800;font-size:15px;cursor:pointer;font-family:inherit;color:#fff;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .14s,opacity .2s}' +
+      '.qs-tlb{padding:9px 0;border-radius:8px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;text-align:center;transition:border-color .14s,background .14s,color .14s}' +
+      '.qs-tlb:hover{border-color:' + hexA(c.blue, .35) + ';color:' + c.t1 + '}' +
+      '.qs-tlb.on{border-color:' + hexA(c.blue, .55) + ';background:' + hexA(c.blue, .12) + ';color:' + c.blue + '}' +
+      '.qs-cta{width:100%;padding:15px;border:none;border-radius:9px;font-weight:800;font-size:15px;letter-spacing:.2px;cursor:pointer;font-family:inherit;color:#fff;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .14s,opacity .2s,filter .15s}' +
+      '.qs-cta:hover{filter:brightness(1.06)}' +
       '.qs-cta:active{transform:scale(.985)}' +
       '.qs-cta:disabled{opacity:.45;cursor:not-allowed}' +
-      '.qs-chart{width:100%;height:230px;border-radius:13px;overflow:hidden;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';margin-bottom:11px}' +
+      '.qs-chart{width:100%;height:234px;border-radius:10px;overflow:hidden;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';margin-bottom:12px;box-shadow:0 1px 12px rgba(0,0,0,.22)}' +
       '.qs-cmodes{display:flex;gap:6px;margin-bottom:7px}' +
-      '.qs-cmode{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 13px;border-radius:9px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}' +
-      '.qs-cmode.on{border-color:' + hexA(c.blue, .6) + ';background:' + hexA(c.blue, .14) + ';color:' + c.blue + '}' +
+      '.qs-cmode{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 13px;border-radius:7px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s}' +
+      '.qs-cmode:hover{border-color:' + hexA(c.blue, .35) + ';color:' + c.t1 + '}' +
+      '.qs-cmode.on{border-color:' + hexA(c.blue, .55) + ';background:' + hexA(c.blue, .12) + ';color:' + c.blue + '}' +
       '.qs-cmode:active{transform:scale(.96)}' +
       '.qs-toggle{width:44px;height:26px;border-radius:999px;border:none;cursor:pointer;position:relative;transition:background .18s;flex-shrink:0}' +
       '.qs-toggle .dot{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s}' +
@@ -396,7 +402,7 @@
     if (!window.dqQOChart) return;
     SG.chartTried = true;
     var c = TH();
-    var colors = { text: c.t2, grid: "rgba(120,150,200,.07)", up: c.green, down: c.red, entry: c.gold, target: c.green, stop: c.red };
+    var colors = { text: c.t2, grid: "rgba(120,150,200,.07)", border: c.bd, cross: "rgba(140,165,210,.42)", crossBg: c.panel2, up: c.green, down: c.red, entry: c.gold, target: c.green, stop: c.red };
     window.dqQOChart.ensureLib().then(function () {
       if (SG.screen !== "position" || !document.getElementById("qs-chart")) return;
       var ch = window.dqQOChart.create(el, { colors: colors, mode: SG.chartMode || "candle" });

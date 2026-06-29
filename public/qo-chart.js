@@ -92,11 +92,15 @@
       chart = LWC.createChart(container, {
         width: container.clientWidth || 320,
         height: container.clientHeight || 240,
-        layout: { background: { color: "transparent" }, textColor: c.text || "#9fb0cc", fontFamily: "Outfit, system-ui, sans-serif", attributionLogo: false },
+        layout: { background: { color: "transparent" }, textColor: c.text || "#9fb0cc", fontFamily: "Outfit, system-ui, sans-serif", fontSize: 11, attributionLogo: false },
         grid: { vertLines: { color: c.grid || "rgba(120,150,200,.07)" }, horzLines: { color: c.grid || "rgba(120,150,200,.07)" } },
-        rightPriceScale: { borderColor: c.grid || "rgba(120,150,200,.12)" },
-        timeScale: { borderColor: c.grid || "rgba(120,150,200,.12)", timeVisible: true, secondsVisible: false },
-        crosshair: { mode: (LWC.CrosshairMode && LWC.CrosshairMode.Normal != null) ? LWC.CrosshairMode.Normal : 0 },
+        rightPriceScale: { borderColor: c.border || "rgba(120,150,200,.16)", borderVisible: true, scaleMargins: { top: 0.12, bottom: 0.12 } },
+        timeScale: { borderColor: c.border || "rgba(120,150,200,.16)", timeVisible: true, secondsVisible: false },
+        crosshair: {
+          mode: (LWC.CrosshairMode && LWC.CrosshairMode.Normal != null) ? LWC.CrosshairMode.Normal : 0,
+          vertLine: { color: c.cross || "rgba(140,165,210,.42)", width: 1, style: DASH, labelBackgroundColor: c.crossBg || "#101a2c" },
+          horzLine: { color: c.cross || "rgba(140,165,210,.42)", width: 1, style: DASH, labelBackgroundColor: c.crossBg || "#101a2c" },
+        },
         handleScroll: true, handleScale: true,
       });
     } catch (e) { return null; }
