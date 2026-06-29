@@ -316,9 +316,57 @@
     };
   }
 
+  // Strict parser for the platform's OWN formatted signal posts (TradingView
+  // Signal / GOD MODE / multi-TP). extract() deliberately skips these; this one
+  // recognizes them so chat can show a clean signal card + a trade action.
+  function extractOfficial(text) {
+    if (text == null) return null;
+    var str = String(text).replace(/\r\n/g, "\n").trim();
+    if (!str || str.length > 4000) return null;
+    function findNum(re) { re.lastIndex = 0; var m = re.exec(str); return m ? toNum(m[1]) : null; }
+    var tp1 = findNum(/(?:tp\s*1|t1|target\s*1|take\s*profit\s*1|\btp\b|\btarget\b)\s*[:=\-]?\s*(\d{1,3}(?:[,\u066c]\d{3})+(?:[.\u066b]\d+)?|\d+(?:[.\u066b]\d+)?)/i);
+    var tp2 = findNum(/(?:tp\s*2|t2|target\s*2|take\s*profit\s*2)\s*[:=\-]?\s*(\d{1,3}(?:[,\u066c]\d{3})+(?:[.\u066b]\d+)?|\d+(?:[.\u066b]\d+)?)/i);
+    var tp3 = findNum(/(?:tp\s*3|t3|target\s*3|take\s*profit\s*3)\s*[:=\-]?\s*(\d{1,3}(?:[,\u066c]\d{3})+(?:[.\u066b]\d+)?|\d+(?:[.\u066b]\d+)?)/i);
+    var sl  = findNum(/(?:sl|s\/l|stop\s*loss|stop-loss|stoploss|\bstop\b)\s*[:=\-]?\s*(\d{1,3}(?:[,\u066c]\d{3})+(?:[.\u066b]\d+)?|\d+(?:[.\u066b]\d+)?)/i);
+    var entry = findNum(/(?:entry|enter|entry\s*price|\bprice\b|@)\s*[:=@]?\s*(\d{1,3}(?:[,\u066c]\d{3})+(?:[.\u066b]\d+)?|\d+(?:[.\u066b]\d+)?)/i);
+    var hasMarker = /tradingview\s*signal|god\s*mode/i.test(str);
+    var hasStructure = (tp1 != null && (tp2 != null || sl != null)) || (entry != null && sl != null && tp1 != null);
+    if (!hasMarker && !hasStructure) return null;
+    var toks = tokens(str);
+    var direction = null;
+    for (var i = 0; i < toks.length; i++) {
+      if (matchWord(toks[i].t, LONG_WORDS)) { direction = "long"; break; }
+      if (matchWord(toks[i].t, SHORT_WORDS)) { direction = "short"; break; }
+    }
+    if (!direction) return null;
+    var symbol = null, symbolSpan = null;
+    for (var j = 0; j < toks.length; j++) {
+      var hit = lookupSymbol(toks[j].t);
+      if (hit) { symbol = hit; symbolSpan = [toks[j].i, toks[j].i + toks[j].t.length]; break; }
+    }
+    if (!symbol) {
+      for (var k = 0; k < toks.length; k++) {
+        var up = toks[k].t.toUpperCase().replace(/[^A-Z0-9]/g, "");
+        if (/^[A-Z]{3}[A-Z]{3}$/.test(up) || /^[A-Z]{2,6}(USDT|USD|BUSD|USDC)$/.test(up)) { symbol = up; symbolSpan = [toks[k].i, toks[k].i + toks[k].t.length]; break; }
+      }
+    }
+    if (!symbol) return null;
+    var tfText = str;
+    if (symbolSpan) tfText = str.slice(0, symbolSpan[0]) + " ".repeat(symbolSpan[1] - symbolSpan[0]) + str.slice(symbolSpan[1]);
+    var tfInfo = detectTimeframe(tfText);
+    var tf = tfInfo ? tfInfo.tf : null;
+    return {
+      official: true, detected: true, level: "official", label: "Signal", confidence: 1,
+      symbol: symbol, direction: direction, entry: entry, sl: sl,
+      tp: tp1, tp1: tp1, tp2: tp2, tp3: tp3, timeframe: tf,
+      matched: { symbol: true, direction: true, entry: entry != null, sl: sl != null, tp: tp1 != null }
+    };
+  }
+
   return {
     version: VERSION,
     extract: extract,
+    extractOfficial: extractOfficial,
     // exposed for debugging / extension / tests
     SYMBOL_MAP: SYMBOL_MAP,
     LONG_WORDS: LONG_WORDS,

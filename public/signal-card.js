@@ -17,9 +17,50 @@
 (function () {
   "use strict";
 
+  // Clean recognition card for the platform's OWN formatted signals
+  // (TradingView / GOD MODE / multi-TP). No "auto-detected / not advice"
+  // disclaimer - these are official posts - plus the Quant Option trade action.
+  function officialCard(sig, m) {
+    var up = sig.direction === "long";
+    var col = up ? "#34d27a" : "#ef4444";
+    var dir = up ? "LONG" : "SHORT";
+    var arrow = ic(up ? '<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/>' : '<path d="M3 7l6 6 4-4 8 8"/><path d="M21 17v-6h-6"/>', 13);
+    function row(label, val, lc) {
+      if (val == null) return "";
+      return '<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:3px 0">' +
+        '<span style="color:' + (lc || t.t3) + ';font-weight:700">' + label + '</span>' +
+        '<span style="color:' + t.t1 + ';font-weight:700;font-family:ui-monospace,monospace">' + esc(String(val)) + '</span></div>';
+    }
+    var levels =
+      row("Entry", sig.entry, "#ffcf5a") +
+      row("TP1", sig.tp1, "#22c55e") +
+      row("TP2", sig.tp2, "#15c07a") +
+      row("TP3", sig.tp3, "#0fb872") +
+      row("Stop", sig.sl, "#ef4444");
+    var tf = sig.timeframe ? '<span style="font-size:10px;color:' + t.t4 + ';font-weight:700">' + esc(sig.timeframe) + '</span>' : "";
+    var card =
+      '<div class="dqsig-official" style="margin-top:5px;border:1px solid ' + col + '55;background:linear-gradient(180deg,' + col + '14,' + col + '07);border-radius:12px;padding:9px 11px;max-width:100%;-webkit-user-select:none;user-select:none">' +
+        '<div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">' +
+          '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:6px;background:' + col + '22;color:' + col + ';font-size:11px;font-weight:800;letter-spacing:.4px">' + arrow + dir + '</span>' +
+          '<span style="font-size:13px;font-weight:800;color:' + t.t1 + ';font-family:ui-monospace,monospace">' + esc(sig.symbol) + '</span>' +
+          tf +
+          '<span style="flex:1"></span>' +
+          '<span style="font-size:8.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:' + col + ';background:' + col + '1c;padding:2px 7px;border-radius:5px">Signal</span>' +
+        '</div>' +
+        levels +
+      '</div>';
+    var tb = (window.dqQOSignals && window.dqQOSignals.tradeButtonHTML) ? window.dqQOSignals.tradeButtonHTML(m) : "";
+    return card + tb;
+  }
+
   function dqSignalChip(m) {
     if (typeof window === "undefined" || !window.DQSignal) return "";
-    if (!m || !m.content || m.sender_role === "bot") return "";
+    if (!m || !m.content) return "";
+    // Official platform signals are recognized first, regardless of sender.
+    var off = null;
+    try { off = window.DQSignal.extractOfficial ? window.DQSignal.extractOfficial(m.content) : null; } catch (e) {}
+    if (off) return officialCard(off, m);
+    if (m.sender_role === "bot") return "";
     var sig;
     try { sig = window.DQSignal.extract(m.content); } catch (e) { return ""; }
     if (!sig) return "";

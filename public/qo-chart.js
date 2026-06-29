@@ -57,6 +57,22 @@
     return _libPromise;
   }
 
+  // Infer a pip size from a symbol so TP/SL labels can show "+N pips".
+  function pipSizeFor(symbol) {
+    var s = String(symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!s) return null;
+    if (/JPY/.test(s)) return 0.01;                              // JPY pairs: 1 pip = 0.01
+    if (/^XAU|^GOLD/.test(s)) return 0.1;                        // gold
+    if (/^XAG|^SILVER/.test(s)) return 0.01;                     // silver
+    if (/(USDT|BUSD|USDC)$/.test(s) && s.length > 6) return null; // crypto: pips not meaningful
+    if (/^[A-Z]{6}$/.test(s)) return 0.0001;                     // 6-letter FX major
+    return null;
+  }
+  function fmtPips(delta, pip) {
+    if (pip == null || !isFinite(delta)) return null;
+    return (delta >= 0 ? "+" : "-") + Math.round(Math.abs(delta) / pip) + "p";
+  }
+
   // opts: { colors:{bg,text,grid,up,down,entry,target,stop}, mode:'candle'|'line' }
   function create(container, opts) {
     if (!available() || !container) return null;
@@ -70,12 +86,13 @@
     var lastData = [];           // retained so a mode switch can re-feed
     var levels = null;           // {entry,target,stop}
     var priceLines = [];
+    var markers = [];
 
     try {
       chart = LWC.createChart(container, {
         width: container.clientWidth || 320,
         height: container.clientHeight || 240,
-        layout: { background: { color: "transparent" }, textColor: c.text || "#9fb0cc", fontFamily: "Outfit, system-ui, sans-serif" },
+        layout: { background: { color: "transparent" }, textColor: c.text || "#9fb0cc", fontFamily: "Outfit, system-ui, sans-serif", attributionLogo: false },
         grid: { vertLines: { color: c.grid || "rgba(120,150,200,.07)" }, horzLines: { color: c.grid || "rgba(120,150,200,.07)" } },
         rightPriceScale: { borderColor: c.grid || "rgba(120,150,200,.12)" },
         timeScale: { borderColor: c.grid || "rgba(120,150,200,.12)", timeVisible: true, secondsVisible: false },
@@ -102,6 +119,11 @@
       var s = activeSeries(); if (!s) return;
       try { s.setData(mode === "candle" ? lastData : toLine(lastData)); } catch (e) {}
       applyLevels();
+      applyMarkers();
+    }
+    function applyMarkers() {
+      var s = activeSeries(); if (!s) return;
+      try { s.setMarkers(markers || []); } catch (e) {}
     }
     function clearLevels() {
       var s = activeSeries(); if (!s) { priceLines = []; return; }
@@ -111,16 +133,36 @@
     function applyLevels() {
       clearLevels();
       var s = activeSeries(); if (!s || !levels) return;
+      var lv = levels;
+      var pip = (lv.pip != null) ? Number(lv.pip) : pipSizeFor(lv.symbol);
+      var entry = Number(lv.entry);
+      var risk = (isFinite(entry) && lv.stop != null && isFinite(Number(lv.stop))) ? Math.abs(entry - Number(lv.stop)) : null;
+      function tpTitle(name, price) {
+        var bits = [name];
+        if (isFinite(entry) && isFinite(price)) {
+          var pp = fmtPips(price - entry, pip); if (pp) bits.push(pp);
+          if (risk && risk > 0) bits.push("R " + (Math.round((Math.abs(price - entry) / risk) * 10) / 10));
+        }
+        return bits.join(" ");
+      }
+      function slTitle(price) {
+        var bits = ["STOP"];
+        if (isFinite(entry) && isFinite(price)) { var pp = fmtPips(price - entry, pip); if (pp) bits.push(pp); }
+        return bits.join(" ");
+      }
+      var tp1 = (lv.tp1 != null) ? lv.tp1 : lv.target;
       var defs = [
-        { price: levels.entry, color: c.entry || "#ffcf5a", title: "ENTRY" },
-        { price: levels.target, color: c.target || "#22c55e", title: "TARGET" },
-        { price: levels.stop, color: c.stop || "#f43f5e", title: "STOP" },
+        { price: lv.entry, color: c.entry || "#ffcf5a", title: "ENTRY", w: 2 },
+        { price: tp1,      color: "#22c55e", title: tpTitle("TP1", Number(tp1)), w: 1 },
+        { price: lv.tp2,   color: "#15c07a", title: tpTitle("TP2", Number(lv.tp2)), w: 1 },
+        { price: lv.tp3,   color: "#0fb872", title: tpTitle("TP3", Number(lv.tp3)), w: 1 },
+        { price: lv.stop,  color: c.stop || "#f43f5e", title: slTitle(Number(lv.stop)), w: 1 },
       ];
       for (var i = 0; i < defs.length; i++) {
         var d = defs[i]; if (d.price == null || !isFinite(Number(d.price))) continue;
         try {
           priceLines.push(s.createPriceLine({
-            price: Number(d.price), color: d.color, lineWidth: 1, lineStyle: DASH,
+            price: Number(d.price), color: d.color, lineWidth: d.w, lineStyle: DASH,
             axisLabelVisible: true, title: d.title,
           }));
         } catch (e) {}
@@ -149,6 +191,8 @@
       },
       setLevels: function (lv) { levels = lv || null; applyLevels(); },
       clearLevels: function () { levels = null; clearLevels(); },
+      setMarkers: function (arr) { markers = Array.isArray(arr) ? arr.slice() : []; applyMarkers(); },
+      clearMarkers: function () { markers = []; applyMarkers(); },
       fit: function () { try { chart.timeScale().fitContent(); } catch (e) {} },
       resize: function (w, h) {
         try { chart.resize(w || container.clientWidth, h || container.clientHeight); } catch (e) {}

@@ -369,10 +369,27 @@
       var ch = window.dqQOChart.create(el, { colors: colors, mode: "candle" });
       if (!ch) return;
       SG.chart = ch;
-      ch.setLevels({ entry: p.entry, target: p.target, stop: p.stop });
+      var nsym = String(p.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      var sig = (SG.sel && String(SG.sel.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === nsym) ? SG.sel : null;
+      ch.setLevels({ entry: p.entry, target: p.target, stop: p.stop, tp1: (sig ? sig.tp1 : p.target), tp2: (sig ? sig.tp2 : null), tp3: (sig ? sig.tp3 : null), symbol: p.symbol, direction: p.dir });
       window.dqQORealPrice.klines(p.symbol, { interval: "1m", limit: 200 }).then(function (data) {
         if (!SG.chart) return;
-        if (data && data.length) { ch.setData(data); ch.fit(); }
+        if (data && data.length) {
+          ch.setData(data); ch.fit();
+          try {
+            var up = p.dir === "long";
+            var t0 = data[0].time, t1 = data[data.length - 1].time, mk = [];
+            if (p.openedAt) {
+              var ot = Math.floor(new Date(p.openedAt).getTime() / 60000) * 60;
+              if (ot >= t0 && ot <= t1) mk.push({ time: ot, position: up ? "belowBar" : "aboveBar", color: up ? "#22c55e" : "#f43f5e", shape: up ? "arrowUp" : "arrowDown", text: up ? "BUY" : "SELL" });
+            }
+            if (p.status !== "open" && p.settledAt) {
+              var st = Math.floor(new Date(p.settledAt).getTime() / 60000) * 60;
+              if (st >= t0 && st <= t1) mk.push({ time: st, position: up ? "aboveBar" : "belowBar", color: (p.outcome === "win") ? "#22c55e" : "#f43f5e", shape: up ? "arrowDown" : "arrowUp", text: "EXIT" });
+            }
+            if (mk.length && SG.chart) SG.chart.setMarkers(mk);
+          } catch (e) {}
+        }
         SG.realStop = window.dqQORealPrice.subscribe(p.symbol, "1m", function (candle) {
           if (SG.chart) SG.chart.update(candle);
         });
@@ -465,7 +482,7 @@
   // (refreshed on open); the open always uses the stored extId, never the text.
   function matchForMessage(m) {
     if (!m || !m.content || !window.DQSignal) return null;
-    var sig; try { sig = window.DQSignal.extract(m.content); } catch (e) { return null; }
+    var sig; try { sig = (window.DQSignal.extractOfficial && window.DQSignal.extractOfficial(m.content)) || window.DQSignal.extract(m.content); } catch (e) { return null; }
     if (!sig || !sig.symbol || !sig.direction) return null;
     var sym = String(sig.symbol).toUpperCase().replace(/[^A-Z0-9]/g, "");
     var live = SG.signals.filter(function (s) {
@@ -483,7 +500,7 @@
   function tradeButtonHTML(m) {
     if (!m || !m.content || !window.DQSignal) return "";
     if (!officialSignalContext(m)) return "";
-    var sig; try { sig = window.DQSignal.extract(m.content); } catch (e) { return ""; }
+    var sig; try { sig = (window.DQSignal.extractOfficial && window.DQSignal.extractOfficial(m.content)) || window.DQSignal.extract(m.content); } catch (e) { return ""; }
     if (!sig || !sig.symbol || !sig.direction) return "";
     var c = TH();
     return '<button class="qs-trade-btn" data-sym="' + ESC(String(sig.symbol).toUpperCase()) + '" data-dir="' + ESC(sig.direction) + '" type="button" style="margin-top:5px;width:100%;padding:9px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;gap:7px;background:linear-gradient(180deg,' + c.blue + ',#2456d8)">' +
