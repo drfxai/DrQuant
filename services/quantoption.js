@@ -290,9 +290,31 @@ async function openPosition(userId, input) {
   } else {
     entry = engine.clockPrice(cfg.base, cfg.wave, now);     // server-stamped entry (on the public ambient curve)
   }
-  const offset = engine.offsetFor(entry, cfg.vol, expirySec, STEP_MS);
-  const target = dir === "long" ? entry + offset : entry - offset;
-  const stop = dir === "long" ? entry - offset : entry + offset;
+  // levels: use the trader's manual TP/SL when provided (TP becomes the settlement
+  // target = TP3; TP1/TP2 are derived for display). Both are required together and
+  // must sit on the correct side of the entry for the chosen direction; otherwise
+  // auto-generate them from volatility as before.
+  let target, stop;
+  const mT = (input.target != null && String(input.target).trim() !== "") ? Number(input.target) : null;
+  const mS = (input.stop != null && String(input.stop).trim() !== "") ? Number(input.stop) : null;
+  if (mT != null || mS != null) {
+    if (mT == null || mS == null || !Number.isFinite(mT) || !Number.isFinite(mS) || mT <= 0 || mS <= 0) {
+      const e = new Error("Enter both a TP and an SL price"); e.code = "bad_levels"; throw e;
+    }
+    const okLong = dir === "long" && mT > entry && mS < entry;
+    const okShort = dir === "short" && mT < entry && mS > entry;
+    if (!okLong && !okShort) {
+      const e = new Error(dir === "long"
+        ? "For a long, TP must be above and SL below the entry (" + String(entry) + ")"
+        : "For a short, TP must be below and SL above the entry (" + String(entry) + ")");
+      e.code = "bad_levels"; throw e;
+    }
+    target = mT; stop = mS;
+  } else {
+    const offset = engine.offsetFor(entry, cfg.vol, expirySec, STEP_MS);
+    target = dir === "long" ? entry + offset : entry - offset;
+    stop = dir === "long" ? entry - offset : entry + offset;
+  }
   const seedPair = engine.newSeed();
   const expiresAt = new Date(now + expirySec * 1000);
 

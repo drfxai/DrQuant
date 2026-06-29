@@ -111,6 +111,7 @@
     realPrices: false,        // server settles on real market prices
     openPositions: [],        // all open positions (real mode can stack)
     focusId: null,            // id of the position whose levels overlay the chart
+    manualTP: "", manualSL: "", // optional user-entered TP(=TP3)/SL for the Trade tab (blank = auto)
     realCandles: {},          // symbol -> [{t,o,h,l,c}] from /quantoption/chart
     chartProvider: null,      // 'binance' | 'twelvedata' (from /chart)
     chartTimer: null, posTimer: null, countTimer: null, chartBusy: false
@@ -482,6 +483,13 @@
         return '<button class="qo-exp ' + (i === QO.expIdx ? "on" : "") + '" data-i="' + i + '" type="button">' + expLabel(s) + '</button>';
       }).join("") + '</div>' +
     '</div>' +
+    '<div class="qo-card">' +
+      '<div class="qo-lab">TP / SL price · optional (auto if blank)</div>' +
+      '<div style="display:flex;gap:8px">' +
+        '<input class="qo-inp" id="qo-tp" type="number" inputmode="decimal" step="any" placeholder="TP (target)" value="' + (QO.manualTP != null ? QO.manualTP : "") + '" style="flex:1;min-width:0">' +
+        '<input class="qo-inp" id="qo-sl" type="number" inputmode="decimal" step="any" placeholder="SL (stop)" value="' + (QO.manualSL != null ? QO.manualSL : "") + '" style="flex:1;min-width:0">' +
+      '</div>' +
+    '</div>' +
     '<div class="qo-pre">' +
       '<div class="b"><div class="k">Potential payout</div><div class="v" id="qo-payout" style="color:' + c.green + '">' + fmtQ(payout) + '</div></div>' +
       '<div class="b"><div class="k">Profit</div><div class="v" style="color:' + c.green + '">+' + Math.round((QO.payoutBps || 8500) / 100) + '%</div></div>' +
@@ -635,6 +643,8 @@
       st.querySelectorAll(".qo-exp").forEach(function (b) {
         b.onclick = function () { var i = +b.getAttribute("data-i"); if (i !== QO.expIdx) { QO.expIdx = i; rerender(); } };
       });
+      var tpI = T("#qo-tp"); if (tpI) tpI.oninput = function () { QO.manualTP = tpI.value; };
+      var slI = T("#qo-sl"); if (slI) slI.oninput = function () { QO.manualSL = slI.value; };
       var open = T("#qo-open"); if (open) open.onclick = openPosition;
     }
   }
@@ -667,11 +677,12 @@
     if (balNum() < stake) { toast("Not enough QNTM in your wallet", "error"); return; }
     QO.busy = true;
     var btn = document.getElementById("qo-open"); if (btn) { btn.disabled = true; btn.style.opacity = ".6"; }
-    API("/quantoption/open", { method: "POST", body: { symbol: sym.symbol, direction: QO.dir, expirySec: curExpiry(), stake: stake } })
+    API("/quantoption/open", { method: "POST", body: { symbol: sym.symbol, direction: QO.dir, expirySec: curExpiry(), stake: stake, target: QO.manualTP, stop: QO.manualSL } })
       .then(function (r) {
         QO.busy = false;
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); rerender(); return; }
         if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+        QO.manualTP = ""; QO.manualSL = "";
         if (QO.realPrices) {
           QO.focusId = p.id;
           return loadMe().catch(function () {}).then(function () { QO.focusId = p.id; syncFocus(); QO.view = "trade"; rerender(); startRealEngine(); });

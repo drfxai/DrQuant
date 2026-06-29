@@ -53,7 +53,7 @@ router.use(auth, pro);
 function fail(res, err) {
   const code = err && err.code;
   const map = {
-    bad_symbol: 400, bad_dir: 400, bad_expiry: 400, bad_stake: 400, bad_amount: 400,
+    bad_symbol: 400, bad_dir: 400, bad_expiry: 400, bad_stake: 400, bad_amount: 400, bad_levels: 400,
     bad_signal: 400, bad_time: 400, signal_closed: 409,
     has_open: 409, capacity: 409, insufficient: 402, not_found: 404, not_open: 409,
     feed_unavailable: 503, feed_unconfigured: 503,
