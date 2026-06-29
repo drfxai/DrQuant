@@ -82,6 +82,7 @@
     chartMode: "candle",   // user-selectable chart style: "candle" | "line" (both real prices)
     openPos: null,         // the user's current open signal position (for resume after exit)
     overlayOpen: false, busy: false,
+    tpHit: {},             // fired TP-cross celebrations (per signal position id)
   };
   var TL_OPTS = [["5m", 300], ["15m", 900], ["1h", 3600], ["4h", 14400]];
 
@@ -424,6 +425,19 @@
         }
         SG.realStop = window.dqQORealPrice.subscribe(p.symbol, "1m", function (candle) {
           if (SG.chart) SG.chart.update(candle);
+          if (window.dqQOFx && candle && SG.pos && SG.pos.status === "open") {
+            var live = Number(candle.close);
+            if (isFinite(live)) {
+              var up2 = p.dir === "long";
+              var tps = [["TP1", sig ? sig.tp1 : p.target], ["TP2", sig ? sig.tp2 : null], ["TP3", sig ? sig.tp3 : null]];
+              var first = !SG.tpHit[p.id + ":seen"]; SG.tpHit[p.id + ":seen"] = 1;
+              for (var k2 = 0; k2 < tps.length; k2++) {
+                var nm = tps[k2][0], lv = Number(tps[k2][1]); if (!isFinite(lv)) continue;
+                var hit = up2 ? live >= lv : live <= lv, key = p.id + ":" + nm;
+                if (hit && !SG.tpHit[key]) { SG.tpHit[key] = 1; if (!first) window.dqQOFx.pop(nm + " reached", "#1c84ff"); }
+              }
+            }
+          }
         });
       }).catch(function () {});
     }).catch(function () { /* lib blocked → levels panel already shows */ });
@@ -479,6 +493,7 @@
   function showResult(p) {
     var c = TH();
     var win = p.status === "won", draw = p.status === "draw";
+    if (win && window.dqQOFx) { try { window.dqQOFx.burst(); } catch (e) {} }
     var col = win ? c.green : draw ? c.gold : c.red;
     var title = win ? "WIN" : draw ? "DRAW" : "LOSS";
     var profit = win ? (Number(p.payout) - Number(p.stake)) : draw ? 0 : -Number(p.stake);

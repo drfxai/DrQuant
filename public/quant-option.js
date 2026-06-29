@@ -112,6 +112,7 @@
     openPositions: [],        // all open positions (real mode can stack)
     focusId: null,            // id of the position whose levels overlay the chart
     manualTP: "", manualSL: "", // optional user-entered TP(=TP3)/SL for the Trade tab (blank = auto)
+    tpHit: {},                // fired TP-cross celebrations (per position id) so each pops once
     realCandles: {},          // symbol -> [{t,o,h,l,c}] from /quantoption/chart
     chartProvider: null,      // 'binance' | 'twelvedata' (from /chart)
     chartTimer: null, posTimer: null, countTimer: null, chartBusy: false
@@ -752,6 +753,7 @@
   function showResult(p) {
     var c = TH();
     var win = p.status === "won", draw = p.status === "draw";
+    if (win && window.dqQOFx) { try { window.dqQOFx.burst(); } catch (e) {} }
     var col = win ? c.green : draw ? c.gold : c.red;
     var title = win ? "WIN" : draw ? "DRAW" : "LOSS";
     var profit = win ? (Number(p.payout) - Number(p.stake)) : draw ? 0 : -Number(p.stake);
@@ -953,6 +955,23 @@
   }
   function startSymPoll() { stopSymPoll(); if (!QO.realPrices) return; fetchPrices(); QO.symTimer = setInterval(fetchPrices, 5000); }
   function stopSymPoll() { if (QO.symTimer) { clearInterval(QO.symTimer); QO.symTimer = null; } }
+  // celebratory pop as the live price crosses each TP (once per position+level)
+  function checkTpCross(list) {
+    if (!window.dqQOFx || !list || !list.length) return;
+    var c = TH();
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i]; if (!p || p.status !== "open") continue;
+      var live = Number(p.livePrice != null ? p.livePrice : p.livePriceRaw); if (!isFinite(live)) continue;
+      var up = p.dir === "long";
+      var first = !QO.tpHit[p.id + ":seen"]; QO.tpHit[p.id + ":seen"] = 1;
+      var tps = [["TP1", p.tp1], ["TP2", p.tp2], ["TP3", p.tp3]];
+      for (var k = 0; k < tps.length; k++) {
+        var nm = tps[k][0], lv = Number(tps[k][1]); if (!isFinite(lv)) continue;
+        var hit = up ? live >= lv : live <= lv, key = p.id + ":" + nm;
+        if (hit && !QO.tpHit[key]) { QO.tpHit[key] = 1; if (!first) window.dqQOFx.pop(nm + " reached", c.blue); }
+      }
+    }
+  }
   function startPosPoll() {
     stopPosPoll(); if (!QO.realPrices) return;
     var tick = function () {
@@ -962,7 +981,7 @@
         var list = (r && Array.isArray(r.positions)) ? r.positions : [];
         var liveIds = {}; list.forEach(function (p) { liveIds[p.id] = 1; });
         Object.keys(prev).forEach(function (id) { if (!liveIds[id]) resolveSettled(Number(id)); });
-        QO.openPositions = list; syncFocus();
+        QO.openPositions = list; syncFocus(); checkTpCross(list);
         if (document.getElementById("qo-stage") && QO.view === "trade") { drawChart(); refreshPositionCard(); refreshOpenChips(); }
         if (!list.length) stopPosPoll();
       }).catch(function () {});
@@ -1002,4 +1021,42 @@
     open: openQO,
     _pure: { clockPrice: clockPrice, toCandles: toCandles, progWidth: progWidth, expLabel: expLabel }
   };
+})();
+
+/* celebratory FX, shared with the signals module via window.dqQOFx */
+(function () {
+  if (window.dqQOFx) return;
+  try {
+    var s = document.createElement("style");
+    s.textContent =
+      "@keyframes qoFxRise{0%{opacity:0;transform:translate(-50%,10px) scale(.82)}16%{opacity:1;transform:translate(-50%,0) scale(1.08)}32%{transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-48px) scale(1)}}" +
+      "@keyframes qoFxConfetti{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(240px) rotate(560deg)}}" +
+      "@keyframes qoFxFlash{0%{opacity:.55;transform:translate(-50%,-50%) scale(.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.6)}}";
+    document.head.appendChild(s);
+  } catch (e) {}
+  function pop(text, color) {
+    color = color || "#1c84ff";
+    var el = document.createElement("div");
+    el.textContent = text;
+    el.style.cssText = "position:fixed;left:50%;top:33%;z-index:6400;pointer-events:none;font-family:Outfit,system-ui,sans-serif;font-weight:800;font-size:15px;letter-spacing:.3px;color:#fff;padding:8px 16px;border-radius:999px;white-space:nowrap;background:" + color + ";box-shadow:0 12px 32px " + color + "66;animation:qoFxRise 1.5s cubic-bezier(.2,.8,.3,1) forwards";
+    document.body.appendChild(el);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 1650);
+  }
+  function burst() {
+    var wrap = document.createElement("div");
+    wrap.style.cssText = "position:fixed;inset:0;z-index:6350;pointer-events:none;overflow:hidden";
+    var fl = document.createElement("div");
+    fl.style.cssText = "position:absolute;left:50%;top:42%;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(28,132,255,.55),transparent 70%);animation:qoFxFlash .7s ease-out forwards";
+    wrap.appendChild(fl);
+    var cols = ["#1c84ff", "#5aa9ff", "#22c55e", "#ffcf5a", "#ff5c8a", "#0a6edb"];
+    for (var i = 0; i < 30; i++) {
+      var p = document.createElement("div");
+      var sz = 6 + Math.round(Math.random() * 7);
+      p.style.cssText = "position:absolute;top:38%;left:" + (28 + Math.random() * 44) + "%;width:" + sz + "px;height:" + Math.round(sz * 0.6) + "px;background:" + cols[i % cols.length] + ";border-radius:2px;opacity:0;animation:qoFxConfetti " + (1.1 + Math.random() * 0.8).toFixed(2) + "s " + (Math.random() * 0.28).toFixed(2) + "s ease-in forwards";
+      wrap.appendChild(p);
+    }
+    document.body.appendChild(wrap);
+    setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 2300);
+  }
+  window.dqQOFx = { pop: pop, burst: burst };
 })();
