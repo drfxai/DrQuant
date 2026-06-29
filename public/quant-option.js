@@ -115,6 +115,7 @@
     tpHit: {},                // fired TP-cross celebrations (per position id) so each pops once
     realCandles: {},          // symbol -> [{t,o,h,l,c}] from /quantoption/chart
     chartProvider: null,      // 'binance' | 'twelvedata' (from /chart)
+    chartErr: null,           // last /chart failure reason, shown in the empty chart
     chartTimer: null, posTimer: null, countTimer: null, chartBusy: false
   };
   function curSym() { return QO.symbols[QO.symIdx] || null; }
@@ -302,7 +303,12 @@
     ctx.clearRect(0, 0, W, H);
     var D = chartSeries();
     var candles = D.candles, line = D.line, dp = D.dp;
-    if (line.length < 2 && candles.length < 1) return;
+    if (line.length < 2 && candles.length < 1) {
+      ctx.fillStyle = c.t3; ctx.font = "12px Outfit, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(QO.chartErr || "Loading chart\u2026", W / 2, H / 2);
+      ctx.textAlign = "left";
+      return;
+    }
 
     var padL = 8, padR = 62, padT = 10, padB = 16;
     var plotW = W - padL - padR, plotH = H - padT - padB;
@@ -925,6 +931,7 @@
     return API("/quantoption/chart?symbol=" + encodeURIComponent(sym.symbol) + "&limit=200").then(function (r) {
       QO.chartBusy = false;
       if (!r || !Array.isArray(r.candles)) return;
+      QO.chartErr = null;
       if (r.provider) QO.chartProvider = r.provider;
       QO.realCandles[sym.symbol] = r.candles.map(function (k) {
         return { t: (Number(k.time) || 0) * 1000, o: Number(k.open), h: Number(k.high), l: Number(k.low), c: Number(k.close) };
@@ -934,7 +941,17 @@
         var pxEl = document.getElementById("qo-px"); if (pxEl) pxEl.textContent = fmtP(headlinePrice(sym), sym.dp);
         drawChart();
       }
-    }).catch(function () { QO.chartBusy = false; });
+    }).catch(function (e) {
+      QO.chartBusy = false;
+      var blob = (((e && e.code) || (e && e.error && e.error.code) || "") + " " +
+                  ((e && e.error && (e.error.message || e.error)) || (e && e.message) || ""));
+      QO.chartErr =
+        /run out|credit|rate|limit|429|too many/i.test(blob) ? "FX feed hit its rate limit \u2014 try again shortly" :
+        /feed_unconfigured|not set|api[_ ]?key|not configured/i.test(blob) ? "FX chart feed isn\u2019t configured on the server" :
+        /feed_unavailable|no real feed/i.test(blob) ? "No live chart feed for this symbol" :
+        "Chart temporarily unavailable \u2014 retrying";
+      if (document.getElementById("qo-stage") && QO.view === "trade") drawChart();
+    });
   }
   function startChartPoll() { stopChartPoll(); if (!QO.realPrices) return; QO.chartTimer = setInterval(function () { fetchChart(false); }, chartCadence()); }
   function stopChartPoll() { if (QO.chartTimer) { clearInterval(QO.chartTimer); QO.chartTimer = null; } }

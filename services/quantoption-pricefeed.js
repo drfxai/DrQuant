@@ -157,13 +157,15 @@ async function tdSeries(tdsym, opts) {
 const _spotCache = new Map(); // SYMBOL -> { p, at }
 
 // latest price as a Number; throws on failure (caller fails closed)
-async function getSpot(symbol) {
+async function getSpot(symbol, opts) {
+  opts = opts || {};
   const prov = providerFor(symbol);
   if (!prov) throw badSymbol(symbol);
   const key = String(symbol).toUpperCase();
   const now = Date.now();
+  const ttl = (opts.maxAgeMs != null) ? opts.maxAgeMs : SPOT_TTL_MS;
   const cached = _spotCache.get(key);
-  if (cached && (now - cached.at) < SPOT_TTL_MS) return cached.p;
+  if (cached && (now - cached.at) < ttl) return cached.p;
   const p = prov === "binance" ? await binanceSpot(CRYPTO[key]) : await tdSpot(TD_MAP[key]);
   _spotCache.set(key, { p, at: now });
   return p;

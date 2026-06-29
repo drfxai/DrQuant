@@ -191,7 +191,8 @@ async function symbolList() {
   if (_stripCache.data && (now - _stripCache.at) < STRIP_TTL_MS) return _stripCache.data;
   const spots = await Promise.all(SYMBOLS.map(async (s) => {
     try {
-      const p = await priceFeed.getSpot(s.symbol);
+      const maxAgeMs = priceFeed.providerFor(s.symbol) === "twelvedata" ? 45000 : 4000;
+      const p = await priceFeed.getSpot(s.symbol, { maxAgeMs });
       if (Number.isFinite(p) && p > 0) { _lastRealSpot.set(s.symbol, p); return { real: true, p }; }
     } catch (e) { /* fall through to last-known / ambient */ }
     if (_lastRealSpot.has(s.symbol)) return { real: true, p: _lastRealSpot.get(s.symbol) };
