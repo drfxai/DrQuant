@@ -536,6 +536,11 @@
       '<div class="b"><div class="k">If TP3 hit</div><div class="v" style="color:' + c.green + '">+' + fmtQ((Number(p.stake) || 0) * ((QO.payoutBps || 8500) / 10000)) + '</div></div>' +
       '<div class="b"><div class="k">Win pays</div><div class="v" style="color:' + c.t1 + '">' + fmtQ(p.potentialWin != null ? p.potentialWin : (Number(p.stake) * (QO.payoutMult || 1.85))) + '</div></div>' +
     '</div>' +
+    '<div style="padding:2px 0 12px">' +
+      '<button class="qo-cta" id="qo-exit" type="button" style="background:linear-gradient(180deg,' + c.gold + ',' + (c.goldD || c.gold) + ');box-shadow:0 8px 22px ' + hexA(c.gold, .28) + '">' +
+        ICO('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>', 18) + 'Exit now \u00b7 cash out' +
+      '</button>' +
+    '</div>' +
     (QO.realPrices
       ? '<div class="qo-fair" style="justify-content:center;padding:4px 0 14px;gap:7px">' +
           ICO('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) +
@@ -647,6 +652,7 @@
       var slI = T("#qo-sl"); if (slI) slI.oninput = function () { QO.manualSL = slI.value; };
       var open = T("#qo-open"); if (open) open.onclick = openPosition;
     }
+    var exitBtn = T("#qo-exit"); if (exitBtn) exitBtn.onclick = cashOutPosition;
   }
   function syncPayout() {
     var el = document.getElementById("qo-payout");
@@ -698,6 +704,28 @@
   }
 
   /* ── poll an open position; settle → result popup ───────────────────────── */
+  function cashOutPosition() {
+    var p = QO.pos; if (!p || p.status !== "open" || QO.busy) return;
+    if (typeof confirm === "function" && !confirm("Exit this position now at the current market price?")) return;
+    QO.busy = true;
+    var btn = document.getElementById("qo-exit"); if (btn) { btn.disabled = true; btn.style.opacity = ".6"; }
+    API("/quantoption/cashout/" + p.id, { method: "POST" }).then(function (r) {
+      QO.busy = false;
+      var sp = r && r.position; if (!sp) { toast("Could not exit position", "error"); rerender(); return; }
+      if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+      return loadMe().catch(function () {}).then(function () {
+        if (QO.realPrices) { QO.focusId = null; syncFocus(); stopRealEngine(); }
+        else { QO.pos = null; stopPoll(); }
+        showResult(sp);
+        rerender();
+        if (QO.realPrices && QO.openPositions && QO.openPositions.length) startRealEngine();
+      });
+    }).catch(function (e) {
+      QO.busy = false;
+      toast((e && e.error && (e.error.message || e.error)) || (e && e.message) || "Could not exit position", "error");
+      rerender();
+    });
+  }
   function startPoll() {
     stopAmbient(); stopPoll();
     if (!QO.pos || QO.pos.status !== "open") return;

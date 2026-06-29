@@ -152,21 +152,20 @@
         var bits = [name];
         if (isFinite(entry) && isFinite(price)) {
           var pp = fmtPips(price - entry, pip); if (pp) bits.push(pp);
-          if (risk && risk > 0) bits.push("R " + (Math.round((Math.abs(price - entry) / risk) * 10) / 10));
         }
         return bits.join(" ");
       }
       function slTitle(price) {
-        var bits = ["STOP"];
+        var bits = ["SL"];
         if (isFinite(entry) && isFinite(price)) { var pp = fmtPips(price - entry, pip); if (pp) bits.push(pp); }
         return bits.join(" ");
       }
       var tp1 = (lv.tp1 != null) ? lv.tp1 : lv.target;
       var defs = [
-        { price: lv.entry, color: c.entry || "#ffcf5a", title: "ENTRY", w: 2 },
-        { price: tp1,      color: "#22c55e", title: tpTitle("TP1", Number(tp1)), w: 1 },
-        { price: lv.tp2,   color: "#15c07a", title: tpTitle("TP2", Number(lv.tp2)), w: 1 },
-        { price: lv.tp3,   color: "#0fb872", title: tpTitle("TP3", Number(lv.tp3)), w: 1 },
+        { price: lv.entry, color: c.entry || "#ffcf5a", title: "ENTRY", w: 1 },
+        { price: tp1,      color: "#5aa9ff", title: tpTitle("TP1", Number(tp1)), w: 1 },
+        { price: lv.tp2,   color: "#1c84ff", title: tpTitle("TP2", Number(lv.tp2)), w: 1 },
+        { price: lv.tp3,   color: "#0a6edb", title: tpTitle("TP3", Number(lv.tp3)), w: 1 },
         { price: lv.stop,  color: c.stop || "#f43f5e", title: slTitle(Number(lv.stop)), w: 1 },
       ];
       for (var i = 0; i < defs.length; i++) {
