@@ -318,7 +318,7 @@
       return;
     }
 
-    var padL = 8, padR = 62, padT = 10, padB = 16;
+    var padL = 10, padR = 58, padT = 8, padB = 20;
     var plotW = W - padL - padR, plotH = H - padT - padB;
 
     // y-range over what is drawn, widened to include levels + the live price
@@ -340,14 +340,25 @@
     function Y(v) { return padT + plotH - ((v - lo) / (hi - lo)) * plotH; }
     function Xl(idx, n) { return padL + (n <= 1 ? 0 : (idx / (n - 1)) * plotW); }
 
-    // grid + right-edge price ticks
-    ctx.lineWidth = 1; ctx.font = "10px Outfit, sans-serif"; ctx.textBaseline = "middle";
+    // grid: vertical time columns + horizontal price rows + a right price-axis (charting-first)
+    var gridSeries = (QO.chartMode === "candle" && candles.length) ? candles : line;
+    var gsn = gridSeries.length;
+    var tAt = function (f) { if (!gsn) return null; var it = gridSeries[Math.round(f * (gsn - 1))]; return it ? it.t : null; };
+    ctx.lineWidth = 1; ctx.textBaseline = "middle";
+    ctx.font = "600 9px Outfit, sans-serif";
+    for (var vc = 1; vc < 4; vc++) {
+      var fx = vc / 4, vx = padL + plotW * fx;
+      ctx.strokeStyle = c.grid; ctx.beginPath(); ctx.moveTo(vx, padT); ctx.lineTo(vx, padT + plotH); ctx.stroke();
+      var tt = tAt(fx);
+      if (tt != null) { ctx.fillStyle = c.t4; ctx.textAlign = "center"; ctx.fillText(hhmm(tt), vx, padT + plotH + 10); }
+    }
+    ctx.font = "600 9.5px Outfit, sans-serif";
     for (var g = 0; g <= 4; g++) {
       var yy = padT + (plotH * g) / 4;
       ctx.strokeStyle = c.grid; ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(padL + plotW, yy); ctx.stroke();
-      var pv = lo + (hi - lo) * (1 - g / 4);
-      ctx.fillStyle = c.t4; ctx.textAlign = "left"; ctx.fillText(fmtP(pv, dp), padL + plotW + 6, yy);
+      if (g > 0 && g < 4) { var pv = lo + (hi - lo) * (1 - g / 4); ctx.fillStyle = c.t3; ctx.textAlign = "left"; ctx.fillText(fmtP(pv, dp), padL + plotW + 7, yy); }
     }
+    ctx.strokeStyle = c.bdSoft; ctx.beginPath(); ctx.moveTo(padL + plotW + 0.5, padT); ctx.lineTo(padL + plotW + 0.5, padT + plotH); ctx.stroke();
 
     // position zones + levels: profit band entry->TP3 (green), loss band entry->SL
     // (red), with TP1 / TP2 / TP3 / ENTRY / SL lines (TP3 = the settlement target)
@@ -422,6 +433,7 @@
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
+  function hhmm(ms) { var d = new Date(Number(ms) || 0); var h = d.getHours(), m = d.getMinutes(); return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m; }
 
   /* ── HTML builders ──────────────────────────────────────────────────────── */
   function headerHTML() {
