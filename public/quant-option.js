@@ -340,11 +340,11 @@
       var n1 = Number(pos.tp1), n2 = Number(pos.tp2);
       var n3 = Number.isFinite(Number(pos.tp3)) ? Number(pos.tp3) : Number(pos.target);
       var yE = Y(nE), yS = Y(nS), y3 = Y(n3);
-      ctx.fillStyle = hexA(c.green, .10); ctx.fillRect(padL, Math.min(yE, y3), plotW, Math.abs(y3 - yE));
-      ctx.fillStyle = hexA(c.red, .10); ctx.fillRect(padL, Math.min(yE, yS), plotW, Math.abs(yS - yE));
-      if (Number.isFinite(n1)) drawLevel(ctx, padL, plotW, Y(n1), c.green, "TP1 " + fmtP(n1, dp), c);
-      if (Number.isFinite(n2)) drawLevel(ctx, padL, plotW, Y(n2), c.green, "TP2 " + fmtP(n2, dp), c);
-      drawLevel(ctx, padL, plotW, y3, c.green, "TP3 " + fmtP(n3, dp), c);
+      ctx.fillStyle = hexA(c.blue, .09); ctx.fillRect(padL, Math.min(yE, y3), plotW, Math.abs(y3 - yE));
+      ctx.fillStyle = hexA(c.red, .08); ctx.fillRect(padL, Math.min(yE, yS), plotW, Math.abs(yS - yE));
+      if (Number.isFinite(n1)) drawLevel(ctx, padL, plotW, Y(n1), c.blue, "TP1 " + fmtP(n1, dp), c);
+      if (Number.isFinite(n2)) drawLevel(ctx, padL, plotW, Y(n2), c.blue, "TP2 " + fmtP(n2, dp), c);
+      drawLevel(ctx, padL, plotW, y3, c.blue, "TP3 " + fmtP(n3, dp), c);
       drawLevel(ctx, padL, plotW, yE, c.gold, "ENTRY " + fmtP(nE, dp), c);
       drawLevel(ctx, padL, plotW, yS, c.red, "SL " + fmtP(nS, dp), c);
     }
@@ -381,12 +381,13 @@
     }
   }
   function drawLevel(ctx, x0, w, y, col, label, c) {
-    ctx.strokeStyle = hexA(col, .85); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.2;
+    ctx.strokeStyle = hexA(col, .5); ctx.setLineDash([2, 4]); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x0 + w, y); ctx.stroke(); ctx.setLineDash([]);
-    ctx.font = "700 9px Outfit, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.font = "700 8.5px Outfit, sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     var tw = ctx.measureText(label).width;
-    ctx.fillStyle = hexA(col, .9); roundRect(ctx, x0 + 4, y - 7.5, tw + 9, 15, 4); ctx.fill();
-    ctx.fillStyle = "#06101f"; ctx.fillText(label, x0 + 8.5, y);
+    // delicate label: faint tinted pill with colored text (not a solid block)
+    ctx.fillStyle = hexA(col, .15); roundRect(ctx, x0 + 4, y - 7, tw + 8, 14, 3); ctx.fill();
+    ctx.fillStyle = hexA(col, .95); ctx.fillText(label, x0 + 8, y);
   }
   function drawCandleArray(ctx, candles, padL, plotW, Y, c) {
     var n = candles.length; if (!n) return;
@@ -508,7 +509,7 @@
     '</div>' +
     '<div class="qo-posrow">' +
       '<div class="qo-poscell"><div class="k" style="color:' + c.gold + '">Entry</div><div class="v">' + fmtP(Number(p.entry), p.dp) + '</div></div>' +
-      '<div class="qo-poscell"><div class="k" style="color:' + c.green + '">TP3</div><div class="v" style="color:' + c.green + '">' + fmtP(Number(p.target), p.dp) + '</div></div>' +
+      '<div class="qo-poscell"><div class="k" style="color:' + c.blue + '">TP3</div><div class="v" style="color:' + c.blue + '">' + fmtP(Number(p.target), p.dp) + '</div></div>' +
       '<div class="qo-poscell"><div class="k" style="color:' + c.red + '">SL</div><div class="v" style="color:' + c.red + '">' + fmtP(Number(p.stop), p.dp) + '</div></div>' +
     '</div>' +
     '<div class="qo-card">' +
@@ -516,11 +517,11 @@
         '<span class="qo-lab" style="margin:0">Live price</span>' +
         '<span id="qo-live" style="font-size:18px;font-weight:800;color:' + c.t1 + ';font-variant-numeric:tabular-nums">' + fmtP(Number(p.livePrice != null ? p.livePrice : p.entry), p.dp) + '</span>' +
       '</div>' +
-      '<div class="qo-bartrack"><div class="qo-barfill" id="qo-prog" style="width:' + progWidth(prog) + '%;background:' + (prog >= 0 ? c.green : c.red) + '"></div></div>' +
+      '<div class="qo-bartrack"><div class="qo-barfill" id="qo-prog" style="width:' + progWidth(prog) + '%;background:' + (prog >= 0 ? c.blue : c.red) + '"></div></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-weight:700">' +
         '<span style="color:' + c.red + '">SL</span>' +
         '<span id="qo-prog-lab" style="color:' + c.t3 + '">' + progLabel(prog) + '</span>' +
-        '<span style="color:' + c.green + '">TP3</span>' +
+        '<span style="color:' + c.blue + '">TP3</span>' +
       '</div>' +
     '</div>' +
     '<div class="qo-pre">' +
@@ -608,7 +609,16 @@
       };
     });
     st.querySelectorAll(".qo-openchip").forEach(function (b) {
-      b.onclick = function () { var id = +b.getAttribute("data-id"); if (id && id !== QO.focusId) { QO.focusId = id; syncFocus(); rerender(); } };
+      b.onclick = function () {
+        var id = +b.getAttribute("data-id"); if (!id || id === QO.focusId) return;
+        QO.focusId = id;
+        // switch the chart to THIS position's symbol so its candles + levels show
+        var fp = null, list = QO.openPositions || [], k;
+        for (k = 0; k < list.length; k++) { if (list[k].id === id) { fp = list[k]; break; } }
+        if (fp) { for (k = 0; k < QO.symbols.length; k++) { if (QO.symbols[k].symbol === fp.symbol) { QO.symIdx = k; break; } } }
+        syncFocus(); rerender();
+        if (QO.realPrices) fetchChart(true);
+      };
     });
     var mc = T("#qo-m-candle"); if (mc) mc.onclick = function () { QO.chartMode = "candle"; rerender(); };
     var ml = T("#qo-m-line"); if (ml) ml.onclick = function () { QO.chartMode = "line"; rerender(); };
