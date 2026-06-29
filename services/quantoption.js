@@ -38,6 +38,13 @@ const { postTransaction } = require("../qntm-ledger/src/ledger");
 const wallets = require("../qntm-ledger/src/wallets");
 const decimal = require("../qntm-ledger/src/decimal");
 const engine = require("./quantoption-engine");
+const priceFeed = require("./quantoption-pricefeed");
+
+// When true, Quant Option settles against REAL market prices (Binance for crypto,
+// TwelveData for FX/metals) using true barrier/touch detection in
+// services/quantoption-pricefeed.js. When false (default), the provably-fair
+// simulated engine is used unchanged — zero behavior change.
+const REAL_PRICES = process.env.QUANTOPTION_REAL_PRICES === "true";
 
 const MIN_STAKE = 10;
 const MAX_STAKE = 1000000;
@@ -172,15 +179,19 @@ async function me(userId) {
   const w = await wallets.getOrCreateWallet("user", userId, "personal", "QNTM"); // same wallet as /api/qntm/wallets/me
   const balance = w.available_balance;
   const poolBal = await poolBalance();
-  const { rows: open } = await pool.query(
-    `SELECT * FROM quantoption_positions WHERE user_id=$1 AND status='open' ORDER BY id DESC LIMIT 1`, [String(userId)]);
-  let openView = null;
-  if (open[0]) openView = await liveView(open[0], userId); // may settle it if already matured
+  // evaluate (and settle if matured) ALL open positions, newest first
+  const { rows: openRows } = await pool.query(
+    `SELECT * FROM quantoption_positions WHERE user_id=$1 AND status='open' ORDER BY id DESC`, [String(userId)]);
+  const evaluated = [];
+  for (const r of openRows) evaluated.push(await liveView(r, userId));
+  const stillOpen = evaluated.filter((p) => p.status === "open"); // a matured one may have settled
   return {
     balance, pool: poolBal, min: MIN_STAKE, max: MAX_STAKE,
     payoutBps: engine.PAYOUT_BPS, payoutMult: PAYOUT_MULT, stepMs: STEP_MS,
     expiries: EXPIRIES, symbols: symbolList(),
-    open: openView,
+    realPrices: REAL_PRICES,
+    open: stillOpen[0] || null,        // newest open (backward-compatible single)
+    openPositions: stillOpen,          // full list (real mode can stack positions)
   };
 }
 
@@ -210,13 +221,35 @@ async function openPosition(userId, input) {
   if (stakeNum > MAX_STAKE) { const e = new Error("stake above maximum"); e.code = "bad_stake"; throw e; }
   const stake = String(stakeNum);
 
-  // one open position per user (keeps UX + settlement simple, like Easy Trade)
-  const { rows: openRows } = await pool.query(
-    `SELECT id FROM quantoption_positions WHERE user_id=$1 AND status='open' LIMIT 1`, [String(userId)]);
-  if (openRows.length) { const e = new Error("you already have an open position"); e.code = "has_open"; throw e; }
+  // SIMULATED mode keeps one open position per user (simple UX + settlement, like
+  // Easy Trade). REAL mode allows stacking concurrent positions, so the guard is
+  // skipped — exposureOk() inside the transaction still bounds total risk.
+  if (!REAL_PRICES) {
+    const { rows: openRows } = await pool.query(
+      `SELECT id FROM quantoption_positions WHERE user_id=$1 AND status='open' LIMIT 1`, [String(userId)]);
+    if (openRows.length) { const e = new Error("you already have an open position"); e.code = "has_open"; throw e; }
+  }
 
   const now = Date.now();
-  const entry = engine.clockPrice(cfg.base, cfg.wave, now);     // server-stamped entry (on the public ambient curve)
+  // REAL mode stamps the entry from the live feed and FAILS CLOSED if the feed is
+  // unavailable (never opens on a guessed price). SIMULATED stamps from the public
+  // ambient curve as before. A throwaway seed is still generated below in both
+  // modes, so the NOT NULL seed columns need no migration.
+  let entry;
+  if (REAL_PRICES) {
+    try {
+      entry = await priceFeed.getSpot(cfg.symbol);
+    } catch (e) {
+      const err = new Error("Live price unavailable — please try again in a moment");
+      err.code = "feed_unavailable"; throw err;
+    }
+    if (!Number.isFinite(entry) || entry <= 0) {
+      const err = new Error("Live price unavailable — please try again in a moment");
+      err.code = "feed_unavailable"; throw err;
+    }
+  } else {
+    entry = engine.clockPrice(cfg.base, cfg.wave, now);     // server-stamped entry (on the public ambient curve)
+  }
   const offset = engine.offsetFor(entry, cfg.vol, expirySec, STEP_MS);
   const target = dir === "long" ? entry + offset : entry - offset;
   const stop = dir === "long" ? entry - offset : entry + offset;
@@ -264,10 +297,49 @@ async function getPosition(userId, id) {
   return liveView(rows[0], userId);
 }
 
+// list ALL open positions for a user (evaluates + settles matured ones). Backs
+// GET /api/quantoption/positions and the multi-position client view.
+async function listOpenPositions(userId) {
+  await init();
+  const { rows } = await pool.query(
+    `SELECT * FROM quantoption_positions WHERE user_id=$1 AND status='open' ORDER BY id DESC`, [String(userId)]);
+  const evaluated = [];
+  for (const row of rows) evaluated.push(await liveView(row, userId));
+  const positions = evaluated.filter((p) => p.status === "open");
+  return { realPrices: REAL_PRICES, count: positions.length, positions };
+}
+
+// server-side chart candles, so the TwelveData key never reaches the browser.
+// Works for every tradeable symbol with a real feed; crypto may also chart
+// browser-direct from Binance. Throws (→ fail()) when no real feed is available.
+async function chartData(symbol, opts) {
+  await init();
+  const cfg = symCfg(String(symbol || ""));
+  if (!cfg) { const e = new Error("unknown symbol"); e.code = "bad_symbol"; throw e; }
+  if (!priceFeed.isSupported(cfg.symbol)) { const e = new Error("no real feed for " + cfg.symbol); e.code = "feed_unavailable"; throw e; }
+  opts = opts || {};
+  const limit = Math.min(500, Math.max(10, Math.floor(Number(opts.limit) || 200)));
+  const candles = await priceFeed.getCandles(cfg.symbol, { limit });
+  return {
+    symbol: cfg.symbol, label: cfg.label, dp: cfg.dp,
+    provider: priceFeed.providerFor(cfg.symbol),
+    candles: candles.map((k) => ({ time: Math.floor(k.t / 1000), open: k.o, high: k.h, low: k.l, close: k.c })),
+  };
+}
+
 // shared: evaluate an open row; if resolved, settle then re-read; build the view
 async function liveView(row, userId) {
   if (row.status !== "open") return positionView(row, { now: Date.now() });
   const now = Date.now();
+  if (REAL_PRICES) {
+    const rev = await realEvaluate(row, now);
+    if (rev.resolved) {
+      await resolve(row.id, rev.outcome, rev.exitPrice);
+      const { rows: fresh } = await pool.query(`SELECT * FROM quantoption_positions WHERE id=$1`, [row.id]);
+      return positionView(fresh[0] || row, { now, realEv: rev });
+    }
+    return positionView(row, { now, realEv: rev });
+  }
   const ev = engine.evaluate(enginePos(row), now);
   if (ev.resolved) {
     await resolve(row.id, ev.outcome, ev.exitPrice);
@@ -275,6 +347,53 @@ async function liveView(row, userId) {
     return positionView(fresh[0] || row, { now, ev });
   }
   return positionView(row, { now, ev });
+}
+
+// REAL-PRICE evaluation: pull real candles for the position window and apply the
+// locked settlement rules via engine.detectBarrierTouch + engine.expiryOutcome.
+// Fail-closed: if the feed can't return data, a MATURED position settles VOID
+// (draw/refund); a still-live position simply reports no live price yet.
+async function realEvaluate(row, nowMs) {
+  const openedMs = new Date(row.opened_at).getTime();
+  const expiryMs = new Date(row.expires_at).getTime();
+  const windowEnd = Math.min(nowMs, expiryMs);
+  const target = Number(row.target_price);
+  const stop = Number(row.stop_price);
+  const dir = row.direction;
+
+  let candles = null;
+  try {
+    candles = await priceFeed.getRange(row.symbol, openedMs, windowEnd);
+  } catch (e) {
+    console.warn("[quantoption] real feed getRange failed for #" + row.id + ":", e.message);
+    candles = null;
+  }
+
+  // rule 4 — no reliable data at settlement
+  if (!candles || candles.length === 0) {
+    if (nowMs >= expiryMs) {
+      return { resolved: true, outcome: "draw", livePrice: Number(row.entry_price), exitPrice: Number(row.entry_price), reason: "no_data_void" };
+    }
+    return { resolved: false, outcome: null, livePrice: null, reason: "no_data_live" };
+  }
+
+  const livePrice = Number(candles[candles.length - 1].c);
+
+  // rules 1 & 2 — barrier touch (incl. same-candle ambiguity → VOID)
+  const touch = engine.detectBarrierTouch(dir, candles, target, stop);
+  if (touch) {
+    return { resolved: true, outcome: touch.outcome, livePrice, exitPrice: touch.exitPrice,
+             ambiguous: !!touch.ambiguous, reason: touch.ambiguous ? "void_same_candle" : "barrier" };
+  }
+
+  // rule 3 — reached expiry with no touch → distance verdict
+  if (nowMs >= expiryMs) {
+    const outcome = engine.expiryOutcome(livePrice, target, stop);
+    return { resolved: true, outcome, livePrice, exitPrice: livePrice, reason: "expiry_distance" };
+  }
+
+  // still live, no touch yet
+  return { resolved: false, outcome: null, livePrice, reason: "live" };
 }
 
 // map a DB row to the engine's position shape
@@ -336,10 +455,17 @@ async function sweepMatured(limitInput) {
   let settled = 0;
   for (const row of rows) {
     try {
-      const ev = engine.evaluate(enginePos(row), Date.now());
-      // matured rows always resolve (now >= expiry), but guard anyway
-      const outcome = ev.resolved ? ev.outcome : engine.expiryOutcome(ev.livePrice, Number(row.target_price), Number(row.stop_price));
-      const exit = ev.exitPrice != null ? ev.exitPrice : ev.livePrice;
+      let outcome, exit;
+      if (REAL_PRICES) {
+        const rev = await realEvaluate(row, Date.now());
+        if (rev.resolved) { outcome = rev.outcome; exit = rev.exitPrice; }
+        else { outcome = "draw"; exit = Number(row.entry_price); } // matured + unresolved → fail-closed VOID
+      } else {
+        const ev = engine.evaluate(enginePos(row), Date.now());
+        // matured rows always resolve (now >= expiry), but guard anyway
+        outcome = ev.resolved ? ev.outcome : engine.expiryOutcome(ev.livePrice, Number(row.target_price), Number(row.stop_price));
+        exit = ev.exitPrice != null ? ev.exitPrice : ev.livePrice;
+      }
       const r = await resolve(row.id, outcome, exit);
       if (r && r.ok && !r.already) settled++;
     } catch (e) { console.warn("[quantoption] settle failed for #" + row.id + ":", e.message); }
@@ -528,14 +654,28 @@ function positionView(p, extra) {
   if (settled) out.serverSeed = p.server_seed;             // reveal only once settled
   if (extra.brief) return out;
   if (!settled) {
-    const ev = extra.ev || engine.evaluate(enginePos(p), now);
-    out.livePrice = roundPx(p.symbol, ev.livePrice);
-    out.livePriceRaw = ev.livePrice;
-    out.countdownMs = Math.max(0, expiresMs - now);
-    out.ticks = ev.ticks.map((k) => ({ t: k.t, price: Number(roundPx(p.symbol, k.price)) }));
-    // indicative progress toward target (1.0 = target, 0 = entry, <0 = toward stop)
-    const entryN = Number(p.entry_price), targetN = Number(p.target_price);
-    out.progress = targetN === entryN ? 0 : (ev.livePrice - entryN) / (targetN - entryN);
+    if (REAL_PRICES) {
+      // REAL mode: live price comes from the feed (may be null if momentarily
+      // unavailable). The client charts from /api/quantoption/chart, so no
+      // synthetic ticks are emitted here.
+      const rev = extra.realEv || {};
+      const lp = (rev.livePrice != null && Number.isFinite(Number(rev.livePrice))) ? Number(rev.livePrice) : null;
+      out.livePrice = lp != null ? roundPx(p.symbol, lp) : null;
+      out.livePriceRaw = lp;
+      out.countdownMs = Math.max(0, expiresMs - now);
+      out.realPrices = true;
+      const entryN = Number(p.entry_price), targetN = Number(p.target_price);
+      out.progress = (lp != null && targetN !== entryN) ? (lp - entryN) / (targetN - entryN) : 0;
+    } else {
+      const ev = extra.ev || engine.evaluate(enginePos(p), now);
+      out.livePrice = roundPx(p.symbol, ev.livePrice);
+      out.livePriceRaw = ev.livePrice;
+      out.countdownMs = Math.max(0, expiresMs - now);
+      out.ticks = ev.ticks.map((k) => ({ t: k.t, price: Number(roundPx(p.symbol, k.price)) }));
+      // indicative progress toward target (1.0 = target, 0 = entry, <0 = toward stop)
+      const entryN = Number(p.entry_price), targetN = Number(p.target_price);
+      out.progress = targetN === entryN ? 0 : (ev.livePrice - entryN) / (targetN - entryN);
+    }
   } else if (extra.ev) {
     out.ticks = extra.ev.ticks.map((k) => ({ t: k.t, price: Number(roundPx(p.symbol, k.price)) }));
   }
@@ -543,7 +683,8 @@ function positionView(p, extra) {
 }
 
 module.exports = {
-  init, me, openPosition, getPosition, resolve, sweepMatured, history,
+  init, me, openPosition, getPosition, listOpenPositions, chartData,
+  resolve, sweepMatured, history,
   fundPool, topUpPool, poolStats, leaderboard,
-  MIN_STAKE, MAX_STAKE, EXPIRIES, SYMBOLS, STEP_MS,
+  MIN_STAKE, MAX_STAKE, EXPIRIES, SYMBOLS, STEP_MS, REAL_PRICES,
 };

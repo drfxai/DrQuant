@@ -32,6 +32,7 @@ function fail(res, err) {
     bad_symbol: 400, bad_dir: 400, bad_expiry: 400, bad_stake: 400, bad_amount: 400,
     bad_signal: 400, bad_time: 400, signal_closed: 409,
     has_open: 409, capacity: 409, insufficient: 402, not_found: 404,
+    feed_unavailable: 503, feed_unconfigured: 503,
   };
   const status = map[code] || 500;
   if (status === 500) console.error("[quantoption]", err);
@@ -61,6 +62,19 @@ router.get("/position/:id", auth, async (req, res) => {
 
 router.get("/history", auth, async (req, res) => {
   try { res.json(await quantoption.history(req.user.id, req.query.limit, req.query.offset)); }
+  catch (e) { fail(res, e); }
+});
+
+// all open positions for the user (REAL mode can have several at once)
+router.get("/positions", auth, async (req, res) => {
+  try { res.json(await quantoption.listOpenPositions(req.user.id)); }
+  catch (e) { fail(res, e); }
+});
+
+// server-proxied chart candles (keeps the TwelveData key server-side)
+//   GET /api/quantoption/chart?symbol=BTCUSDT&limit=200
+router.get("/chart", auth, async (req, res) => {
+  try { res.json(await quantoption.chartData(req.query.symbol, { limit: req.query.limit })); }
   catch (e) { fail(res, e); }
 });
 

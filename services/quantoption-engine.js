@@ -202,9 +202,42 @@ function clockPrice(base, wave, tMs) {
   return base * Math.exp(x);
 }
 
+// ── REAL-PRICE barrier detection (range/touch over real candles) ────────────
+// Settlement for QUANTOPTION_REAL_PRICES mode. Walks candles in chronological
+// order over the position window and applies the locked rules:
+//   1) unambiguous touch  → target first = "win", stop first = "lose"
+//   2) BOTH barriers inside one candle's range (order indeterminate) → "draw" (VOID)
+//   3) no touch anywhere   → return null  (caller falls back to expiryOutcome)
+// `dir` is "long" | "short". target/stop are absolute prices (long: target>entry,
+// stop<entry; short: target<entry, stop>entry). Candles are { t,o,h,l,c } in ms.
+function detectBarrierTouch(dir, candles, target, stop) {
+  if (!Array.isArray(candles) || candles.length === 0) return null;
+  for (let i = 0; i < candles.length; i++) {
+    const k = candles[i];
+    const hi = Number(k.h), lo = Number(k.l);
+    if (!Number.isFinite(hi) || !Number.isFinite(lo)) continue;
+    let hitTarget, hitStop;
+    if (dir === "long") {
+      hitTarget = hi >= target;   // target sits above entry
+      hitStop = lo <= stop;       // stop sits below entry
+    } else {
+      hitTarget = lo <= target;   // target sits below entry
+      hitStop = hi >= stop;       // stop sits above entry
+    }
+    if (hitTarget && hitStop) {
+      // rule 2 — cannot order the two touches inside one candle → VOID/refund
+      return { outcome: "draw", exitPrice: Number(k.c), ambiguous: true, atMs: Number(k.t), index: i };
+    }
+    if (hitTarget) return { outcome: "win", exitPrice: target, ambiguous: false, atMs: Number(k.t), index: i };
+    if (hitStop) return { outcome: "lose", exitPrice: stop, ambiguous: false, atMs: Number(k.t), index: i };
+  }
+  return null; // rule 3 — reached end of window with no touch
+}
+
 module.exports = {
   PAYOUT_BPS,
   gauss, stepsFor, offsetFor, pathAt, hitOutcome, expiryOutcome, evaluate,
+  detectBarrierTouch,
   profitOf, settleAmounts, requiredPool,
   newSeed, seedHash, deriveWave, clockPrice,
 };
