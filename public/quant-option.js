@@ -316,7 +316,7 @@
     var pos = overlayPos();
     var hasLevels = !!pos;
     if (hasLevels) {
-      var ts = [Number(pos.entry), Number(pos.target), Number(pos.stop)];
+      var ts = [Number(pos.entry), Number(pos.stop), Number(pos.tp1), Number(pos.tp2), Number(pos.tp3)].filter(Number.isFinite);
       for (i = 0; i < ts.length; i++) { if (ts[i] < lo) lo = ts[i]; if (ts[i] > hi) hi = ts[i]; }
     }
     if (!(hi > lo)) { hi = lo + 1; }
@@ -333,14 +333,20 @@
       ctx.fillStyle = c.t4; ctx.textAlign = "left"; ctx.fillText(fmtP(pv, dp), padL + plotW + 6, yy);
     }
 
-    // position zones + lines (entry/target/stop)
+    // position zones + levels: profit band entry->TP3 (green), loss band entry->SL
+    // (red), with TP1 / TP2 / TP3 / ENTRY / SL lines (TP3 = the settlement target)
     if (hasLevels) {
-      var yE = Y(Number(pos.entry)), yT = Y(Number(pos.target)), yS = Y(Number(pos.stop));
-      ctx.fillStyle = hexA(c.green, .10); ctx.fillRect(padL, Math.min(yE, yT), plotW, Math.abs(yT - yE));
+      var nE = Number(pos.entry), nS = Number(pos.stop);
+      var n1 = Number(pos.tp1), n2 = Number(pos.tp2);
+      var n3 = Number.isFinite(Number(pos.tp3)) ? Number(pos.tp3) : Number(pos.target);
+      var yE = Y(nE), yS = Y(nS), y3 = Y(n3);
+      ctx.fillStyle = hexA(c.green, .10); ctx.fillRect(padL, Math.min(yE, y3), plotW, Math.abs(y3 - yE));
       ctx.fillStyle = hexA(c.red, .10); ctx.fillRect(padL, Math.min(yE, yS), plotW, Math.abs(yS - yE));
-      drawLevel(ctx, padL, plotW, yT, c.green, "TARGET " + fmtP(Number(pos.target), dp), c);
-      drawLevel(ctx, padL, plotW, yS, c.red, "STOP " + fmtP(Number(pos.stop), dp), c);
-      drawLevel(ctx, padL, plotW, yE, c.gold, "ENTRY " + fmtP(Number(pos.entry), dp), c);
+      if (Number.isFinite(n1)) drawLevel(ctx, padL, plotW, Y(n1), c.green, "TP1 " + fmtP(n1, dp), c);
+      if (Number.isFinite(n2)) drawLevel(ctx, padL, plotW, Y(n2), c.green, "TP2 " + fmtP(n2, dp), c);
+      drawLevel(ctx, padL, plotW, y3, c.green, "TP3 " + fmtP(n3, dp), c);
+      drawLevel(ctx, padL, plotW, yE, c.gold, "ENTRY " + fmtP(nE, dp), c);
+      drawLevel(ctx, padL, plotW, yS, c.red, "SL " + fmtP(nS, dp), c);
     }
 
     // the price series
@@ -502,8 +508,8 @@
     '</div>' +
     '<div class="qo-posrow">' +
       '<div class="qo-poscell"><div class="k" style="color:' + c.gold + '">Entry</div><div class="v">' + fmtP(Number(p.entry), p.dp) + '</div></div>' +
-      '<div class="qo-poscell"><div class="k" style="color:' + c.green + '">Target</div><div class="v" style="color:' + c.green + '">' + fmtP(Number(p.target), p.dp) + '</div></div>' +
-      '<div class="qo-poscell"><div class="k" style="color:' + c.red + '">Stop</div><div class="v" style="color:' + c.red + '">' + fmtP(Number(p.stop), p.dp) + '</div></div>' +
+      '<div class="qo-poscell"><div class="k" style="color:' + c.green + '">TP3</div><div class="v" style="color:' + c.green + '">' + fmtP(Number(p.target), p.dp) + '</div></div>' +
+      '<div class="qo-poscell"><div class="k" style="color:' + c.red + '">SL</div><div class="v" style="color:' + c.red + '">' + fmtP(Number(p.stop), p.dp) + '</div></div>' +
     '</div>' +
     '<div class="qo-card">' +
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">' +
@@ -512,13 +518,13 @@
       '</div>' +
       '<div class="qo-bartrack"><div class="qo-barfill" id="qo-prog" style="width:' + progWidth(prog) + '%;background:' + (prog >= 0 ? c.green : c.red) + '"></div></div>' +
       '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-weight:700">' +
-        '<span style="color:' + c.red + '">Stop</span>' +
+        '<span style="color:' + c.red + '">SL</span>' +
         '<span id="qo-prog-lab" style="color:' + c.t3 + '">' + progLabel(prog) + '</span>' +
-        '<span style="color:' + c.green + '">Target</span>' +
+        '<span style="color:' + c.green + '">TP3</span>' +
       '</div>' +
     '</div>' +
     '<div class="qo-pre">' +
-      '<div class="b"><div class="k">If target hit</div><div class="v" style="color:' + c.green + '">+' + fmtQ((Number(p.stake) || 0) * ((QO.payoutBps || 8500) / 10000)) + '</div></div>' +
+      '<div class="b"><div class="k">If TP3 hit</div><div class="v" style="color:' + c.green + '">+' + fmtQ((Number(p.stake) || 0) * ((QO.payoutBps || 8500) / 10000)) + '</div></div>' +
       '<div class="b"><div class="k">Win pays</div><div class="v" style="color:' + c.t1 + '">' + fmtQ(p.potentialWin != null ? p.potentialWin : (Number(p.stake) * (QO.payoutMult || 1.85))) + '</div></div>' +
     '</div>' +
     (QO.realPrices
@@ -557,7 +563,7 @@
   }
   function expLabel(sec) { sec = Number(sec); if (sec < 60) return sec + "s"; if (sec < 3600) return (sec / 60) + "m"; return (sec / 3600) + "h"; }
   function progWidth(prog) { var v = (prog + 1) / 2; return Math.max(0, Math.min(100, v * 100)); }
-  function progLabel(prog) { if (prog >= 1) return "at target"; if (prog <= -1) return "at stop"; return Math.round(prog * 100) + "% to target"; }
+  function progLabel(prog) { if (prog >= 1) return "at TP3"; if (prog <= -1) return "at SL"; return Math.round(prog * 100) + "% to TP3"; }
 
   function stageHTML() {
     var tabs =
@@ -716,7 +722,7 @@
           kv("Symbol", ESC((p.label || p.symbol) + " · " + (p.dir === "long" ? "Long" : "Short")), c) +
           kv("Entry", fmtP(Number(p.entry), p.dp), c) +
           kv("Exit", fmtP(Number(p.exitPrice != null ? p.exitPrice : p.entry), p.dp), c) +
-          kv("Target / Stop", fmtP(Number(p.target), p.dp) + " / " + fmtP(Number(p.stop), p.dp), c) +
+          kv("TP3 / SL", fmtP(Number(p.target), p.dp) + " / " + fmtP(Number(p.stop), p.dp), c) +
           kv("Stake", fmtQ(p.stake) + " QNTM", c) +
           kv("Payout", fmtQ(p.payout) + " QNTM", c) +
           kv("New balance", fmtQ(QO.balance) + " QNTM", c) +
