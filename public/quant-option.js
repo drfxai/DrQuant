@@ -103,10 +103,17 @@
     symIdx: 0, dir: "long", stake: 100, expIdx: 1,
     chartMode: "candle",    // 'candle' | 'line'
     view: "trade",          // 'trade' | 'history'
-    pos: null,              // open/most-recent position view from the server
-    amb: {},                // symbol -> rolling [{t,price}]
+    pos: null,              // open/most-recent position view (focused, in real mode)
+    amb: {},                // symbol -> rolling [{t,price}]  (simulated mode only)
     ambTimer: null, pollTimer: null, overlayOpen: false, busy: false,
-    history: null
+    history: null,
+    // -- real-price mode (QUANTOPTION_REAL_PRICES=true on the server) --
+    realPrices: false,        // server settles on real market prices
+    openPositions: [],        // all open positions (real mode can stack)
+    focusId: null,            // id of the position whose levels overlay the chart
+    realCandles: {},          // symbol -> [{t,o,h,l,c}] from /quantoption/chart
+    chartProvider: null,      // 'binance' | 'twelvedata' (from /chart)
+    chartTimer: null, posTimer: null, countTimer: null, chartBusy: false
   };
   function curSym() { return QO.symbols[QO.symIdx] || null; }
   function curExpiry() { return QO.expiries[QO.expIdx] != null ? QO.expiries[QO.expIdx] : 60; }
@@ -206,9 +213,32 @@
       QO.pool = r.pool != null ? r.pool : QO.pool;
       if (QO.symIdx >= QO.symbols.length) QO.symIdx = 0;
       if (QO.stake < QO.min) QO.stake = QO.min;
-      QO.pos = (r.open && r.open.status === "open") ? r.open : (r.open || QO.pos);
+      QO.realPrices = !!r.realPrices;
+      if (QO.realPrices) {
+        QO.openPositions = Array.isArray(r.openPositions) ? r.openPositions
+          : (r.open && r.open.status === "open" ? [r.open] : []);
+        syncFocus();
+      } else {
+        QO.pos = (r.open && r.open.status === "open") ? r.open : (r.open || QO.pos);
+      }
       return r;
     });
+  }
+  // keep QO.focusId valid and mirror the focused position into QO.pos so the
+  // shared position-card / chart-overlay code reads one place in both modes
+  function syncFocus() {
+    var list = QO.openPositions || [];
+    if (!list.length) { QO.focusId = null; QO.pos = null; return; }
+    var f = null, i;
+    for (i = 0; i < list.length; i++) { if (list[i].id === QO.focusId) { f = list[i]; break; } }
+    if (!f) { f = list[0]; QO.focusId = f.id; }
+    QO.pos = f;
+  }
+  function focusPos() {
+    if (!QO.realPrices) return (QO.pos && QO.pos.status === "open") ? QO.pos : null;
+    var list = QO.openPositions || [], i;
+    for (i = 0; i < list.length; i++) { if (list[i].id === QO.focusId) return list[i]; }
+    return list[0] || null;
   }
 
   /* ── ambient buffer (deterministic; rebuilt instantly on demand) ────────── */
@@ -222,6 +252,7 @@
     return arr;
   }
   function tickAmbient() {
+    if (QO.realPrices) return;
     var sym = curSym(); if (!sym || !sym.wave) return;
     var buf = QO.amb[sym.symbol] || (QO.amb[sym.symbol] = buildAmbient(sym));
     var now = Date.now(), last = buf[buf.length - 1];
@@ -267,18 +298,23 @@
     var L = layoutCanvas(); if (!L) return;
     var ctx = L.ctx, W = L.w, H = L.h, c = TH();
     ctx.clearRect(0, 0, W, H);
-    var pts = seriesPoints();
-    if (pts.length < 2) return;
+    var D = chartSeries();
+    var candles = D.candles, line = D.line, dp = D.dp;
+    if (line.length < 2 && candles.length < 1) return;
 
-    var dp = (QO.pos && QO.pos.dp != null) ? QO.pos.dp : (curSym() ? curSym().dp : 2);
     var padL = 8, padR = 62, padT = 10, padB = 16;
     var plotW = W - padL - padR, plotH = H - padT - padB;
 
-    // y-range over the series, widened to always include target/stop when open
-    var lo = Infinity, hi = -Infinity, i;
-    for (i = 0; i < pts.length; i++) { var p = pts[i].price; if (p < lo) lo = p; if (p > hi) hi = p; }
-    var pos = QO.pos;
-    var hasLevels = pos && (pos.status === "open" || pos.exitPrice != null);
+    // y-range over what is drawn, widened to include levels + the live price
+    var lo = Infinity, hi = -Infinity, i, p;
+    if (QO.chartMode === "candle" && candles.length) {
+      for (i = 0; i < candles.length; i++) { if (candles[i].l < lo) lo = candles[i].l; if (candles[i].h > hi) hi = candles[i].h; }
+    } else {
+      for (i = 0; i < line.length; i++) { p = line[i].price; if (p < lo) lo = p; if (p > hi) hi = p; }
+    }
+    if (D.live != null) { if (D.live < lo) lo = D.live; if (D.live > hi) hi = D.live; }
+    var pos = overlayPos();
+    var hasLevels = !!pos;
     if (hasLevels) {
       var ts = [Number(pos.entry), Number(pos.target), Number(pos.stop)];
       for (i = 0; i < ts.length; i++) { if (ts[i] < lo) lo = ts[i]; if (ts[i] > hi) hi = ts[i]; }
@@ -286,7 +322,7 @@
     if (!(hi > lo)) { hi = lo + 1; }
     var pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
     function Y(v) { return padT + plotH - ((v - lo) / (hi - lo)) * plotH; }
-    function X(idx) { return padL + (idx / (pts.length - 1)) * plotW; }
+    function Xl(idx, n) { return padL + (n <= 1 ? 0 : (idx / (n - 1)) * plotW); }
 
     // grid + right-edge price ticks
     ctx.lineWidth = 1; ctx.font = "10px Outfit, sans-serif"; ctx.textBaseline = "middle";
@@ -300,7 +336,6 @@
     // position zones + lines (entry/target/stop)
     if (hasLevels) {
       var yE = Y(Number(pos.entry)), yT = Y(Number(pos.target)), yS = Y(Number(pos.stop));
-      // green zone entry->target, red zone entry->stop
       ctx.fillStyle = hexA(c.green, .10); ctx.fillRect(padL, Math.min(yE, yT), plotW, Math.abs(yT - yE));
       ctx.fillStyle = hexA(c.red, .10); ctx.fillRect(padL, Math.min(yE, yS), plotW, Math.abs(yS - yE));
       drawLevel(ctx, padL, plotW, yT, c.green, "TARGET " + fmtP(Number(pos.target), dp), c);
@@ -309,34 +344,35 @@
     }
 
     // the price series
-    var up = pts[pts.length - 1].price >= pts[0].price;
+    var up = (line.length ? line[line.length - 1].price >= line[0].price : true);
     var lineCol = hasLevels ? c.blue : (up ? c.green : c.red);
-    if (QO.chartMode === "candle") {
-      drawCandles(ctx, pts, X, Y, plotW, c);
-    } else {
-      // area fill + line
+    if (QO.chartMode === "candle" && candles.length) {
+      drawCandleArray(ctx, candles, padL, plotW, Y, c);
+    } else if (line.length >= 2) {
       ctx.beginPath();
-      for (i = 0; i < pts.length; i++) { var xx = X(i), y2 = Y(pts[i].price); if (i === 0) ctx.moveTo(xx, y2); else ctx.lineTo(xx, y2); }
-      ctx.lineTo(X(pts.length - 1), padT + plotH); ctx.lineTo(X(0), padT + plotH); ctx.closePath();
+      for (i = 0; i < line.length; i++) { var xx = Xl(i, line.length), y2 = Y(line[i].price); if (i === 0) ctx.moveTo(xx, y2); else ctx.lineTo(xx, y2); }
+      ctx.lineTo(Xl(line.length - 1, line.length), padT + plotH); ctx.lineTo(Xl(0, line.length), padT + plotH); ctx.closePath();
       var grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
       grad.addColorStop(0, hexA(lineCol, .22)); grad.addColorStop(1, hexA(lineCol, 0));
       ctx.fillStyle = grad; ctx.fill();
       ctx.beginPath();
-      for (i = 0; i < pts.length; i++) { var x3 = X(i), y3 = Y(pts[i].price); if (i === 0) ctx.moveTo(x3, y3); else ctx.lineTo(x3, y3); }
+      for (i = 0; i < line.length; i++) { var x3 = Xl(i, line.length), y3 = Y(line[i].price); if (i === 0) ctx.moveTo(x3, y3); else ctx.lineTo(x3, y3); }
       ctx.strokeStyle = lineCol; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
     }
 
     // live price marker at the right edge
-    var lastP = pts[pts.length - 1].price, yL = Y(lastP);
-    var markCol = hasLevels ? c.gold : lineCol;
-    ctx.strokeStyle = hexA(markCol, .5); ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, yL); ctx.lineTo(padL + plotW, yL); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = markCol; ctx.beginPath(); ctx.arc(padL + plotW, yL, 3.4, 0, Math.PI * 2); ctx.fill();
-    // price tag
-    var tag = fmtP(lastP, dp); ctx.font = "700 10px Outfit, sans-serif"; var tw = ctx.measureText(tag).width;
-    ctx.fillStyle = markCol; var ty = Math.max(padT + 8, Math.min(padT + plotH - 8, yL));
-    roundRect(ctx, padL + plotW + 4, ty - 8, tw + 10, 16, 4); ctx.fill();
-    ctx.fillStyle = "#06101f"; ctx.textAlign = "left"; ctx.fillText(tag, padL + plotW + 9, ty);
+    var lastP = (D.live != null) ? D.live : (line.length ? line[line.length - 1].price : (candles.length ? candles[candles.length - 1].c : null));
+    if (lastP != null) {
+      var yL = Y(lastP);
+      var markCol = hasLevels ? c.gold : lineCol;
+      ctx.strokeStyle = hexA(markCol, .5); ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(padL, yL); ctx.lineTo(padL + plotW, yL); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = markCol; ctx.beginPath(); ctx.arc(padL + plotW, yL, 3.4, 0, Math.PI * 2); ctx.fill();
+      var tag = fmtP(lastP, dp); ctx.font = "700 10px Outfit, sans-serif"; var tw = ctx.measureText(tag).width;
+      ctx.fillStyle = markCol; var ty = Math.max(padT + 8, Math.min(padT + plotH - 8, yL));
+      roundRect(ctx, padL + plotW + 4, ty - 8, tw + 10, 16, 4); ctx.fill();
+      ctx.fillStyle = "#06101f"; ctx.textAlign = "left"; ctx.fillText(tag, padL + plotW + 9, ty);
+    }
   }
   function drawLevel(ctx, x0, w, y, col, label, c) {
     ctx.strokeStyle = hexA(col, .85); ctx.setLineDash([5, 4]); ctx.lineWidth = 1.2;
@@ -346,12 +382,11 @@
     ctx.fillStyle = hexA(col, .9); roundRect(ctx, x0 + 4, y - 7.5, tw + 9, 15, 4); ctx.fill();
     ctx.fillStyle = "#06101f"; ctx.fillText(label, x0 + 8.5, y);
   }
-  function drawCandles(ctx, pts, X, Y, plotW, c) {
-    var candles = toCandles(pts, CANDLE_TICKS); if (!candles.length) return;
-    var n = candles.length;
+  function drawCandleArray(ctx, candles, padL, plotW, Y, c) {
+    var n = candles.length; if (!n) return;
     var slot = plotW / n, bw = Math.max(1.4, Math.min(9, slot * 0.62));
     for (var i = 0; i < n; i++) {
-      var cd = candles[i], cx = 8 + slot * (i + 0.5);
+      var cd = candles[i], cx = padL + slot * (i + 0.5);
       var up = cd.c >= cd.o, col = up ? c.green : c.red;
       var yo = Y(cd.o), yc = Y(cd.c), yh = Y(cd.h), yl = Y(cd.l);
       ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, yh); ctx.lineTo(cx, yl); ctx.stroke();
@@ -401,8 +436,8 @@
     var lineIc = '<path d="M3 17l5-6 4 3 6-8"/><circle cx="8" cy="11" r="1.3"/><circle cx="12" cy="14" r="1.3"/>';
     return '<div class="qo-chartwrap">' +
       '<div class="qo-chartbar">' +
-        '<div style="flex:1;min-width:0"><div class="qo-px" id="qo-px">' + fmtP(sym ? (sym.price != null ? sym.price : sym.base) : 0, sym ? sym.dp : 2) + '</div>' +
-        '<div class="qo-pxsub">' + ESC(sym ? (sym.label || sym.symbol) : "") + ' · simulated feed</div></div>' +
+        '<div style="flex:1;min-width:0"><div class="qo-px" id="qo-px">' + fmtP(headlinePrice(sym), sym ? sym.dp : 2) + '</div>' +
+        '<div class="qo-pxsub" id="qo-pxsub">' + ESC(sym ? (sym.label || sym.symbol) : "") + ' · ' + feedLabel() + '</div></div>' +
         '<div class="qo-modes">' +
           '<button class="qo-mode ' + (QO.chartMode === "candle" ? "on" : "") + '" id="qo-m-candle" type="button" aria-label="Candles">' + ICO(candIc, 16) + '</button>' +
           '<button class="qo-mode ' + (QO.chartMode === "line" ? "on" : "") + '" id="qo-m-line" type="button" aria-label="Line">' + ICO(lineIc, 16) + '</button>' +
@@ -486,10 +521,15 @@
       '<div class="b"><div class="k">If target hit</div><div class="v" style="color:' + c.green + '">+' + fmtQ((Number(p.stake) || 0) * ((QO.payoutBps || 8500) / 10000)) + '</div></div>' +
       '<div class="b"><div class="k">Win pays</div><div class="v" style="color:' + c.t1 + '">' + fmtQ(p.potentialWin != null ? p.potentialWin : (Number(p.stake) * (QO.payoutMult || 1.85))) + '</div></div>' +
     '</div>' +
-    '<div class="qo-fair" style="justify-content:center;padding:4px 0 14px;gap:7px">' +
-      ICO('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) +
-      '<span style="font-family:ui-monospace,monospace;font-size:9.5px">commit ' + ESC(String(p.seedHash || "").slice(0, 18)) + '…</span>' +
-    '</div>';
+    (QO.realPrices
+      ? '<div class="qo-fair" style="justify-content:center;padding:4px 0 14px;gap:7px">' +
+          ICO('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) +
+          '<span>settled on ' + realFeedWord() + ' market prices</span>' +
+        '</div>'
+      : '<div class="qo-fair" style="justify-content:center;padding:4px 0 14px;gap:7px">' +
+          ICO('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) +
+          '<span style="font-family:ui-monospace,monospace;font-size:9.5px">commit ' + ESC(String(p.seedHash || "").slice(0, 18)) + '…</span>' +
+        '</div>');
   }
   function historyHTML() {
     var c = TH(); var h = QO.history;
@@ -528,6 +568,12 @@
       '</div>';
     var body;
     if (QO.view === "history") body = historyHTML();
+    else if (QO.realPrices) {
+      var hasOpen = !!(QO.openPositions && QO.openPositions.length);
+      body = statsHTML() + symsHTML() + chartHTML() +
+             (hasOpen ? ((QO.openPositions.length > 1 ? openSwitcherHTML() : "") + positionHTML()) : "") +
+             orderHTML();
+    }
     else body = statsHTML() + symsHTML() + chartHTML() + (QO.pos && QO.pos.status === "open" ? positionHTML() : orderHTML());
     return '<div class="qo-pad">' + tabs + body + '</div>';
   }
@@ -546,13 +592,22 @@
     var tsig = T("#qo-tab-signals"); if (tsig) tsig.onclick = function () { if (window.dqQOSignals) window.dqQOSignals.open(); else toast("Signal trading is loading — try again", "error"); };
     var th = T("#qo-tab-history"); if (th) th.onclick = function () { QO.view = "history"; rerender(); loadHistory(); };
 
-    st.querySelectorAll(".qo-sym").forEach(function (b) {
-      b.onclick = function () { var i = +b.getAttribute("data-i"); if (i !== QO.symIdx && !(QO.pos && QO.pos.status === "open")) { QO.symIdx = i; var sm = curSym(); if (sm) QO.amb[sm.symbol] = buildAmbient(sm); rerender(); } };
+    st.querySelectorAll(".qo-sym:not(.qo-openchip)").forEach(function (b) {
+      b.onclick = function () {
+        var i = +b.getAttribute("data-i"); if (isNaN(i) || i === QO.symIdx) return;
+        if (!QO.realPrices && QO.pos && QO.pos.status === "open") return; // simulated: symbol locked while a position is open
+        QO.symIdx = i;
+        if (QO.realPrices) { rerender(); fetchChart(true); }
+        else { var sm = curSym(); if (sm) QO.amb[sm.symbol] = buildAmbient(sm); rerender(); }
+      };
+    });
+    st.querySelectorAll(".qo-openchip").forEach(function (b) {
+      b.onclick = function () { var id = +b.getAttribute("data-id"); if (id && id !== QO.focusId) { QO.focusId = id; syncFocus(); rerender(); } };
     });
     var mc = T("#qo-m-candle"); if (mc) mc.onclick = function () { QO.chartMode = "candle"; rerender(); };
     var ml = T("#qo-m-line"); if (ml) ml.onclick = function () { QO.chartMode = "line"; rerender(); };
 
-    if (QO.view === "trade" && !(QO.pos && QO.pos.status === "open")) {
+    if (QO.view === "trade" && (QO.realPrices || !(QO.pos && QO.pos.status === "open"))) {
       var lo = T("#qo-long"); if (lo) lo.onclick = function () { if (QO.dir !== "long") { QO.dir = "long"; rerender(); } };
       var sh = T("#qo-short"); if (sh) sh.onclick = function () { if (QO.dir !== "short") { QO.dir = "short"; rerender(); } };
       var stake = T("#qo-stake"), range = T("#qo-range");
@@ -600,8 +655,12 @@
       .then(function (r) {
         QO.busy = false;
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); rerender(); return; }
-        QO.pos = p;
         if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+        if (QO.realPrices) {
+          QO.focusId = p.id;
+          return loadMe().catch(function () {}).then(function () { QO.focusId = p.id; syncFocus(); QO.view = "trade"; rerender(); startRealEngine(); });
+        }
+        QO.pos = p;
         return loadMe().catch(function () {}).then(function () { QO.pos = p; QO.view = "trade"; rerender(); startPoll(); });
       })
       .catch(function (e) {
@@ -662,10 +721,14 @@
           kv("Payout", fmtQ(p.payout) + " QNTM", c) +
           kv("New balance", fmtQ(QO.balance) + " QNTM", c) +
         '</div>' +
-        '<div style="margin:8px 18px 0;padding:11px 12px;border-radius:11px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + '">' +
-          '<div class="qo-fair" style="margin-bottom:6px">' + ICO('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) + '<span>Provably fair — verify the path</span></div>' +
-          '<div style="font-family:ui-monospace,monospace;font-size:9px;color:' + c.t3 + ';word-break:break-all;line-height:1.5"><b style="color:' + c.t4 + '">hash</b> ' + ESC(p.seedHash || "") + '<br><b style="color:' + c.t4 + '">seed</b> ' + ESC(p.serverSeed || "(revealed at settle)") + '</div>' +
-        '</div>' +
+        (QO.realPrices
+          ? '<div style="margin:8px 18px 0;padding:11px 12px;border-radius:11px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + '">' +
+              '<div class="qo-fair"><span>Settled on real ' + realFeedWord() + ' market prices — exit ' + fmtP(Number(p.exitPrice != null ? p.exitPrice : p.entry), p.dp) + '</span></div>' +
+            '</div>'
+          : '<div style="margin:8px 18px 0;padding:11px 12px;border-radius:11px;background:' + c.panel3 + ';border:1px solid ' + c.bdSoft + '">' +
+              '<div class="qo-fair" style="margin-bottom:6px">' + ICO('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>', 12) + '<span>Provably fair — verify the path</span></div>' +
+              '<div style="font-family:ui-monospace,monospace;font-size:9px;color:' + c.t3 + ';word-break:break-all;line-height:1.5"><b style="color:' + c.t4 + '">hash</b> ' + ESC(p.seedHash || "") + '<br><b style="color:' + c.t4 + '">seed</b> ' + ESC(p.serverSeed || "(revealed at settle)") + '</div>' +
+            '</div>') +
         '<div style="padding:14px 18px 18px"><button type="button" id="qo-result-x" style="width:100%;padding:13px 0;border-radius:13px;border:none;cursor:pointer;font-size:14px;font-weight:800;color:#fff;background:linear-gradient(180deg,' + c.blue + ',#2456d8)">Back to Trade</button></div>' +
       '</div>';
     document.body.appendChild(ov);
@@ -685,7 +748,8 @@
   /* ── ambient ticker control ─────────────────────────────────────────────── */
   function startAmbient() {
     stopAmbient();
-    if (QO.pos && QO.pos.status === "open") return; // poll drives the chart instead
+    if (QO.realPrices) return;                       // real mode uses the chart/positions pollers
+    if (QO.pos && QO.pos.status === "open") return;  // poll drives the chart instead
     QO.ambTimer = setInterval(tickAmbient, AMB_MS);
   }
   function stopAmbient() { if (QO.ambTimer) { clearInterval(QO.ambTimer); QO.ambTimer = null; } }
@@ -700,7 +764,7 @@
   function onResize() { drawChart(); }
 
   function closeQO() {
-    stopAmbient(); stopPoll();
+    stopAmbient(); stopPoll(); stopRealEngine();
     var o = document.getElementById(OV_ID); if (o && o.parentNode) o.parentNode.removeChild(o);
     QO.overlayOpen = false;
     document.removeEventListener("keydown", onKey);
@@ -724,9 +788,14 @@
     window.addEventListener("resize", onResize);
 
     loadMe().then(function () {
-      var sm = curSym(); if (sm) QO.amb[sm.symbol] = buildAmbient(sm);
-      rerender();
-      if (QO.pos && QO.pos.status === "open") { startPoll(); } else { startAmbient(); }
+      if (QO.realPrices) {
+        rerender();
+        fetchChart(true).then(function () { rerender(); startRealEngine(); });
+      } else {
+        var sm = curSym(); if (sm) QO.amb[sm.symbol] = buildAmbient(sm);
+        rerender();
+        if (QO.pos && QO.pos.status === "open") { startPoll(); } else { startAmbient(); }
+      }
     }).catch(function (e) {
       var st = document.getElementById("qo-stage");
       if (st) st.innerHTML = '<div class="qo-empty">Could not load Quant Option.<br>' + ESC((e && e.message) || "Please try again.") + '</div>';
@@ -734,6 +803,127 @@
   }
 
   /* ── public API ─────────────────────────────────────────────────────────── */
+  /* -- real-price helpers + engine (active when QO.realPrices) -- */
+  function feedLabel() {
+    if (!QO.realPrices) return "simulated feed";
+    var p = QO.chartProvider;
+    return p === "binance" ? "live · Binance" : p === "twelvedata" ? "live · TwelveData" : "live feed";
+  }
+  function realFeedWord() {
+    return QO.chartProvider === "binance" ? "Binance" : QO.chartProvider === "twelvedata" ? "TwelveData" : "live";
+  }
+  function headlinePrice(sym) {
+    if (!sym) return 0;
+    if (QO.realPrices) {
+      var rc = QO.realCandles[sym.symbol];
+      if (rc && rc.length) return rc[rc.length - 1].c;
+      var fp = focusPos(); if (fp && fp.livePriceRaw != null) return Number(fp.livePriceRaw);
+      return sym.price != null ? sym.price : sym.base; // placeholder until /chart arrives
+    }
+    return sym.price != null ? sym.price : sym.base;
+  }
+  function overlayPos() {
+    if (QO.realPrices) { var fp = focusPos(); return (fp && (fp.status === "open" || fp.exitPrice != null)) ? fp : null; }
+    return (QO.pos && (QO.pos.status === "open" || QO.pos.exitPrice != null)) ? QO.pos : null;
+  }
+  // unified chart series: {candles:[{t,o,h,l,c}], line:[{t,price}], live, dp}
+  function chartSeries() {
+    var sym = curSym(), fp = focusPos();
+    var dp = (fp && fp.dp != null) ? fp.dp : (sym ? sym.dp : 2);
+    if (QO.realPrices) {
+      var rc = (sym && QO.realCandles[sym.symbol]) ? QO.realCandles[sym.symbol] : [];
+      var candles = rc.slice();
+      var line = candles.map(function (k) { return { t: k.t, price: k.c }; });
+      var live = null;
+      if (fp && fp.status === "open" && fp.livePriceRaw != null) live = Number(fp.livePriceRaw);
+      else if (candles.length) live = candles[candles.length - 1].c;
+      return { candles: candles, line: line, live: live, dp: dp };
+    }
+    var pts = seriesPoints();
+    return { candles: toCandles(pts, CANDLE_TICKS), line: pts, live: pts.length ? pts[pts.length - 1].price : null, dp: dp };
+  }
+  // compact switcher row of all open positions (shown when more than one)
+  function openSwitcherHTML() {
+    var c = TH(); var list = QO.openPositions || [];
+    return '<div class="qo-lab" style="padding:0 1px 6px">Open positions · ' + list.length + '</div>' +
+      '<div class="qo-syms" style="margin-bottom:11px">' + list.map(function (p) {
+        var on = p.id === QO.focusId, dirCol = p.dir === "long" ? c.green : c.red;
+        return '<div class="qo-sym qo-openchip ' + (on ? "on" : "") + '" data-id="' + p.id + '" style="min-width:108px' + (on ? (";border-color:" + hexA(dirCol, .6) + ";background:" + hexA(dirCol, .12)) : "") + '">' +
+          '<div class="nm" style="' + (on ? ("color:" + dirCol) : "") + '">' + ESC(p.label || p.symbol) + ' ' + (p.dir === "long" ? "▲" : "▼") + '</div>' +
+          '<div class="px">' + fmtQ(p.stake) + ' · ' + mmss(p.countdownMs != null ? p.countdownMs : 0) + '</div></div>';
+      }).join("") + '</div>';
+  }
+  function refreshOpenChips() {
+    var list = QO.openPositions || [];
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i], chip = document.querySelector('.qo-openchip[data-id="' + p.id + '"]');
+      if (chip) { var px = chip.querySelector(".px"); if (px) px.textContent = fmtQ(p.stake) + " · " + mmss(p.countdownMs != null ? p.countdownMs : 0); }
+    }
+  }
+  function chartCadence() { return QO.chartProvider === "twelvedata" ? 30000 : 5000; }
+  function fetchChart(force) {
+    var sym = curSym(); if (!sym || !QO.realPrices) return Promise.resolve();
+    if (QO.chartBusy && !force) return Promise.resolve();
+    QO.chartBusy = true;
+    return API("/quantoption/chart?symbol=" + encodeURIComponent(sym.symbol) + "&limit=200").then(function (r) {
+      QO.chartBusy = false;
+      if (!r || !Array.isArray(r.candles)) return;
+      if (r.provider) QO.chartProvider = r.provider;
+      QO.realCandles[sym.symbol] = r.candles.map(function (k) {
+        return { t: (Number(k.time) || 0) * 1000, o: Number(k.open), h: Number(k.high), l: Number(k.low), c: Number(k.close) };
+      });
+      if (document.getElementById("qo-stage") && QO.view === "trade") {
+        var sub = document.getElementById("qo-pxsub"); if (sub) sub.textContent = (sym.label || sym.symbol) + " · " + feedLabel();
+        var pxEl = document.getElementById("qo-px"); if (pxEl) pxEl.textContent = fmtP(headlinePrice(sym), sym.dp);
+        drawChart();
+      }
+    }).catch(function () { QO.chartBusy = false; });
+  }
+  function startChartPoll() { stopChartPoll(); if (!QO.realPrices) return; QO.chartTimer = setInterval(function () { fetchChart(false); }, chartCadence()); }
+  function stopChartPoll() { if (QO.chartTimer) { clearInterval(QO.chartTimer); QO.chartTimer = null; } }
+  function startPosPoll() {
+    stopPosPoll(); if (!QO.realPrices) return;
+    var tick = function () {
+      if (!QO.openPositions || !QO.openPositions.length) { stopPosPoll(); return; }
+      var prev = {}; QO.openPositions.forEach(function (p) { prev[p.id] = 1; });
+      API("/quantoption/positions").then(function (r) {
+        var list = (r && Array.isArray(r.positions)) ? r.positions : [];
+        var liveIds = {}; list.forEach(function (p) { liveIds[p.id] = 1; });
+        Object.keys(prev).forEach(function (id) { if (!liveIds[id]) resolveSettled(Number(id)); });
+        QO.openPositions = list; syncFocus();
+        if (document.getElementById("qo-stage") && QO.view === "trade") { drawChart(); refreshPositionCard(); refreshOpenChips(); }
+        if (!list.length) stopPosPoll();
+      }).catch(function () {});
+    };
+    QO.posTimer = setInterval(tick, 5000);
+    tick();
+  }
+  function stopPosPoll() { if (QO.posTimer) { clearInterval(QO.posTimer); QO.posTimer = null; } }
+  function resolveSettled(id) {
+    API("/quantoption/position/" + id).then(function (r) {
+      var p = r && r.position; if (!p || p.status === "open") return;
+      if (navigator.vibrate) { try { navigator.vibrate(p.status === "won" ? [10, 40, 10] : 22); } catch (e) {} }
+      showResult(p);
+      loadMe().then(function () { if (document.getElementById(OV_ID) && QO.view === "trade") rerender(); }).catch(function () {});
+    }).catch(function () {});
+  }
+  // local countdown so timers tick smoothly between position polls
+  function startCountdown() {
+    stopCountdown(); if (!QO.realPrices) return;
+    QO.countTimer = setInterval(function () {
+      var list = QO.openPositions || [], changed = false, i;
+      for (i = 0; i < list.length; i++) { if (list[i].countdownMs != null) { list[i].countdownMs = Math.max(0, list[i].countdownMs - 250); changed = true; } }
+      if (changed && document.getElementById("qo-stage") && QO.view === "trade") { refreshPositionCard(); refreshOpenChips(); }
+    }, 250);
+  }
+  function stopCountdown() { if (QO.countTimer) { clearInterval(QO.countTimer); QO.countTimer = null; } }
+  function startRealEngine() {
+    if (!QO.realPrices) return;
+    startChartPoll();
+    if (QO.openPositions && QO.openPositions.length) { startPosPoll(); startCountdown(); }
+  }
+  function stopRealEngine() { stopChartPoll(); stopPosPoll(); stopCountdown(); }
+
   window.openQuantOption = openQO;
   window.dqQuantOption = {
     open: openQO,
