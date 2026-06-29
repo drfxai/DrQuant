@@ -343,6 +343,28 @@ async function reread(userId, id) {
   return signalPositionView(rows[0], s[0] || null);
 }
 
+// The user's current OPEN signal position (if any) so the UI can resume an
+// in-progress trade after the app was closed. Lazily settles like getSignalPosition.
+async function getOpenSignalPosition(userId) {
+  await init();
+  const { rows } = await pool.query(
+    `SELECT * FROM quantoption_signal_positions WHERE user_id=$1 AND status='open' ORDER BY id DESC LIMIT 1`,
+    [String(userId)]);
+  if (!rows.length) return null;
+  const p = rows[0];
+  const { rows: srows } = await pool.query(`SELECT * FROM quantoption_signals WHERE ext_id=$1`, [p.signal_ext_id]);
+  const signal = srows[0];
+  if (signal && (signal.status === "won" || signal.status === "lost")) {
+    await settleSignal(p.signal_ext_id, signal.status === "won" ? "win" : "lose", signal.last_price);
+    return reread(userId, p.id);
+  }
+  if (p.expires_at && new Date(p.expires_at).getTime() <= Date.now()) {
+    await refundExpired(p.id);
+    return reread(userId, p.id);
+  }
+  return signalPositionView(p, signal || null);
+}
+
 // time-limit expiry with no real outcome → refund the stake (draw)
 async function refundExpired(positionId) {
   return withTransaction(async (cx) => {
@@ -431,7 +453,7 @@ function webhookConfigured() {
 }
 
 module.exports = {
-  init, ingestSignalEvent, openSignalPosition, getSignalPosition, sweepExpired,
+  init, ingestSignalEvent, openSignalPosition, getSignalPosition, getOpenSignalPosition, sweepExpired,
   listLiveSignals, getSignalByExt, history, webhookConfigured,
   MIN_STAKE, MAX_STAKE, MIN_TIME_LIMIT, MAX_TIME_LIMIT,
 };

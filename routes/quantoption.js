@@ -95,6 +95,13 @@ router.post("/open-signal", auth, async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
+router.get("/signal-open", auth, async (req, res) => {
+  try {
+    const position = await quantoptionSignals.getOpenSignalPosition(req.user.id);
+    res.json({ position: position || null });
+  } catch (e) { fail(res, e); }
+});
+
 router.get("/signal-position/:id", auth, async (req, res) => {
   try {
     const position = await quantoptionSignals.getSignalPosition(req.user.id, Number(req.params.id));

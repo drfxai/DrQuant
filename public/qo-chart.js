@@ -101,6 +101,17 @@
       });
     } catch (e) { return null; }
 
+    // Keep the chart sized to its container. On mobile (and any late-layout
+    // case) clientWidth can be 0 at creation, leaving the chart blank/collapsed;
+    // the observer resizes it the moment the container has real dimensions.
+    var ro = null;
+    function syncSize() { try { chart.resize(container.clientWidth || 320, container.clientHeight || 240); } catch (e) {} }
+    if (typeof ResizeObserver !== "undefined") {
+      try { ro = new ResizeObserver(function () { syncSize(); }); ro.observe(container); } catch (e) { ro = null; }
+    } else {
+      try { setTimeout(syncSize, 60); } catch (e) {}
+    }
+
     function makeSeries() {
       if (mode === "candle") {
         candleSeries = chart.addCandlestickSeries({
@@ -197,7 +208,7 @@
       resize: function (w, h) {
         try { chart.resize(w || container.clientWidth, h || container.clientHeight); } catch (e) {}
       },
-      destroy: function () { try { chart.remove(); } catch (e) {} chart = candleSeries = lineSeries = null; priceLines = []; },
+      destroy: function () { if (ro) { try { ro.disconnect(); } catch (e) {} ro = null; } try { chart.remove(); } catch (e) {} chart = candleSeries = lineSeries = null; priceLines = []; markers = []; },
     };
   }
 

@@ -79,6 +79,8 @@
     pos: null,             // open/most-recent signal position
     pollTimer: null,
     chart: null, realStop: null, chartTried: false,
+    chartMode: "candle",   // user-selectable chart style: "candle" | "line" (both real prices)
+    openPos: null,         // the user's current open signal position (for resume after exit)
     overlayOpen: false, busy: false,
   };
   var TL_OPTS = [["5m", 300], ["15m", 900], ["1h", 3600], ["4h", 14400]];
@@ -115,6 +117,10 @@
       '.qs-cta:active{transform:scale(.985)}' +
       '.qs-cta:disabled{opacity:.45;cursor:not-allowed}' +
       '.qs-chart{width:100%;height:230px;border-radius:13px;overflow:hidden;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';margin-bottom:11px}' +
+      '.qs-cmodes{display:flex;gap:6px;margin-bottom:7px}' +
+      '.qs-cmode{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 13px;border-radius:9px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12px;font-weight:800;cursor:pointer;font-family:inherit}' +
+      '.qs-cmode.on{border-color:' + hexA(c.blue, .6) + ';background:' + hexA(c.blue, .14) + ';color:' + c.blue + '}' +
+      '.qs-cmode:active{transform:scale(.96)}' +
       '.qs-toggle{width:44px;height:26px;border-radius:999px;border:none;cursor:pointer;position:relative;transition:background .18s;flex-shrink:0}' +
       '.qs-toggle .dot{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s}' +
       '.qs-empty{text-align:center;padding:40px 16px;color:' + c.t4 + ';font-size:12.5px}' +
@@ -172,7 +178,19 @@
         '</div>' +
       '</div>';
     }).join("") : '<div class="qs-empty">No live signals right now.<br>God Mode signals appear here once the webhook is set up.</div>';
-    return adminBtn +
+    var resume = "";
+    if (SG.openPos && SG.openPos.status === "open") {
+      var op = SG.openPos; var oup = op.dir === "long";
+      resume = '<div class="qs-resume qs-card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;border-color:' + hexA(c.blue, .5) + ';background:' + hexA(c.blue, .08) + '">' +
+        '<div style="display:flex;align-items:center;gap:9px;min-width:0">' +
+          '<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:' + (oup ? c.green : c.red) + ';box-shadow:0 0 8px ' + hexA(oup ? c.green : c.red, .7) + ';animation:qsPulse 1.4s infinite"></span>' +
+          '<div style="min-width:0"><div style="font-size:13px;font-weight:800;color:' + c.t1 + '">Open trade \u00b7 ' + ESC(op.symbol) + ' ' + (oup ? "Long" : "Short") + '</div>' +
+          '<div style="font-size:11px;color:' + c.t3 + '">Staked ' + fmtQ(op.stake) + ' QNTM \u00b7 tap to manage</div></div>' +
+        '</div>' +
+        '<span style="font-size:11px;font-weight:800;color:' + c.blue + ';flex-shrink:0">Resume ' + ICO('<path d="M5 12h14M12 5l7 7-7 7"/>', 13) + '</span>' +
+      '</div>';
+    }
+    return resume + adminBtn +
       '<div class="qs-lab" style="margin:2px 2px 9px">Live signals</div>' +
       list;
   }
@@ -227,7 +245,10 @@
     var hasTL = p.timeLimitSec != null && p.expiresAt;
     var cryptoReal = window.dqQORealPrice && window.dqQORealPrice.isReal(p.symbol);
     var chartBlock = cryptoReal
-      ? '<div class="qs-chart" id="qs-chart"></div>'
+      ? '<div class="qs-chartwrap"><div class="qs-cmodes">' +
+          '<button class="qs-cmode' + (SG.chartMode === "candle" ? " on" : "") + '" data-cmode="candle" type="button">Candles</button>' +
+          '<button class="qs-cmode' + (SG.chartMode === "line" ? " on" : "") + '" data-cmode="line" type="button">Line</button>' +
+        '</div><div class="qs-chart" id="qs-chart"></div></div>'
       : '<div class="qs-card" style="text-align:center"><div style="font-size:11px;color:' + c.t3 + ';line-height:1.5">' + ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 16) + '<br>Live chart is available for crypto symbols.<br>This signal settles on the real God Mode trade.</div></div>';
     return '<div class="qs-row" style="margin-bottom:12px">' +
         '<div style="display:flex;align-items:center;gap:9px">' +
@@ -270,6 +291,7 @@
 
     if (SG.screen === "list") {
       var wb = T("#qs-webhook"); if (wb) wb.onclick = showWebhook;
+      var rb = T(".qs-resume"); if (rb && SG.openPos) rb.onclick = function () { SG.pos = SG.openPos; SG.screen = "position"; rerender(); startPoll(); };
       st.querySelectorAll(".qs-sigcard").forEach(function (card) {
         card.onclick = function () {
           var ext = card.getAttribute("data-ext");
@@ -291,6 +313,15 @@
       var open = T("#qs-open"); if (open) open.onclick = doOpen;
     } else if (SG.screen === "position") {
       var b2 = T("#qs-back2"); if (b2) b2.onclick = function () { stopPoll(); SG.pos = null; SG.screen = "list"; refresh().then(rerender).catch(rerender); };
+      st.querySelectorAll(".qs-cmode").forEach(function (b) {
+        b.onclick = function () {
+          var m = b.getAttribute("data-cmode"); if (m !== "candle" && m !== "line") return;
+          if (m === SG.chartMode) return;
+          SG.chartMode = m;
+          st.querySelectorAll(".qs-cmode").forEach(function (x) { x.classList.toggle("on", x.getAttribute("data-cmode") === m); });
+          if (SG.chart) SG.chart.setMode(m);
+        };
+      });
     }
   }
   function syncConfirm() {
@@ -313,7 +344,7 @@
       .then(function (r) {
         SG.busy = false;
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); return; }
-        SG.pos = p; SG.screen = "position";
+        SG.pos = p; SG.openPos = p; SG.screen = "position";
         if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
         rerender(); startPoll();
       })
@@ -348,6 +379,7 @@
     el.textContent = mmss(ms);
   }
   function onResolved(p) {
+    SG.openPos = null;
     teardownChart();
     if (navigator.vibrate) { try { navigator.vibrate(p.status === "won" ? [10, 40, 10] : 22); } catch (e) {} }
     showResult(p);
@@ -366,7 +398,7 @@
     var colors = { text: c.t2, grid: "rgba(120,150,200,.07)", up: c.green, down: c.red, entry: c.gold, target: c.green, stop: c.red };
     window.dqQOChart.ensureLib().then(function () {
       if (SG.screen !== "position" || !document.getElementById("qs-chart")) return;
-      var ch = window.dqQOChart.create(el, { colors: colors, mode: "candle" });
+      var ch = window.dqQOChart.create(el, { colors: colors, mode: SG.chartMode || "candle" });
       if (!ch) return;
       SG.chart = ch;
       var nsym = String(p.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -579,7 +611,17 @@
     if (document.getElementById(OV_ID)) { return; }
     SG.screen = "list"; SG.sel = null; SG.pos = null;
     buildOverlay();
-    loadList().then(function () { rerender(); }).catch(function () {
+    loadList().then(function () {
+      // Resume an in-progress trade if one exists (like Easy Trade), so an open
+      // position can be viewed/managed again after leaving and reopening.
+      return API("/quantoption/signal-open").then(function (r) {
+        var p = r && r.position;
+        SG.openPos = (p && p.status === "open") ? p : null;
+        if (SG.openPos && SG.screen === "list" && !SG.sel) {
+          SG.pos = SG.openPos; SG.screen = "position"; rerender(); startPoll();
+        } else { rerender(); }
+      }).catch(function () { rerender(); });
+    }).catch(function () {
       var st = document.getElementById("qs-stage"); if (st) st.innerHTML = '<div class="qs-empty">Could not load signals.</div>';
     });
   }

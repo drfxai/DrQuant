@@ -20,6 +20,7 @@ const express = require("express");
 const crypto = require("crypto");
 const router = express.Router();
 const scoreboard = require("../services/signal-scoreboard");
+const quantoptionSignals = require("../services/quantoption-signals");
 
 const SECRET = process.env.TRADINGVIEW_WEBHOOK_SECRET || "";
 const SIGNAL_CHANNEL_USERNAME = process.env.SIGNAL_CHANNEL_USERNAME || "signals";
@@ -228,6 +229,15 @@ function feedScoreboardFromTag(data, chatId) {
       event: data.event, price: data.price, result: data.result,
     });
   }
+  // Mirror into the Quant Option signal store so the in-chat "Trade on Quant
+  // Option" button has a live, trusted signal to open against (best-effort).
+  try {
+    quantoptionSignals.ingestSignalEvent(
+      ev === "entry"
+        ? { signal_id: data.signal_id, event: "entry", symbol: data.symbol, direction: data.direction, entry: data.entry, sl: data.sl, tp1: data.tp1, tp2: data.tp2, tp3: data.tp3, tf: data.tf }
+        : { signal_id: data.signal_id, event: data.event, symbol: data.symbol, direction: data.direction, price: data.price, result: data.result }
+    ).catch(function () {});
+  } catch (e) { /* QO mirror is non-critical */ }
 }
 
 router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
@@ -438,6 +448,18 @@ router.post(["/tradingview", "/tradingview/:token"], async (req, res) => {
       scoreboard.ingestWebhook(n, { signalId: sig.id, chatId, extId: fields.id });
     } catch (e) { /* scoreboard is non-critical */ }
 
+    // Mirror into the Quant Option signal store (best-effort) so the in-chat
+    // trade button can open a real position against this signal. An id lets
+    // later tp/sl updates settle it; without one it records entry under a
+    // synthetic id and (absent a time limit) settles only via the QO webhook.
+    try {
+      quantoptionSignals.ingestSignalEvent({
+        signal_id: fields.id != null ? fields.id : ("sig_" + sig.id),
+        event: "entry", symbol: n.symbol, direction: n.side,
+        entry: n.price, sl: n.stop_loss, tp1: n.take_profit, tf: n.timeframe,
+      }).catch(function () {});
+    } catch (e) { /* QO mirror is non-critical */ }
+
     // Post the signal into the channel as a normal chat message so every member
     // sees it in the chat UI (raw `signal` events are not rendered by the SPA).
     if (chatId) {
@@ -499,15 +521,24 @@ router.post("/signal-update", express.json({ limit: "32kb" }), (req, res) => {
   let authed = false;
   if (SECRET && typeof b.secret === "string") authed = timingSafeEqual(b.secret, SECRET);
   if (!authed) return res.status(401).json({ error: "Unauthorized" });
-  const one = (e) => scoreboard.applyEvent({
-    signalId: e.signal_id != null ? e.signal_id : (e.signalId != null ? e.signalId : (e.id != null ? e.id : null)),
-    symbol: e.symbol,
-    direction: e.direction != null ? e.direction : e.side,
-    event: e.event != null ? e.event : (e.type != null ? e.type : e.status),
-    price: e.price,
-    result: e.result,
-    ts: e.time != null ? e.time : e.timestamp,
-  });
+  const one = (e) => {
+    const sid = e.signal_id != null ? e.signal_id : (e.signalId != null ? e.signalId : (e.id != null ? e.id : null));
+    const edir = e.direction != null ? e.direction : e.side;
+    const evt = e.event != null ? e.event : (e.type != null ? e.type : e.status);
+    const r = scoreboard.applyEvent({
+      signalId: sid,
+      symbol: e.symbol,
+      direction: edir,
+      event: evt,
+      price: e.price,
+      result: e.result,
+      ts: e.time != null ? e.time : e.timestamp,
+    });
+    // Mirror the progress/close event into the Quant Option signal store so a
+    // chat-opened position settles on the real outcome (best-effort).
+    try { quantoptionSignals.ingestSignalEvent({ signal_id: sid, event: evt, symbol: e.symbol, direction: edir, price: e.price, result: e.result }).catch(function () {}); } catch (er) {}
+    return r;
+  };
   try {
     if (Array.isArray(b.events)) {
       const results = b.events.map(one);
