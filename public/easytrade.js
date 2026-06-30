@@ -1000,6 +1000,7 @@
   // expose + wake the nav-tab bolt on load: light it if a forecast is already live.
   if (typeof window !== "undefined") {
     window.openEasyTrade = open;
+    window.dqEasyTradeGame = open; // stable handle: the Easy Trade hub overrides window.openEasyTrade, so keep a dedicated reference to the Baby Trader game opener
     try { ensureNavCss(); } catch (e) {}
     setTimeout(function () { try { syncNavBolt(); } catch (e) {} }, 2500);
   }

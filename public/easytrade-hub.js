@@ -104,16 +104,26 @@
   // Resolve the target opener FIRST; only close the hub once we actually have one,
   // so a not-yet-ready module (or a tap that lands off a card) can never drop the
   // user onto the chat home screen underneath.
-  function route(resolve) {
+  function route(resolve, label) {
     if (_routed) return;
     var fn = (typeof resolve === "function") ? resolve() : null;
-    if (typeof fn !== "function") return;
+    if (typeof fn !== "function") {
+      try { console.warn("[EasyHub] opener for '" + (label || "section") + "' is not available"); } catch (e) {}
+      try { if (typeof showToast === "function") showToast(label || "Easy Trade", "Still loading - please reload the app and try again."); } catch (e) {}
+      return;
+    }
     _routed = true;
-    try { fn(); closeHub(); } catch (e) { _routed = false; }
+    try { fn(); closeHub(); }
+    catch (err) {
+      _routed = false;
+      try { console.error("[EasyHub] failed to open '" + (label || "section") + "'", err); } catch (e) {}
+      try { if (typeof showToast === "function") showToast(label || "Easy Trade", "Couldn't open this - please try again."); } catch (e) {}
+    }
   }
 
   function goLeagues() { return (window.dqLeagues && typeof window.dqLeagues.open === "function") ? function () { window.dqLeagues.open(); } : null; }
   function goBabyTrader() {
+    if (typeof window.dqEasyTradeGame === "function") return window.dqEasyTradeGame;
     if (typeof babyTraderOpen === "function") return babyTraderOpen;
     if (typeof window.openEasyTrade === "function" && window.openEasyTrade !== openHub) return window.openEasyTrade;
     return null;
@@ -158,16 +168,16 @@
     ov.addEventListener("click", function (e) { if (e.target === ov) closeHub(); });
     document.addEventListener("keydown", onKey);
 
-    function wireCard(id, fn) {
+    function wireCard(id, fn, label) {
       var el = ov.querySelector(id);
       if (!el) return;
-      el.onclick = function () { route(fn); };
-      el.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); route(fn); } };
+      el.onclick = function () { route(fn, label); };
+      el.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); route(fn, label); } };
     }
     var x = ov.querySelector("#ezh-x"); if (x) x.onclick = closeHub;
-    wireCard("#ezh-league", goLeagues);
-    wireCard("#ezh-baby", goBabyTrader);
-    wireCard("#ezh-pick", goBabyPick);
+    wireCard("#ezh-league", goLeagues, "Legendary League");
+    wireCard("#ezh-baby", goBabyTrader, "Baby Trader");
+    wireCard("#ezh-pick", goBabyPick, "Baby Pick");
     if (window.dqAppNav) window.dqAppNav.wire(ov, "easytrade", closeHub);
   }
 
