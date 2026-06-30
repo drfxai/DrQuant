@@ -60,7 +60,14 @@
   function anyLayerOpen() {
     try {
       return !!(byId("ctx-menu") || emojiOpen() || document.querySelector(".dq-modal-ov") ||
-                fullscreenOverlay() || sidebarOpen() || infoPanelOpen() || inMobileChat());
+                fullscreenOverlay() ||
+                // Easy Trade / Baby Pick overlays style themselves via an injected
+                // stylesheet (not inline), so fullscreenOverlay() cannot see them.
+                // They run their own back system - count them as open here so we
+                // never rewind our sentinel out from under them (which would make
+                // their popstate handler tear the overlay down on open).
+                byId("et-ov") || byId("bp-ov") ||
+                sidebarOpen() || infoPanelOpen() || inMobileChat());
     } catch (e) { return false; }
   }
 
