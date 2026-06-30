@@ -440,7 +440,7 @@
               for (var k2 = 0; k2 < tps.length; k2++) {
                 var nm = tps[k2][0], lv = Number(tps[k2][1]); if (!isFinite(lv)) continue;
                 var hit = up2 ? live >= lv : live <= lv, key = p.id + ":" + nm;
-                if (hit && !SG.tpHit[key]) { SG.tpHit[key] = 1; if (!first) window.dqQOFx.pop(nm + " reached", "#1c84ff"); }
+                if (hit && !SG.tpHit[key]) { SG.tpHit[key] = 1; if (!first) window.dqQOFx.target(nm); }
               }
             }
           }

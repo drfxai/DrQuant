@@ -1005,7 +1005,7 @@
       for (var k = 0; k < tps.length; k++) {
         var nm = tps[k][0], lv = Number(tps[k][1]); if (!isFinite(lv)) continue;
         var hit = up ? live >= lv : live <= lv, key = p.id + ":" + nm;
-        if (hit && !QO.tpHit[key]) { QO.tpHit[key] = 1; if (!first) window.dqQOFx.pop(nm + " reached", c.blue); }
+        if (hit && !QO.tpHit[key]) { QO.tpHit[key] = 1; if (!first) window.dqQOFx.target(nm); }
       }
     }
   }
@@ -1062,15 +1062,66 @@
 
 /* celebratory FX, shared with the signals module via window.dqQOFx */
 (function () {
-  if (window.dqQOFx) return;
+  if (window.dqQOFx && window.dqQOFx.v2) return;
   try {
-    var s = document.createElement("style");
+    var s = document.getElementById("qo-fx-kf") || document.createElement("style");
+    s.id = "qo-fx-kf";
     s.textContent =
       "@keyframes qoFxRise{0%{opacity:0;transform:translate(-50%,10px) scale(.82)}16%{opacity:1;transform:translate(-50%,0) scale(1.08)}32%{transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-48px) scale(1)}}" +
       "@keyframes qoFxConfetti{0%{opacity:1;transform:translateY(0) rotate(0deg)}100%{opacity:0;transform:translateY(240px) rotate(560deg)}}" +
-      "@keyframes qoFxFlash{0%{opacity:.55;transform:translate(-50%,-50%) scale(.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.6)}}";
-    document.head.appendChild(s);
+      "@keyframes qoFxFlash{0%{opacity:.55;transform:translate(-50%,-50%) scale(.4)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.6)}}" +
+      "@keyframes qoMsIn{0%{transform:translateX(-50%) translateY(-26px);opacity:0}100%{transform:translateX(-50%) translateY(0);opacity:1}}" +
+      "@keyframes qoMsBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}" +
+      "@keyframes qoConf{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(112vh) rotate(680deg);opacity:.14}}";
+    if (!s.parentNode) document.head.appendChild(s);
   } catch (e) {}
+  function esc(x) { return String(x == null ? "" : x).replace(/[&<>"]/g, function (m) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[m]; }); }
+  function hexA(hex, a) { hex = String(hex || "#1c84ff"); if (hex.charAt(0) !== "#") return hex; var h = hex.slice(1); if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2); var n = parseInt(h, 16); return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")"; }
+  function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
+  function ring(pct, color) {
+    var r = 18, cc = 2 * Math.PI * r, off = cc * (1 - Math.max(0, Math.min(100, pct)) / 100);
+    return '<svg width="46" height="46" viewBox="0 0 46 46" style="flex-shrink:0">' +
+      '<circle cx="23" cy="23" r="' + r + '" fill="none" stroke="' + hexA(color, .18) + '" stroke-width="4"/>' +
+      '<circle cx="23" cy="23" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="4" stroke-linecap="round" stroke-dasharray="' + cc.toFixed(1) + '" stroke-dashoffset="' + off.toFixed(1) + '" transform="rotate(-90 23 23)"/>' +
+      '<text x="23" y="27" text-anchor="middle" font-size="12" font-weight="800" fill="' + color + '" font-family="Outfit,sans-serif">' + Math.round(pct) + '%</text></svg>';
+  }
+  function milestone(opts) {
+    try {
+      opts = opts || {};
+      var color = opts.color || "#1c84ff", ttl = opts.ttl || 3600;
+      var ex = document.getElementById("qo-ms"); if (ex) ex.remove();
+      var wrap = document.createElement("div");
+      wrap.id = "qo-ms";
+      wrap.style.cssText = "position:fixed;top:calc(14px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:6600;width:calc(100% - 26px);max-width:430px;cursor:pointer";
+      wrap.innerHTML =
+        '<div style="display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:14px;background:linear-gradient(135deg,' + hexA(color, .26) + ',' + hexA(color, .07) + '),rgba(13,21,37,.94);border:1px solid ' + hexA(color, .55) + ';box-shadow:0 16px 44px ' + hexA(color, .32) + ';-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);animation:qoMsIn .5s cubic-bezier(.2,1.2,.3,1)">' +
+          (opts.pct != null ? ring(opts.pct, color) : "") +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-size:15px;font-weight:900;color:' + color + ';letter-spacing:.2px">' + (opts.emoji ? opts.emoji + " " : "") + esc(opts.title || "") + '</div>' +
+            (opts.line ? '<div style="font-size:12px;color:#9fb0cc;margin-top:2px;line-height:1.4">' + esc(opts.line) + '</div>' : "") +
+          '</div>' +
+        '</div>' +
+        '<div style="height:3px;border-radius:3px;margin:5px 14px 0;transform-origin:left;background:' + color + ';animation:qoMsBar ' + ttl + 'ms linear forwards"></div>';
+      document.body.appendChild(wrap);
+      wrap.onclick = function () { wrap.remove(); };
+      setTimeout(function () {
+        if (!wrap.parentNode) return;
+        wrap.style.transition = "opacity .3s,transform .3s";
+        wrap.style.opacity = "0"; wrap.style.transform = "translateX(-50%) translateY(-14px)";
+        setTimeout(function () { if (wrap.parentNode) wrap.remove(); }, 300);
+      }, ttl);
+    } catch (e) {}
+  }
+  function MS_TP1() { return { pct: 33, color: "#22c55e", emoji: "\uD83C\uDFAF", title: "Target 1 hit!", line: pick(["You\u2019re 33% of the way \u2014 momentum\u2019s on your side!", "First target smashed \u2014 the win is heating up.", "Great start \u2014 33% locked in, keep riding it!"]) }; }
+  function MS_TP2() { return { pct: 66, color: "#22c55e", emoji: "\uD83D\uDD25", title: "Target 2 hit!", line: pick(["66% there \u2014 you can almost taste the win!", "On fire \u2014 two targets down, one to go.", "So close \u2014 66% done, hold the line!"]) }; }
+  function MS_TP3() { return { pct: 100, color: "#ffcf5a", emoji: "\uD83D\uDE80", title: "Final target hit!", line: pick(["Bullseye \u2014 the settlement target is in!", "Full distance \u2014 that\u2019s the maximum run!", "Nailed it \u2014 every target cleared!"]) }; }
+  function target(name) {
+    var n = String(name || "").toUpperCase();
+    if (n === "TP1") return milestone(MS_TP1());
+    if (n === "TP2") return milestone(MS_TP2());
+    if (n === "TP3") return milestone(MS_TP3());
+    return milestone({ pct: 100, color: "#22c55e", emoji: "\uD83C\uDFAF", title: name + " reached" });
+  }
   function pop(text, color) {
     color = color || "#1c84ff";
     var el = document.createElement("div");
@@ -1081,19 +1132,19 @@
   }
   function burst() {
     var wrap = document.createElement("div");
-    wrap.style.cssText = "position:fixed;inset:0;z-index:6350;pointer-events:none;overflow:hidden";
+    wrap.style.cssText = "position:fixed;inset:0;z-index:6650;pointer-events:none;overflow:hidden";
     var fl = document.createElement("div");
-    fl.style.cssText = "position:absolute;left:50%;top:42%;width:170px;height:170px;border-radius:50%;background:radial-gradient(circle,rgba(28,132,255,.55),transparent 70%);animation:qoFxFlash .7s ease-out forwards";
+    fl.style.cssText = "position:absolute;left:50%;top:40%;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(34,197,94,.5),transparent 70%);animation:qoFxFlash .7s ease-out forwards";
     wrap.appendChild(fl);
-    var cols = ["#1c84ff", "#5aa9ff", "#22c55e", "#ffcf5a", "#ff5c8a", "#0a6edb"];
-    for (var i = 0; i < 30; i++) {
-      var p = document.createElement("div");
+    var cols = ["#22c55e", "#1c84ff", "#5aa9ff", "#ffcf5a", "#ff5c8a", "#ffffff"];
+    for (var i = 0; i < 48; i++) {
+      var p = document.createElement("span");
       var sz = 6 + Math.round(Math.random() * 7);
-      p.style.cssText = "position:absolute;top:38%;left:" + (28 + Math.random() * 44) + "%;width:" + sz + "px;height:" + Math.round(sz * 0.6) + "px;background:" + cols[i % cols.length] + ";border-radius:2px;opacity:0;animation:qoFxConfetti " + (1.1 + Math.random() * 0.8).toFixed(2) + "s " + (Math.random() * 0.28).toFixed(2) + "s ease-in forwards";
+      p.style.cssText = "position:absolute;top:-16px;left:" + (Math.random() * 100) + "%;width:" + sz + "px;height:" + Math.round(sz * 0.55) + "px;background:" + cols[i % cols.length] + ";opacity:.95;border-radius:2px;transform:rotate(" + Math.round(Math.random() * 360) + "deg);animation:qoConf " + (1.5 + Math.random() * 1.3).toFixed(2) + "s " + (Math.random() * 0.45).toFixed(2) + "s cubic-bezier(.25,.6,.4,1) forwards";
       wrap.appendChild(p);
     }
     document.body.appendChild(wrap);
-    setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 2300);
+    setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 3500);
   }
-  window.dqQOFx = { pop: pop, burst: burst };
+  window.dqQOFx = { v2: true, pop: pop, burst: burst, milestone: milestone, target: target, MS_TP1: MS_TP1, MS_TP2: MS_TP2, MS_TP3: MS_TP3 };
 })();
