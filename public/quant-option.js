@@ -926,7 +926,7 @@
     if (QO.realPrices) {
       var rc = QO.realCandles[sym.symbol];
       if (rc && rc.length) return rc[rc.length - 1].c;
-      var fp = focusPos(); if (fp && fp.livePriceRaw != null) return Number(fp.livePriceRaw);
+      var fp = focusPos(); if (fp && fp.livePriceRaw != null && fp.symbol === sym.symbol) return Number(fp.livePriceRaw);
       return sym.price != null ? sym.price : sym.base; // placeholder until /chart arrives
     }
     return sym.price != null ? sym.price : sym.base;
@@ -943,13 +943,14 @@
   // unified chart series: {candles:[{t,o,h,l,c}], line:[{t,price}], live, dp}
   function chartSeries() {
     var sym = curSym(), fp = focusPos();
-    var dp = (fp && fp.dp != null) ? fp.dp : (sym ? sym.dp : 2);
+    var fpOnChart = !!(fp && sym && fp.symbol === sym.symbol);  // focused position is the charted symbol
+    var dp = (fpOnChart && fp.dp != null) ? fp.dp : (sym ? sym.dp : 2);
     if (QO.realPrices) {
       var rc = (sym && QO.realCandles[sym.symbol]) ? QO.realCandles[sym.symbol] : [];
       var candles = rc.slice();
       var line = candles.map(function (k) { return { t: k.t, price: k.c }; });
       var live = null;
-      if (fp && fp.status === "open" && fp.livePriceRaw != null) live = Number(fp.livePriceRaw);
+      if (fpOnChart && fp.status === "open" && fp.livePriceRaw != null) live = Number(fp.livePriceRaw);
       else if (candles.length) live = candles[candles.length - 1].c;
       return { candles: candles, line: line, live: live, dp: dp };
     }
