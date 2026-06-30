@@ -50,7 +50,7 @@ router.get("/", async (req, res) => {
 // GET /api/leagues/me — the caller's status for the ID card / league screen.
 router.get("/me", async (req, res) => {
   try {
-    res.json(await leagues.getStatus(req.user.id));
+    res.json(await leagues.getStatus(req.user.id, req.user.role === "admin"));
   } catch (e) { fail(res, e); }
 });
 
@@ -74,7 +74,7 @@ router.post("/ritual/:rid/claim", async (req, res) => {
 // POST /api/leagues/:id/unlock — start the 7-day unlock ritual for league :id.
 router.post("/:id/unlock", async (req, res) => {
   try {
-    res.status(201).json(await rituals.startRitual(req.user.id, req.params.id));
+    res.status(201).json(await rituals.startRitual(req.user.id, req.params.id, req.user.role === "admin"));
   } catch (e) { fail(res, e); }
 });
 

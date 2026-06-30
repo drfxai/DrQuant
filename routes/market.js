@@ -635,7 +635,7 @@ router.get("/creators/:handle", async (req, res) => {
     const _xpPosts = (xpRow && xpRow.posts) || 0;
     const _xpLikes = (xpRow && xpRow.likes) || 0;
     const _xp = 1000 + _xpLikes * 100 + _xpPosts * 100;
-    const _level = Math.max(1, Math.min(10, Math.floor(_xp / 1000)));
+    const _level = Math.max(1, Math.min(100, Math.floor(_xp / 1000)));
     res.json({
       creator: shapeCreator(u, { me }),
       products: products.map(shapeProduct),
@@ -644,7 +644,7 @@ router.get("/creators/:handle", async (req, res) => {
       post_count: posts.length,
       xp: _xp,
       level: _level,
-      xp_max: 10000,
+      xp_max: 100000,
     });
   } catch (e) {
     console.error("[market] creator profile:", e.message);
@@ -1031,7 +1031,7 @@ router.get("/me/stats", async (req, res) => {
     );
     const posts = (r && r.posts) || 0;
     const likes = (r && r.likes) || 0;
-    const BASE = 1000, LIKE_XP = 100, POST_XP = 100, PER_LEVEL = 1000, MAX_LEVEL = 10;
+    const BASE = 1000, LIKE_XP = 100, POST_XP = 100, PER_LEVEL = 1000, MAX_LEVEL = 100;
     const xp = BASE + likes * LIKE_XP + posts * POST_XP;
     const level = Math.max(1, Math.min(MAX_LEVEL, Math.floor(xp / PER_LEVEL)));
     res.json({

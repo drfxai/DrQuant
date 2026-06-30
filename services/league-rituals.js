@@ -44,7 +44,7 @@ function err(code, message, status) {
 // ── START a ritual ───────────────────────────────────────────────────────────
 // Validates eligibility, locks the league's stake_for_unlock QNTM, opens the
 // 7-day window. Returns the data the UI needs to render the countdown.
-async function startRitual(userId, leagueId) {
+async function startRitual(userId, leagueId, isAdmin) {
   leagueId = Number(leagueId);
   if (!userId || !Number.isInteger(leagueId)) throw err("bad_request", "userId and a valid leagueId are required");
 
@@ -69,7 +69,7 @@ async function startRitual(userId, leagueId) {
   );
   const earned = BigInt(srows[0].total_earned_qntm);
   const current = Number(srows[0].current) || 0;
-  if (earned < BigInt(def.earned_threshold_qntm)) {
+  if (!isAdmin && earned < BigInt(def.earned_threshold_qntm)) {
     throw err("not_qualified", "you have not earned enough QNTM to qualify for " + def.name);
   }
   if (leagueId <= current) throw err("already_unlocked", def.name + " is already unlocked");

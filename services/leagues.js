@@ -163,7 +163,7 @@ async function _availableQntm(userId) {
 // READ — full status for the ID card / league screen. Creates a default row on
 // first view. The per-league breakdown is computed live so it is always
 // self-consistent, and includes any in-progress unlock ritual ("Ascending").
-async function getStatus(userId) {
+async function getStatus(userId, isAdmin) {
   await ensureRow(pool, userId);
 
   const { rows: srows } = await pool.query(
@@ -206,7 +206,7 @@ async function getStatus(userId) {
   const available = await _availableQntm(userId);
 
   const leaguesView = defs.map((d) => {
-    const earnedOk = earned >= BigInt(d.earned_threshold_qntm);
+    const earnedOk = isAdmin || (earned >= BigInt(d.earned_threshold_qntm));
     const stakeForUnlock = Number(d.stake_for_unlock_qntm);
     let state;
     if (current != null && d.id <= current) state = "Unlocked";
