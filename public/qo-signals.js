@@ -353,6 +353,7 @@
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); return; }
         SG.pos = p; SG.openPos = p; SG.screen = "position";
         if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+        if (window.dqQOFx && window.dqQOFx.opened) { try { window.dqQOFx.opened((p && p.symbol) || (SG.sel && SG.sel.symbol), (SG.sel && SG.sel.direction) || (p && (p.direction || p.dir))); } catch (e) {} }
         rerender(); startPoll();
       })
       .catch(function (e) {
@@ -435,7 +436,7 @@
             var live = Number(candle.close);
             if (isFinite(live)) {
               var up2 = p.dir === "long";
-              var tps = [["TP1", sig ? sig.tp1 : p.target], ["TP2", sig ? sig.tp2 : null], ["TP3", sig ? sig.tp3 : null]];
+              var tps = [["TP1", sig ? sig.tp1 : p.target], ["HALF", sig ? (Number(sig.tp1) + Number(sig.tp2)) / 2 : null], ["TP2", sig ? sig.tp2 : null], ["TP3", sig ? sig.tp3 : null]];
               var first = !SG.tpHit[p.id + ":seen"]; SG.tpHit[p.id + ":seen"] = 1;
               for (var k2 = 0; k2 < tps.length; k2++) {
                 var nm = tps[k2][0], lv = Number(tps[k2][1]); if (!isFinite(lv)) continue;

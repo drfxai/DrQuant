@@ -715,6 +715,7 @@
         QO.busy = false;
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); rerender(); return; }
         if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
+        if (window.dqQOFx && window.dqQOFx.opened) { try { window.dqQOFx.opened(sym.label || sym.symbol, QO.dir); } catch (e) {} }
         QO.manualTP = ""; QO.manualSL = "";
         if (QO.realPrices) {
           QO.focusId = p.id;
@@ -1001,7 +1002,7 @@
       var live = Number(p.livePrice != null ? p.livePrice : p.livePriceRaw); if (!isFinite(live)) continue;
       var up = p.dir === "long";
       var first = !QO.tpHit[p.id + ":seen"]; QO.tpHit[p.id + ":seen"] = 1;
-      var tps = [["TP1", p.tp1], ["TP2", p.tp2], ["TP3", p.tp3]];
+      var tps = [["TP1", p.tp1], ["HALF", (Number(p.tp1) + Number(p.tp2)) / 2], ["TP2", p.tp2], ["TP3", p.tp3]];
       for (var k = 0; k < tps.length; k++) {
         var nm = tps[k][0], lv = Number(tps[k][1]); if (!isFinite(lv)) continue;
         var hit = up ? live >= lv : live <= lv, key = p.id + ":" + nm;
@@ -1115,12 +1116,22 @@
   function MS_TP1() { return { pct: 33, color: "#22c55e", emoji: "\uD83C\uDFAF", title: "Target 1 hit!", line: pick(["You\u2019re 33% of the way \u2014 momentum\u2019s on your side!", "First target smashed \u2014 the win is heating up.", "Great start \u2014 33% locked in, keep riding it!"]) }; }
   function MS_TP2() { return { pct: 66, color: "#22c55e", emoji: "\uD83D\uDD25", title: "Target 2 hit!", line: pick(["66% there \u2014 you can almost taste the win!", "On fire \u2014 two targets down, one to go.", "So close \u2014 66% done, hold the line!"]) }; }
   function MS_TP3() { return { pct: 100, color: "#ffcf5a", emoji: "\uD83D\uDE80", title: "Final target hit!", line: pick(["Bullseye \u2014 the settlement target is in!", "Full distance \u2014 that\u2019s the maximum run!", "Nailed it \u2014 every target cleared!"]) }; }
+  function MS_HALF() { return { pct: 50, color: "#1c84ff", emoji: "\uD83D\uDCC8", title: "Halfway there!", line: pick(["50% of the way to target \u2014 keep it going!", "Past the midpoint \u2014 the target\u2019s in sight!", "Halfway home \u2014 momentum\u2019s building!"]) }; }
   function target(name) {
     var n = String(name || "").toUpperCase();
     if (n === "TP1") return milestone(MS_TP1());
     if (n === "TP2") return milestone(MS_TP2());
     if (n === "TP3") return milestone(MS_TP3());
+    if (n === "HALF") return milestone(MS_HALF());
     return milestone({ pct: 100, color: "#22c55e", emoji: "\uD83C\uDFAF", title: name + " reached" });
+  }
+  function opened(label, dir) {
+    var d = String(dir || "").toLowerCase();
+    var side = d === "short" ? "Short" : d === "long" ? "Long" : "";
+    var lab = label ? String(label) : "";
+    var line = lab ? (lab + (side ? " \u00b7 " + side : "")) : side;
+    line = line ? (line + " is running \u2014 targets are set.") : "Your position is live \u2014 targets are set.";
+    return milestone({ color: "#1c84ff", emoji: "\u26A1", title: "Trade live!", line: line, ttl: 2800 });
   }
   function pop(text, color) {
     color = color || "#1c84ff";
@@ -1146,5 +1157,5 @@
     document.body.appendChild(wrap);
     setTimeout(function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 3500);
   }
-  window.dqQOFx = { v2: true, pop: pop, burst: burst, milestone: milestone, target: target, MS_TP1: MS_TP1, MS_TP2: MS_TP2, MS_TP3: MS_TP3 };
+  window.dqQOFx = { v2: true, pop: pop, burst: burst, milestone: milestone, target: target, opened: opened, MS_TP1: MS_TP1, MS_TP2: MS_TP2, MS_TP3: MS_TP3, MS_HALF: MS_HALF };
 })();
