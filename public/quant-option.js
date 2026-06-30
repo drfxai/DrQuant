@@ -156,7 +156,7 @@
       '.qo-mode{width:30px;height:26px;border-radius:6px;border:none;background:transparent;color:' + c.t3 + ';cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .14s,color .14s}' +
       '.qo-mode:hover{color:' + c.t2 + '}' +
       '.qo-mode.on{background:' + hexA(c.blue, .16) + ';color:' + c.blue + '}' +
-      '.qo-canvas{display:block;width:100%;height:234px;touch-action:pan-y}' +
+      '.qo-canvas{display:block;width:100%;height:290px;touch-action:pan-y}' +
       '.qo-seg{display:flex;gap:9px;margin-bottom:12px}' +
       '.qo-dir{flex:1;border-radius:10px;padding:13px 10px;border:1px solid ' + c.bd + ';background:' + c.panel + ';cursor:pointer;text-align:center;transition:border-color .15s,background .15s,transform .12s;position:relative;overflow:hidden}' +
       '.qo-dir:hover{border-color:' + hexA(c.blue, .35) + '}' +
@@ -287,7 +287,7 @@
     var cv = document.getElementById("qo-canvas"); if (!cv) return null;
     var dpr = window.devicePixelRatio || 1;
     var w = cv.clientWidth || cv.parentNode.clientWidth || 320;
-    var h = cv.clientHeight || 226;
+    var h = cv.clientHeight || 290;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
       cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     }
@@ -318,7 +318,7 @@
       return;
     }
 
-    var padL = 10, padR = 58, padT = 8, padB = 20;
+    var padL = 10, padR = 92, padT = 8, padB = 20;
     var plotW = W - padL - padR, plotH = H - padT - padB;
 
     // y-range over what is drawn, widened to include levels + the live price
@@ -366,14 +366,26 @@
       var nE = Number(pos.entry), nS = Number(pos.stop);
       var n1 = Number(pos.tp1), n2 = Number(pos.tp2);
       var n3 = Number.isFinite(Number(pos.tp3)) ? Number(pos.tp3) : Number(pos.target);
-      var yE = Y(nE), yS = Y(nS), y3 = Y(n3);
-      ctx.fillStyle = hexA(c.blue, .09); ctx.fillRect(padL, Math.min(yE, y3), plotW, Math.abs(y3 - yE));
-      ctx.fillStyle = hexA(c.red, .08); ctx.fillRect(padL, Math.min(yE, yS), plotW, Math.abs(yS - yE));
-      if (Number.isFinite(n1)) drawLevel(ctx, padL, plotW, Y(n1), c.blue, "TP1 " + fmtP(n1, dp), c);
-      if (Number.isFinite(n2)) drawLevel(ctx, padL, plotW, Y(n2), c.blue, "TP2 " + fmtP(n2, dp), c);
-      drawLevel(ctx, padL, plotW, y3, c.blue, "TP3 " + fmtP(n3, dp), c);
-      drawLevel(ctx, padL, plotW, yE, c.gold, "ENTRY " + fmtP(nE, dp), c);
-      drawLevel(ctx, padL, plotW, yS, c.red, "SL " + fmtP(nS, dp), c);
+      var plotR = padL + plotW;
+      var lvl = function (price, col, label) {
+        if (!Number.isFinite(price)) return;
+        var y = Y(price);
+        ctx.font = "700 8.5px Outfit, sans-serif"; ctx.textBaseline = "middle";
+        var pw = ctx.measureText(label).width + 12, ph = 16, rr = 4;
+        var pillR = W - 3, pillL = pillR - pw;
+        var lineR = Math.max(padL, pillL - 2);
+        ctx.strokeStyle = hexA(col, .5); ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(lineR, y); ctx.stroke(); ctx.setLineDash([]);
+        var cy = Math.max(padT + ph / 2, Math.min(padT + plotH - ph / 2, y));
+        ctx.fillStyle = col; roundRect(ctx, pillL, cy - ph / 2, pw, ph, rr); ctx.fill();
+        ctx.fillStyle = lum(col) > 150 ? "#06101f" : "#ffffff"; ctx.textAlign = "left";
+        ctx.fillText(label, pillL + 6, cy);
+      };
+      lvl(n1, c.blue, "TP1 " + fmtP(n1, dp));
+      lvl(n2, c.blue, "TP2 " + fmtP(n2, dp));
+      lvl(n3, c.blue, "TP3 " + fmtP(n3, dp));
+      lvl(nE, c.gold, "ENTRY " + fmtP(nE, dp));
+      lvl(nS, c.red, "SL " + fmtP(nS, dp));
     }
 
     // the price series
@@ -395,9 +407,9 @@
 
     // live price marker at the right edge
     var lastP = (D.live != null) ? D.live : (line.length ? line[line.length - 1].price : (candles.length ? candles[candles.length - 1].c : null));
-    if (lastP != null) {
+    if (lastP != null && !hasLevels) {
       var yL = Y(lastP);
-      var markCol = hasLevels ? c.gold : lineCol;
+      var markCol = lineCol;
       ctx.strokeStyle = hexA(markCol, .5); ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(padL, yL); ctx.lineTo(padL + plotW, yL); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle = markCol; ctx.beginPath(); ctx.arc(padL + plotW, yL, 3.4, 0, Math.PI * 2); ctx.fill();
@@ -434,6 +446,7 @@
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
   function hhmm(ms) { var d = new Date(Number(ms) || 0); var h = d.getHours(), m = d.getMinutes(); return (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m; }
+  function lum(hex) { hex = String(hex || ""); if (hex.charAt(0) !== "#") return 0; var h = hex.slice(1); if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2); var n = parseInt(h, 16); return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); }
 
   /* ── HTML builders ──────────────────────────────────────────────────────── */
   function headerHTML() {

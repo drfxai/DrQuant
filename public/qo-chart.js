@@ -167,10 +167,10 @@
       var tp1 = (lv.tp1 != null) ? lv.tp1 : lv.target;
       var defs = [
         { price: lv.entry, color: c.entry || "#ffcf5a", title: "ENTRY", w: 1 },
-        { price: tp1,      color: "#5aa9ff", title: tpTitle("TP1", Number(tp1)), w: 1 },
-        { price: lv.tp2,   color: "#1c84ff", title: tpTitle("TP2", Number(lv.tp2)), w: 1 },
-        { price: lv.tp3,   color: "#0a6edb", title: tpTitle("TP3", Number(lv.tp3)), w: 1 },
-        { price: lv.stop,  color: c.stop || "#f43f5e", title: slTitle(Number(lv.stop)), w: 1 },
+        { price: tp1,      color: "#1c84ff", title: "TP1", w: 1 },
+        { price: lv.tp2,   color: "#1c84ff", title: "TP2", w: 1 },
+        { price: lv.tp3,   color: "#1c84ff", title: "TP3", w: 1 },
+        { price: lv.stop,  color: c.stop || "#f43f5e", title: "SL", w: 1 },
       ];
       for (var i = 0; i < defs.length; i++) {
         var d = defs[i]; if (d.price == null || !isFinite(Number(d.price))) continue;
