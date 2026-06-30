@@ -84,6 +84,7 @@
     openList: [],          // ALL of the user's open signal positions (multi-open)
     histItems: null,       // loaded history items (null = not yet loaded)
     listTimer: null,       // poller that refreshes openList while on the list screen
+    fxTimer: null,         // FX/metals chart refresh poll (server /chart, 30s safe cadence)
     overlayOpen: false, busy: false,
     tpHit: {},             // fired TP-cross celebrations (per signal position id)
   };
@@ -280,12 +281,10 @@
     var dirCol = up ? c.green : c.red;
     var hasTL = p.timeLimitSec != null && p.expiresAt;
     var cryptoReal = window.dqQORealPrice && window.dqQORealPrice.isReal(p.symbol);
-    var chartBlock = cryptoReal
-      ? '<div class="qs-chartwrap"><div class="qs-cmodes">' +
-          '<button class="qs-cmode' + (SG.chartMode === "candle" ? " on" : "") + '" data-cmode="candle" type="button">Candles</button>' +
-          '<button class="qs-cmode' + (SG.chartMode === "line" ? " on" : "") + '" data-cmode="line" type="button">Line</button>' +
-        '</div><div class="qs-chart" id="qs-chart"></div></div>'
-      : '<div class="qs-card" style="text-align:center"><div style="font-size:11px;color:' + c.t3 + ';line-height:1.5">' + ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 16) + '<br>Live chart is available for crypto symbols.<br>This signal settles on the real God Mode trade.</div></div>';
+    var chartBlock = '<div class="qs-chartwrap"><div class="qs-cmodes">' +
+        '<button class="qs-cmode' + (SG.chartMode === "candle" ? " on" : "") + '" data-cmode="candle" type="button">Candles</button>' +
+        '<button class="qs-cmode' + (SG.chartMode === "line" ? " on" : "") + '" data-cmode="line" type="button">Line</button>' +
+      '</div><div class="qs-chart" id="qs-chart"></div></div>';
     return '<div class="qs-row" style="margin-bottom:12px">' +
         '<div style="display:flex;align-items:center;gap:9px">' +
           '<span style="width:9px;height:9px;border-radius:50%;background:' + dirCol + ';box-shadow:0 0 8px ' + hexA(dirCol, .7) + ';animation:qsPulse 1.4s infinite"></span>' +
@@ -300,11 +299,11 @@
         '<div class="qs-lvc"><div class="k" style="color:' + c.green + '">Target</div><div class="v" style="color:' + c.green + '">' + fmtP(p.target) + '</div></div>' +
         '<div class="qs-lvc"><div class="k" style="color:' + c.red + '">Stop</div><div class="v" style="color:' + c.red + '">' + fmtP(p.stop) + '</div></div>' +
       '</div>' +
-      (cryptoReal && p.status === "open"
+      (p.status === "open"
         ? '<div class="qs-card">' +
             '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">' +
               '<span class="qs-lab" style="margin:0">Live price</span>' +
-              '<span id="qs-live" style="font-size:18px;font-weight:800;color:' + c.t1 + ';font-variant-numeric:tabular-nums">\u2014</span>' +
+              '<span id="qs-live" style="font-size:18px;font-weight:800;color:' + c.t1 + ';font-variant-numeric:tabular-nums">' + ((p.signal && p.signal.lastPrice != null) ? fmtP(p.signal.lastPrice) : "\u2014") + '</span>' +
             '</div>' +
             '<div style="height:7px;border-radius:999px;background:' + c.panel3 + ';overflow:hidden"><div id="qs-prog" style="height:100%;width:0%;background:' + c.blue + ';transition:width .3s ease,background .3s ease"></div></div>' +
             '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-weight:700">' +
@@ -598,7 +597,13 @@
   function setupChart() {
     var p = SG.pos; if (!p) return;
     var el = document.getElementById("qs-chart"); if (!el) return;
-    if (!(window.dqQORealPrice && window.dqQORealPrice.isReal(p.symbol))) return;
+    if (window.dqQORealPrice && window.dqQORealPrice.isReal(p.symbol)) setupCryptoChart();
+    else setupFxChart();
+  }
+  /* crypto: browser-direct Binance feed (live 1m subscribe) */
+  function setupCryptoChart() {
+    var p = SG.pos; if (!p) return;
+    var el = document.getElementById("qs-chart"); if (!el) return;
     if (!window.dqQOChart) return;
     SG.chartTried = true;
     var c = TH();
@@ -649,7 +654,62 @@
       }).catch(function () {});
     }).catch(function () { /* lib blocked → levels panel already shows */ });
   }
+  /* FX / metals: server-proxied candles from /quantoption/chart (the TwelveData
+     key stays server-side). Polled at a 30s cadence to respect the free tier;
+     the server also caches, so multiple viewers share one upstream call. */
+  function setupFxChart() {
+    var p = SG.pos; if (!p) return;
+    var el = document.getElementById("qs-chart"); if (!el) return;
+    if (!window.dqQOChart) { fxChartFallback("Chart library unavailable"); return; }
+    SG.chartTried = true;
+    var c = TH();
+    var colors = { text: c.t2, grid: "rgba(120,150,200,.07)", border: c.bd, cross: "rgba(140,165,210,.42)", crossBg: c.panel2, up: c.green, down: c.red, entry: c.gold, target: c.green, stop: c.red };
+    window.dqQOChart.ensureLib().then(function () {
+      if (SG.screen !== "position" || !SG.pos || SG.pos.id !== p.id || !document.getElementById("qs-chart")) return;
+      var ch = window.dqQOChart.create(el, { colors: colors, mode: SG.chartMode || "candle" });
+      if (!ch) { fxChartFallback("Chart library unavailable"); return; }
+      SG.chart = ch;
+      var nsym = String(p.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      var sig = (SG.sel && String(SG.sel.symbol || "").toUpperCase().replace(/[^A-Z0-9]/g, "") === nsym) ? SG.sel : null;
+      ch.setLevels({ entry: p.entry, target: p.target, stop: p.stop, tp1: (sig ? sig.tp1 : p.target), tp2: (sig ? sig.tp2 : null), tp3: (sig ? sig.tp3 : null), symbol: p.symbol, direction: p.dir });
+      var paintMarkers = function (data) {
+        try {
+          var up = p.dir === "long";
+          var t0 = data[0].time, t1 = data[data.length - 1].time, mk = [];
+          if (p.openedAt) { var ot = Math.floor(new Date(p.openedAt).getTime() / 60000) * 60; if (ot >= t0 && ot <= t1) mk.push({ time: ot, position: up ? "belowBar" : "aboveBar", color: up ? "#22c55e" : "#f43f5e", shape: up ? "arrowUp" : "arrowDown", text: up ? "BUY" : "SELL" }); }
+          if (p.status !== "open" && p.settledAt) { var st = Math.floor(new Date(p.settledAt).getTime() / 60000) * 60; if (st >= t0 && st <= t1) mk.push({ time: st, position: up ? "aboveBar" : "belowBar", color: (p.outcome === "win") ? "#22c55e" : "#f43f5e", shape: up ? "arrowDown" : "arrowUp", text: "EXIT" }); }
+          if (mk.length && SG.chart) SG.chart.setMarkers(mk);
+        } catch (e) {}
+      };
+      var pull = function (first) {
+        API("/quantoption/chart?symbol=" + encodeURIComponent(p.symbol) + "&limit=200").then(function (r) {
+          if (!SG.chart || SG.screen !== "position" || !SG.pos || SG.pos.id !== p.id) return;
+          var data = (r && Array.isArray(r.candles)) ? r.candles : [];
+          if (!data.length) { if (first) fxChartFallback("No live chart data for this symbol yet"); return; }
+          SG.chart.setData(data); if (first) SG.chart.fit();
+          paintMarkers(data);
+          updateLive(Number(data[data.length - 1].close));
+        }).catch(function (e) {
+          if (!first) return;
+          var blob = (((e && e.error && (e.error.code || e.error.message)) || (e && e.message) || "")) + "";
+          fxChartFallback(/not configured|api[_ ]?key|feed_unconfigured/i.test(blob) ? "FX live chart isn\u2019t set up on the server"
+            : /run out|credit|rate|limit|429|too many/i.test(blob) ? "FX feed hit its rate limit \u2014 try again shortly"
+            : "Live chart unavailable for this symbol");
+        });
+      };
+      pull(true);
+      if (p.status === "open") SG.fxTimer = setInterval(function () { pull(false); }, 30000);
+    }).catch(function () { fxChartFallback("Chart library unavailable"); });
+  }
+  function fxChartFallback(msg) {
+    var el = document.getElementById("qs-chart"); if (!el) return;
+    var c = TH();
+    var wrap = (el.closest ? el.closest(".qs-chartwrap") : null) || el;
+    var html = '<div class="qs-card" style="text-align:center;margin-bottom:12px"><div style="font-size:11px;color:' + c.t3 + ';line-height:1.5">' + ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 16) + '<br>' + ESC(msg || "Live chart unavailable") + '.<br>This signal still settles on the real God Mode trade.</div></div>';
+    if (wrap.parentNode) wrap.outerHTML = html;
+  }
   function teardownChart() {
+    if (SG.fxTimer) { clearInterval(SG.fxTimer); SG.fxTimer = null; }
     if (SG.realStop) { try { SG.realStop(); } catch (e) {} SG.realStop = null; }
     if (SG.chart) { try { SG.chart.destroy(); } catch (e) {} SG.chart = null; }
   }
