@@ -366,6 +366,38 @@ async function getOpenSignalPosition(userId) {
   return signalPositionView(p, signal || null);
 }
 
+// All of the user's currently OPEN signal positions (multiple allowed - one per
+// signal). Lazily settles any whose bound signal already resolved or whose time
+// limit lapsed (those drop out of the list), then returns the live remainder,
+// newest first. Mirrors getOpenSignalPosition but returns every open position.
+async function listOpenSignalPositions(userId) {
+  await init();
+  const { rows } = await pool.query(
+    `SELECT * FROM quantoption_signal_positions WHERE user_id=$1 AND status='open' ORDER BY id DESC`,
+    [String(userId)]);
+  if (!rows.length) return { positions: [] };
+  const sigCache = {};
+  async function sigFor(extId) {
+    if (extId in sigCache) return sigCache[extId];
+    const { rows: s } = await pool.query(`SELECT * FROM quantoption_signals WHERE ext_id=$1`, [extId]);
+    return (sigCache[extId] = s[0] || null);
+  }
+  const out = [];
+  for (const p of rows) {
+    const signal = await sigFor(p.signal_ext_id);
+    if (signal && (signal.status === "won" || signal.status === "lost")) {
+      await settleSignal(p.signal_ext_id, signal.status === "won" ? "win" : "lose", signal.last_price);
+      continue;   // just settled -> no longer open
+    }
+    if (p.expires_at && new Date(p.expires_at).getTime() <= Date.now()) {
+      await refundExpired(p.id);
+      continue;   // time limit lapsed -> refunded (draw), drops out of open list
+    }
+    out.push(signalPositionView(p, signal));
+  }
+  return { positions: out };
+}
+
 // time-limit expiry with no real outcome → refund the stake (draw)
 async function refundExpired(positionId) {
   return withTransaction(async (cx) => {
@@ -502,6 +534,6 @@ async function cashOutSignal(userId, id) {
 
 module.exports = {
   init, ingestSignalEvent, openSignalPosition, getSignalPosition, getOpenSignalPosition, cashOutSignal, sweepExpired,
-  listLiveSignals, getSignalByExt, history, webhookConfigured,
+  listLiveSignals, getSignalByExt, history, webhookConfigured, listOpenSignalPositions,
   MIN_STAKE, MAX_STAKE, MIN_TIME_LIMIT, MAX_TIME_LIMIT,
 };

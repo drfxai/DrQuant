@@ -80,7 +80,10 @@
     pollTimer: null,
     chart: null, realStop: null, chartTried: false,
     chartMode: "candle",   // user-selectable chart style: "candle" | "line" (both real prices)
-    openPos: null,         // the user's current open signal position (for resume after exit)
+    openPos: null,         // most-recent open position (legacy resume; superseded by openList)
+    openList: [],          // ALL of the user's open signal positions (multi-open)
+    histItems: null,       // loaded history items (null = not yet loaded)
+    listTimer: null,       // poller that refreshes openList while on the list screen
     overlayOpen: false, busy: false,
     tpHit: {},             // fired TP-cross celebrations (per signal position id)
   };
@@ -128,6 +131,9 @@
       '.qs-cmode:hover{border-color:' + hexA(c.blue, .35) + ';color:' + c.t1 + '}' +
       '.qs-cmode.on{border-color:' + hexA(c.blue, .55) + ';background:' + hexA(c.blue, .12) + ';color:' + c.blue + '}' +
       '.qs-cmode:active{transform:scale(.96)}' +
+      '.qs-seg{display:flex;gap:6px;background:' + c.panel3 + ';border:1px solid ' + c.bd + ';border-radius:13px;padding:4px;margin-bottom:13px}' +
+      '.qs-segb{flex:1;padding:9px 0;border:none;border-radius:9px;background:transparent;color:' + c.t3 + ';font-weight:800;font-size:13px;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}' +
+      '.qs-segb.on{background:' + c.panel + ';color:' + c.t1 + ';box-shadow:0 1px 5px rgba(0,0,0,.28)}' +
       '.qs-toggle{width:44px;height:26px;border-radius:999px;border:none;cursor:pointer;position:relative;transition:background .18s;flex-shrink:0}' +
       '.qs-toggle .dot{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s}' +
       '.qs-empty{text-align:center;padding:40px 16px;color:' + c.t4 + ';font-size:12.5px}' +
@@ -197,9 +203,32 @@
         '<span style="font-size:11px;font-weight:800;color:' + c.blue + ';flex-shrink:0">Resume ' + ICO('<path d="M5 12h14M12 5l7 7-7 7"/>', 13) + '</span>' +
       '</div>';
     }
-    return resume + adminBtn +
-      '<div class="qs-lab" style="margin:2px 2px 9px">Live signals</div>' +
-      list;
+    var seg = '<div class="qs-seg">' +
+      '<button class="qs-segb on" data-seg="list" type="button">Signals</button>' +
+      '<button class="qs-segb" data-seg="history" type="button">History</button>' +
+    '</div>';
+    var ops = (SG.openList || []).filter(function (p) { return p.status === "open"; });
+    var openSection;
+    if (ops.length) {
+      openSection = '<div class="qs-lab" style="margin:2px 2px 9px">Open positions \u00b7 ' + ops.length + '</div>' +
+        ops.map(function (p) {
+          var up = p.dir === "long"; var dc = up ? c.green : c.red;
+          var hasTL = p.timeLimitSec != null && p.expiresAt;
+          var cd = hasTL ? ' \u00b7 <span id="qs-opc-' + p.id + '">' + mmss(new Date(p.expiresAt).getTime() - Date.now()) + '</span>' : '';
+          return '<div class="qs-card" style="display:flex;align-items:center;gap:10px;border-color:' + hexA(dc, .4) + ';background:' + hexA(dc, .07) + '">' +
+              '<div class="qs-opmain" data-open="' + p.id + '" style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;cursor:pointer">' +
+                '<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:' + dc + ';box-shadow:0 0 8px ' + hexA(dc, .7) + ';animation:qsPulse 1.4s infinite"></span>' +
+                '<div style="min-width:0"><div style="font-size:13px;font-weight:800;color:' + c.t1 + '">' + ESC(p.symbol) + ' \u00b7 ' + (up ? "Long" : "Short") + '</div>' +
+                '<div style="font-size:10.5px;color:' + c.t3 + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Staked ' + fmtQ(p.stake) + ' QNTM' + cd + '</div></div>' +
+              '</div>' +
+              '<button class="qs-opclose" data-close="' + p.id + '" type="button" style="flex-shrink:0;padding:8px 13px;border-radius:9px;border:1px solid ' + hexA(c.red, .4) + ';background:' + hexA(c.red, .12) + ';color:' + c.red + ';font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">Close</button>' +
+            '</div>';
+        }).join("") +
+        '<div class="qs-lab" style="margin:14px 2px 9px">Live signals</div>';
+    } else {
+      openSection = '<div class="qs-lab" style="margin:2px 2px 9px">Live signals</div>';
+    }
+    return seg + adminBtn + openSection + list;
   }
 
   /* ── HTML: confirm ──────────────────────────────────────────────────────── */
@@ -271,17 +300,74 @@
         '<div class="qs-lvc"><div class="k" style="color:' + c.green + '">Target</div><div class="v" style="color:' + c.green + '">' + fmtP(p.target) + '</div></div>' +
         '<div class="qs-lvc"><div class="k" style="color:' + c.red + '">Stop</div><div class="v" style="color:' + c.red + '">' + fmtP(p.stop) + '</div></div>' +
       '</div>' +
+      (cryptoReal && p.status === "open"
+        ? '<div class="qs-card">' +
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">' +
+              '<span class="qs-lab" style="margin:0">Live price</span>' +
+              '<span id="qs-live" style="font-size:18px;font-weight:800;color:' + c.t1 + ';font-variant-numeric:tabular-nums">\u2014</span>' +
+            '</div>' +
+            '<div style="height:7px;border-radius:999px;background:' + c.panel3 + ';overflow:hidden"><div id="qs-prog" style="height:100%;width:0%;background:' + c.blue + ';transition:width .3s ease,background .3s ease"></div></div>' +
+            '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-weight:700">' +
+              '<span style="color:' + c.red + '">Stop</span>' +
+              '<span id="qs-proglab" style="color:' + c.t3 + '">\u2014</span>' +
+              '<span style="color:' + c.green + '">Target</span>' +
+            '</div>' +
+          '</div>'
+        : '') +
       '<div class="qs-card qs-row">' +
         '<div><div class="qs-lab" style="margin:0">Staked</div><div style="font-size:16px;font-weight:800;color:' + c.t1 + ';margin-top:3px">' + fmtQ(p.stake) + ' QNTM</div></div>' +
         '<div style="text-align:right"><div class="qs-lab" style="margin:0">Win pays</div><div style="font-size:16px;font-weight:800;color:' + c.green + ';margin-top:3px">' + fmtQ(p.potentialWin != null ? p.potentialWin : Number(p.stake) * PAYOUT_MULT) + ' QNTM</div></div>' +
       '</div>' +
+      (p.status === "open"
+        ? '<button id="qs-cashout" class="qs-cta" type="button" style="margin-bottom:9px;background:linear-gradient(180deg,' + c.gold + ',' + (c.goldD || c.gold) + ')">' +
+            ICO('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>', 18) + 'Exit now \u00b7 cash out' +
+          '</button>'
+        : '') +
       '<button id="qs-back2" class="qs-cta" type="button" style="background:' + c.panel2 + ';color:' + c.t2 + ';border:1px solid ' + c.bd + '">Back to signals</button>';
   }
 
   /* ── stage render ───────────────────────────────────────────────────────── */
+  function historyHTML() {
+    var c = TH();
+    var seg = '<div class="qs-seg">' +
+      '<button class="qs-segb" data-seg="list" type="button">Signals</button>' +
+      '<button class="qs-segb on" data-seg="history" type="button">History</button>' +
+    '</div>';
+    if (SG.histItems == null) return seg + '<div class="qs-empty">Loading\u2026</div>';
+    var items = SG.histItems;
+    var settled = items.filter(function (p) { return p.status !== "open"; });
+    var wins = 0, net = 0;
+    settled.forEach(function (p) {
+      if (p.status === "won") { wins++; net += Number(p.payout) - Number(p.stake); }
+      else if (p.status !== "draw") { net -= Number(p.stake); }
+    });
+    var winRate = settled.length ? Math.round(wins / settled.length * 100) : null;
+    var head = '<div class="qs-lv" style="margin-bottom:12px">' +
+      '<div class="qs-lvc"><div class="k" style="color:' + c.t3 + '">Win rate</div><div class="v">' + (winRate == null ? "\u2014" : winRate + "%") + '</div></div>' +
+      '<div class="qs-lvc"><div class="k" style="color:' + c.t3 + '">Settled</div><div class="v">' + settled.length + '</div></div>' +
+      '<div class="qs-lvc"><div class="k" style="color:' + c.t3 + '">Net P/L</div><div class="v" style="color:' + (net >= 0 ? c.green : c.red) + '">' + fmtSigned(net) + '</div></div>' +
+    '</div>';
+    if (!items.length) return seg + head + '<div class="qs-empty">No signal positions yet.</div>';
+    var rows = items.map(function (p) {
+      var win = p.status === "won", draw = p.status === "draw", open = p.status === "open";
+      var col = win ? c.green : draw ? c.gold : open ? c.blue : c.red;
+      var tag = win ? "WIN" : draw ? "DRAW" : open ? "LIVE" : "LOSS";
+      var prof = win ? "+" + fmtQ(Number(p.payout) - Number(p.stake)) : draw ? "0" : open ? "\u2014" : "-" + fmtQ(p.stake);
+      var up = p.dir === "long";
+      return '<div style="display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:10px;background:' + c.panel + ';border:1px solid ' + c.bd + ';margin-bottom:7px">' +
+        '<span style="flex-shrink:0;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;background:' + hexA(col, .14) + ';color:' + col + '">' + tag + '</span>' +
+        '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:800;color:' + c.t1 + '">' + ESC(p.symbol) + ' \u00b7 ' + (up ? "Long" : "Short") + '</div>' +
+        '<div style="font-size:10px;color:' + c.t4 + '">' + fmtQ(p.stake) + ' QNTM' + (p.cashedOut ? ' \u00b7 cashed out' : '') + '</div></div>' +
+        '<div style="font-size:13px;font-weight:800;color:' + col + ';font-variant-numeric:tabular-nums">' + prof + '</div>' +
+      '</div>';
+    }).join("");
+    return seg + head + rows;
+  }
+
   function stageHTML() {
     if (SG.screen === "confirm") return confirmHTML();
     if (SG.screen === "position") return positionHTML();
+    if (SG.screen === "history") return historyHTML();
     return listHTML();
   }
   function rerender() {
@@ -306,6 +392,19 @@
           if (sig) { SG.sel = sig; SG.screen = "confirm"; rerender(); }
         };
       });
+      st.querySelectorAll(".qs-segb").forEach(function (b) {
+        b.onclick = function () { if (b.getAttribute("data-seg") === "history") goHistory(); };
+      });
+      st.querySelectorAll(".qs-opmain").forEach(function (el) {
+        el.onclick = function () { openDetailById(el.getAttribute("data-open")); };
+      });
+      st.querySelectorAll(".qs-opclose").forEach(function (b) {
+        b.onclick = function (ev) { ev.stopPropagation(); doCashout(b.getAttribute("data-close"), false); };
+      });
+    } else if (SG.screen === "history") {
+      st.querySelectorAll(".qs-segb").forEach(function (b) {
+        b.onclick = function () { if (b.getAttribute("data-seg") === "list") goList(); };
+      });
     } else if (SG.screen === "confirm") {
       var back = T("#qs-back"); if (back) back.onclick = function () { SG.screen = "list"; SG.sel = null; rerender(); };
       var stake = T("#qs-stake");
@@ -319,7 +418,8 @@
       });
       var open = T("#qs-open"); if (open) open.onclick = doOpen;
     } else if (SG.screen === "position") {
-      var b2 = T("#qs-back2"); if (b2) b2.onclick = function () { stopPoll(); SG.pos = null; SG.screen = "list"; refresh().then(rerender).catch(rerender); };
+      var b2 = T("#qs-back2"); if (b2) b2.onclick = function () { goList(); };
+      var co = T("#qs-cashout"); if (co) co.onclick = function () { if (SG.pos) doCashout(SG.pos.id, true); };
       st.querySelectorAll(".qs-cmode").forEach(function (b) {
         b.onclick = function () {
           var m = b.getAttribute("data-cmode"); if (m !== "candle" && m !== "line") return;
@@ -352,6 +452,7 @@
         SG.busy = false;
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); return; }
         SG.pos = p; SG.openPos = p; SG.screen = "position";
+        loadOpenList();
         if (navigator.vibrate) { try { navigator.vibrate(12); } catch (e) {} }
         if (window.dqQOFx && window.dqQOFx.opened) { try { window.dqQOFx.opened((p && p.symbol) || (SG.sel && SG.sel.symbol), (SG.sel && SG.sel.direction) || (p && (p.direction || p.dir))); } catch (e) {} }
         rerender(); startPoll();
@@ -380,6 +481,104 @@
     updateCountdown();
   }
   function stopPoll() { if (SG.pollTimer) { clearInterval(SG.pollTimer); SG.pollTimer = null; } }
+
+  /* \u2500\u2500 multi-open: list of all open positions \u2500\u2500 */
+  function loadOpenList() {
+    return API("/quantoption/signal-positions").then(function (r) {
+      SG.openList = (r && Array.isArray(r.positions)) ? r.positions : [];
+      return SG.openList;
+    }).catch(function () { return SG.openList; });
+  }
+  function refreshOpenRows() {
+    (SG.openList || []).forEach(function (p) {
+      if (!p.expiresAt) return;
+      var el = document.getElementById("qs-opc-" + p.id);
+      if (el) el.textContent = mmss(new Date(p.expiresAt).getTime() - Date.now());
+    });
+  }
+  function startListPoll() {
+    stopListPoll();
+    SG.listTimer = setInterval(function () {
+      if (SG.screen !== "list") { stopListPoll(); return; }
+      var prev = {}; (SG.openList || []).forEach(function (p) { prev[p.id] = 1; });
+      API("/quantoption/signal-positions").then(function (r) {
+        if (SG.screen !== "list") return;
+        var list = (r && Array.isArray(r.positions)) ? r.positions : [];
+        var liveIds = {}; list.forEach(function (p) { liveIds[p.id] = 1; });
+        var settled = Object.keys(prev).filter(function (id) { return !liveIds[id]; });
+        var countChanged = list.length !== (SG.openList || []).length;
+        SG.openList = list;
+        if (settled.length) {
+          SG.histItems = null;
+          toast("A signal settled \u00b7 see History", "");
+          rerender();
+        } else if (countChanged) {
+          rerender();
+        } else {
+          refreshOpenRows();
+        }
+      }).catch(function () {});
+    }, 3000);
+  }
+  function stopListPoll() { if (SG.listTimer) { clearInterval(SG.listTimer); SG.listTimer = null; } }
+
+  /* \u2500\u2500 live P/L mirror (crypto detail view), like the Trade tab \u2500\u2500 */
+  function updateLive(live) {
+    var p = SG.pos; if (!p || !isFinite(live)) return;
+    var c = TH();
+    var el = document.getElementById("qs-live"); if (el) el.textContent = fmtP(live);
+    var entry = Number(p.entry), target = Number(p.target);
+    var den = target - entry; var prog = den ? (live - entry) / den : 0;
+    var bar = document.getElementById("qs-prog");
+    if (bar) { bar.style.width = (Math.max(0, Math.min(1, prog)) * 100).toFixed(1) + "%"; bar.style.background = prog >= 0 ? c.blue : c.red; }
+    var lab = document.getElementById("qs-proglab");
+    if (lab) lab.textContent = prog >= 1 ? "at target" : prog <= 0 ? "toward stop" : Math.round(prog * 100) + "% to target";
+  }
+
+  /* \u2500\u2500 navigation helpers \u2500\u2500 */
+  function goList() {
+    stopPoll(); teardownChart();
+    SG.screen = "list"; SG.sel = null; SG.pos = null;
+    loadOpenList().then(function () { if (SG.screen === "list") { rerender(); startListPoll(); } })
+                  .catch(function () { if (SG.screen === "list") rerender(); });
+  }
+  function goHistory() {
+    stopListPoll(); stopPoll(); teardownChart();
+    SG.screen = "history"; SG.pos = null; SG.sel = null;
+    rerender();
+    API("/quantoption/signal-history?limit=50").then(function (r) {
+      SG.histItems = (r && Array.isArray(r.items)) ? r.items : [];
+      if (SG.screen === "history") rerender();
+    }).catch(function () { if (SG.histItems == null) SG.histItems = []; if (SG.screen === "history") rerender(); });
+  }
+  function openDetailById(id) {
+    var p = (SG.openList || []).filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!p) { toast("Position not found", "error"); return; }
+    stopListPoll();
+    SG.pos = p; SG.screen = "position"; rerender(); startPoll();
+  }
+
+  /* \u2500\u2500 close (cash out) before settle \u2500\u2500 */
+  function doCashout(id, fromDetail) {
+    if (SG.busy) return; SG.busy = true;
+    if (fromDetail) { var cb = document.getElementById("qs-cashout"); if (cb) { cb.disabled = true; cb.style.opacity = ".6"; } }
+    API("/quantoption/cashout-signal/" + id, { method: "POST" }).then(function (r) {
+      SG.busy = false;
+      var p = r && r.position; if (!p) { toast("Could not close position", "error"); return; }
+      stopPoll(); teardownChart();
+      SG.pos = null; SG.histItems = null;
+      if (navigator.vibrate) { try { navigator.vibrate(14); } catch (e) {} }
+      showResult(p);
+      loadOpenList().then(function () {
+        SG.screen = "list"; rerender(); startListPoll();
+        API("/quantoption/me").then(function (r2) { if (r2 && r2.balance != null) SG.balance = r2.balance; }).catch(function () {});
+      });
+    }).catch(function (e) {
+      SG.busy = false;
+      var cb2 = document.getElementById("qs-cashout"); if (cb2) { cb2.disabled = false; cb2.style.opacity = "1"; }
+      toast((e && e.error && (e.error.message || e.error)) || (e && e.message) || "Could not close position", "error");
+    });
+  }
   function updateCountdown() {
     var p = SG.pos; var el = document.getElementById("qs-count");
     if (!el || !p || !p.expiresAt) return;
@@ -432,6 +631,7 @@
         }
         SG.realStop = window.dqQORealPrice.subscribe(p.symbol, "1m", function (candle) {
           if (SG.chart) SG.chart.update(candle);
+          if (candle) updateLive(Number(candle.close));
           if (window.dqQOFx && candle && SG.pos && SG.pos.status === "open") {
             var live = Number(candle.close);
             if (isFinite(live)) {
@@ -525,7 +725,7 @@
         '</div>' +
       '</div>';
     document.body.appendChild(ov);
-    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); SG.pos = null; SG.screen = "list"; refresh().then(rerender).catch(rerender); }
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); SG.pos = null; goList(); }
     ov.addEventListener("click", function (e) { if (e.target === ov) close(); });
     var b = ov.querySelector("#qs-result-x"); if (b) b.onclick = close;
   }
@@ -602,7 +802,7 @@
     closeOverlay();
   }
   function closeOverlay() {
-    stopPoll(); teardownChart();
+    stopPoll(); stopListPoll(); teardownChart();
     var o = document.getElementById(OV_ID); if (o && o.parentNode) o.parentNode.removeChild(o);
     SG.overlayOpen = false;
     document.removeEventListener("keydown", onKey);
@@ -631,18 +831,14 @@
 
   function open() {
     if (document.getElementById(OV_ID)) { return; }
-    SG.screen = "list"; SG.sel = null; SG.pos = null;
+    SG.screen = "list"; SG.sel = null; SG.pos = null; SG.histItems = null;
     buildOverlay();
     loadList().then(function () {
-      // Resume an in-progress trade if one exists (like Easy Trade), so an open
-      // position can be viewed/managed again after leaving and reopening.
-      return API("/quantoption/signal-open").then(function (r) {
-        var p = r && r.position;
-        SG.openPos = (p && p.status === "open") ? p : null;
-        if (SG.openPos && SG.screen === "list" && !SG.sel) {
-          SG.pos = SG.openPos; SG.screen = "position"; rerender(); startPoll();
-        } else { rerender(); }
-      }).catch(function () { rerender(); });
+      // Multi-open: load ALL open positions so they appear in the manageable list.
+      return loadOpenList().then(function () {
+        if (SG.screen === "list") rerender();
+        startListPoll();
+      });
     }).catch(function () {
       var st = document.getElementById("qs-stage"); if (st) st.innerHTML = '<div class="qs-empty">Could not load signals.</div>';
     });

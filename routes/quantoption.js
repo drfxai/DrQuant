@@ -156,6 +156,12 @@ router.get("/signal-open", auth, async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
+// all OPEN signal positions for the user (multiple allowed, one per signal)
+router.get("/signal-positions", auth, async (req, res) => {
+  try { res.json(await quantoptionSignals.listOpenSignalPositions(req.user.id)); }
+  catch (e) { fail(res, e); }
+});
+
 router.get("/signal-position/:id", auth, async (req, res) => {
   try {
     const position = await quantoptionSignals.getSignalPosition(req.user.id, Number(req.params.id));
