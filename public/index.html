@@ -1530,6 +1530,7 @@ function openMarket(){
   document.addEventListener('play',mkVideoGuard,true);
   mkRender();
 }
+var _mkAutoIO=null;function mkSetupAutoplay(){try{if(_mkAutoIO){_mkAutoIO.disconnect();_mkAutoIO=null;}}catch(_){}var root=document.getElementById('mk-body');if(!root||!('IntersectionObserver'in window))return;var vids=[].slice.call(root.querySelectorAll('video[data-mk-auto]'));if(!vids.length)return;var ratio=new WeakMap();var apply=function(){var best=null,bestR=0.55;vids.forEach(function(v){var r=ratio.get(v)||0;if(r>bestR){bestR=r;best=v;}});vids.forEach(function(v){if(v===best){try{v.muted=true;var p=v.play();if(p&&p.catch)p.catch(function(){});}catch(_){}}else{try{if(!v.paused)v.pause();}catch(_){}}});};_mkAutoIO=new IntersectionObserver(function(entries){entries.forEach(function(en){ratio.set(en.target,en.isIntersecting?en.intersectionRatio:0);});apply();},{root:root,threshold:[0,0.25,0.5,0.6,0.75,0.9,1]});vids.forEach(function(v){try{v.muted=true;ratio.set(v,0);_mkAutoIO.observe(v);}catch(_){}});}
 function mkVideoGuard(e){const v=e.target;if(!v||v.tagName!=='VIDEO'||!v.closest)return;if(!v.closest('#mk-overlay,.dq-modal-ov'))return;document.querySelectorAll('#mk-overlay video,.dq-modal-ov video').forEach(o=>{if(o!==v&&!o.paused){try{o.pause();}catch(_){}}});}
 function mkNavBtn(tab,label,path){return `<button class="mk-navbtn" data-mktab="${tab}" style="flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:9px 0 8px;color:${t.t4};-webkit-tap-highlight-color:transparent"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg><span class="mk-navlbl" style="font-size:10px;font-weight:500">${label}</span></button>`;}
 function mkSetTab(tab){MK.tab=tab;MK.handle=null;MK.cur=null;const b=document.getElementById('mk-body');if(b)b.scrollTop=0;mkRender();}
@@ -1583,7 +1584,7 @@ async function mkExplore(){
     const d=await api(`/market/explore?${qs}`);
     const feed=document.getElementById('mk-feed');if(!feed)return;
     if(!d.posts||!d.posts.length){feed.innerHTML=mkEmpty('Nothing here yet','Be the first to share a chart, idea, or product with the community.');return;}
-    feed.innerHTML=d.posts.map(mkPostCard).join('');
+    feed.innerHTML=d.posts.map(mkPostCard).join('');mkSetupAutoplay();
   }catch(e){const feed=document.getElementById('mk-feed');if(feed)feed.innerHTML=mkEmpty("Couldn't load feed",mkErrMsg(e));}
 }
 
@@ -1591,7 +1592,7 @@ function mkPostCard(p){
   const a=p.author||{};
   let media='';
   if(p.media_type==='image'&&p.media_url)media=`<img src="${esc(p.media_url)}" alt="" loading="lazy" style="width:100%;display:block;max-height:440px;object-fit:cover;background:${t.ch}"/>`;
-  else if(p.media_type==='video'&&p.media_url)media=`<video src="${esc(p.media_url)}" ${p.thumb_url?`poster="${esc(p.thumb_url)}"`:''} controls playsinline preload="metadata" style="width:100%;display:block;max-height:440px;background:#000"></video>`;
+  else if(p.media_type==='video'&&p.media_url)media=`<video src="${esc(p.media_url)}" ${p.thumb_url?`poster="${esc(p.thumb_url)}"`:''} data-mk-auto muted loop controls playsinline preload="metadata" style="width:100%;display:block;max-height:440px;background:#000"></video>`;
   const mine=!!(S.user&&a.id===S.user.id);
   const foll=mine?`<button class="mk-editpost" data-pid="${p.id}" style="${mkGhostBtn()};padding:7px 14px;font-size:12.5px;font-weight:700;flex-shrink:0">Edit</button>`:a.is_following?`<button class="mk-foll" data-uid="${a.id}" data-on="1" style="${mkFollOff()}">Following</button>`:`<button class="mk-foll" data-uid="${a.id}" data-on="0" style="${mkFollOn()}">Follow</button>`;
   return `<div class="mk-post" style="border:1px solid ${t.bd};border-radius:16px;background:${t.cd};overflow:hidden;margin-bottom:14px">
@@ -2238,7 +2239,7 @@ window.addEventListener("resize",()=>{
 <script src="/easytrade-leaderboard.js?v=20260630-1"></script>
 <script src="/idcard.js"></script>
 <script src="/crystal3d.js"></script>
-<script src="/profile-ui.js"></script>
+<script src="/profile-ui.js?v=20260701-1"></script>
 <script src="/babypick.js?v=20260630-1"></script>
 <script src="/easytrade-hub.js?v=20260630-2"></script>
 <script src="/quant-option.js"></script>

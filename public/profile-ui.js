@@ -348,11 +348,21 @@
       var md = body.closest(".dq-modal-md");
       var wide = window.innerWidth >= 920;
       if (md) {
-        md.style.width = wide ? "900px" : "560px";
-        md.style.maxWidth = "100%";
+        // full-screen: fill the viewport edge-to-edge (was a centered 560/900px card)
+        md.style.width = "100%";
+        md.style.maxWidth = "none";
+        md.style.borderRadius = "0";
+        md.style.margin = "0";
         md.style.padding = "0";
+        md.style.border = "none";
+        md.style.overflowY = "auto";
+        md.style.setProperty("max-height", "none", "important");  // beat the .dq-modal-md CSS cap
         md.style.background = "radial-gradient(130% 90% at 50% -10%,#0d1838,#080f26 55%,#05091c)";
-        md.style.border = "1px solid rgba(120,160,255,.14)";
+        var _pov = md.parentNode;   // the .dq-modal-ov host: drop the centering pad, stretch full-height
+        if (_pov && _pov.classList && _pov.classList.contains("dq-modal-ov")) {
+          _pov.style.padding = "0";
+          _pov.style.alignItems = "stretch";
+        }
         var hdr = md.firstElementChild;
         if (hdr && hdr.querySelector && hdr.querySelector("#md-cl")) hdr.style.display = "none";
       }
