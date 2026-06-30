@@ -318,7 +318,9 @@
       return;
     }
 
-    var padL = 3, padR = 92, padT = 4, padB = 16;
+    var pos = overlayPos();
+    var hasLevels = !!pos;
+    var padL = 3, padR = hasLevels ? 92 : 66, padT = 4, padB = 16;
     var plotW = W - padL - padR, plotH = H - padT - padB;
 
     // y-range over what is drawn, widened to include levels + the live price
@@ -329,8 +331,6 @@
       for (i = 0; i < line.length; i++) { p = line[i].price; if (p < lo) lo = p; if (p > hi) hi = p; }
     }
     if (D.live != null) { if (D.live < lo) lo = D.live; if (D.live > hi) hi = D.live; }
-    var pos = overlayPos();
-    var hasLevels = !!pos;
     if (hasLevels) {
       var ts = [Number(pos.entry), Number(pos.stop), Number(pos.tp1), Number(pos.tp2), Number(pos.tp3)].filter(Number.isFinite);
       for (i = 0; i < ts.length; i++) { if (ts[i] < lo) lo = ts[i]; if (ts[i] > hi) hi = ts[i]; }
@@ -357,6 +357,8 @@
     if (hasLevels) {
       var lps = [Number(pos.entry), Number(pos.stop), Number(pos.tp1), Number(pos.tp2), Number(pos.tp3)];
       for (i = 0; i < lps.length; i++) { if (Number.isFinite(lps[i])) lvlYs.push(Math.max(padT + 8, Math.min(padT + plotH - 8, Y(lps[i])))); }
+    } else if (D.live != null) {
+      lvlYs.push(Math.max(padT + 8, Math.min(padT + plotH - 8, Y(D.live))));
     }
     for (var g = 0; g <= 4; g++) {
       var yy = padT + (plotH * g) / 4;
@@ -364,7 +366,7 @@
       if (g > 0 && g < 4) {
         var clash = false;
         for (var li = 0; li < lvlYs.length; li++) { if (Math.abs(yy - lvlYs[li]) < 12) { clash = true; break; } }
-        if (!clash) { var pv = lo + (hi - lo) * (1 - g / 4); ctx.fillStyle = c.t3; ctx.textAlign = "left"; ctx.fillText(fmtP(pv, dp), padL + plotW + 7, yy); }
+        if (!clash) { var pv = lo + (hi - lo) * (1 - g / 4); ctx.fillStyle = c.t3; if (hasLevels) { ctx.textAlign = "left"; ctx.fillText(fmtP(pv, dp), padL + plotW + 7, yy); } else { ctx.textAlign = "right"; ctx.fillText(fmtP(pv, dp), W - 5, yy); } }
       }
     }
     ctx.strokeStyle = c.bdSoft; ctx.beginPath(); ctx.moveTo(padL + plotW + 0.5, padT); ctx.lineTo(padL + plotW + 0.5, padT + plotH); ctx.stroke();
@@ -423,9 +425,10 @@
       ctx.beginPath(); ctx.moveTo(padL, yL); ctx.lineTo(padL + plotW, yL); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle = markCol; ctx.beginPath(); ctx.arc(padL + plotW, yL, 3.4, 0, Math.PI * 2); ctx.fill();
       var tag = fmtP(lastP, dp); ctx.font = "700 10px Outfit, sans-serif"; var tw = ctx.measureText(tag).width;
+      var lpw = tw + 10, lpL = W - 3 - lpw;
       ctx.fillStyle = markCol; var ty = Math.max(padT + 8, Math.min(padT + plotH - 8, yL));
-      roundRect(ctx, padL + plotW + 4, ty - 8, tw + 10, 16, 4); ctx.fill();
-      ctx.fillStyle = "#06101f"; ctx.textAlign = "left"; ctx.fillText(tag, padL + plotW + 9, ty);
+      roundRect(ctx, lpL, ty - 8, lpw, 16, 4); ctx.fill();
+      ctx.fillStyle = "#06101f"; ctx.textAlign = "left"; ctx.fillText(tag, lpL + 5, ty);
     }
   }
   function drawLevel(ctx, x0, w, y, col, label, c) {
@@ -929,8 +932,13 @@
     return sym.price != null ? sym.price : sym.base;
   }
   function overlayPos() {
-    if (QO.realPrices) { var fp = focusPos(); return (fp && (fp.status === "open" || fp.exitPrice != null)) ? fp : null; }
-    return (QO.pos && (QO.pos.status === "open" || QO.pos.exitPrice != null)) ? QO.pos : null;
+    var p;
+    if (QO.realPrices) { var fp = focusPos(); p = (fp && (fp.status === "open" || fp.exitPrice != null)) ? fp : null; }
+    else { p = (QO.pos && (QO.pos.status === "open" || QO.pos.exitPrice != null)) ? QO.pos : null; }
+    if (!p) return null;
+    var cs = curSym();
+    if (cs && p.symbol && cs.symbol !== p.symbol) return null;  // levels belong to another symbol's chart
+    return p;
   }
   // unified chart series: {candles:[{t,o,h,l,c}], line:[{t,price}], live, dp}
   function chartSeries() {
