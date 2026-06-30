@@ -101,14 +101,24 @@
   }
   function onKey(e) { if (e.key === "Escape") closeHub(); }
   var _routed = false;
-  function route(fn) { if (_routed) return; _routed = true; closeHub(); setTimeout(function () { try { fn(); } catch (e) {} }, 0); }
-
-  function goLeagues() { if (window.dqLeagues && window.dqLeagues.open) window.dqLeagues.open(); }
-  function goBabyTrader() {
-    if (typeof babyTraderOpen === "function") babyTraderOpen();
-    else if (typeof window.openEasyTrade === "function" && window.openEasyTrade !== openHub) window.openEasyTrade();
+  // Resolve the target opener FIRST; only close the hub once we actually have one,
+  // so a not-yet-ready module (or a tap that lands off a card) can never drop the
+  // user onto the chat home screen underneath.
+  function route(resolve) {
+    if (_routed) return;
+    var fn = (typeof resolve === "function") ? resolve() : null;
+    if (typeof fn !== "function") return;
+    _routed = true;
+    try { fn(); closeHub(); } catch (e) { _routed = false; }
   }
-  function goBabyPick() { if (window.dqBabyPick && window.dqBabyPick.open) window.dqBabyPick.open(); }
+
+  function goLeagues() { return (window.dqLeagues && typeof window.dqLeagues.open === "function") ? function () { window.dqLeagues.open(); } : null; }
+  function goBabyTrader() {
+    if (typeof babyTraderOpen === "function") return babyTraderOpen;
+    if (typeof window.openEasyTrade === "function" && window.openEasyTrade !== openHub) return window.openEasyTrade;
+    return null;
+  }
+  function goBabyPick() { return (window.dqBabyPick && typeof window.dqBabyPick.open === "function") ? function () { window.dqBabyPick.open(); } : null; }
 
   function openHub() {
     closeHub();

@@ -104,6 +104,19 @@ async function reactionsFor(pool, messageIds, userId) {
 router.get("/", async (req, res) => {
   const pool = req.app.get("pool");
   try {
+    // Ensure the user has their DrFX AI assistant DM (covers admin + accounts made before bot-DM seeding).
+    try {
+      const { rows: [bot] } = await pool.query("SELECT id FROM users WHERE role='bot' ORDER BY id ASC LIMIT 1");
+      if (bot && bot.id !== req.user.id) {
+        const { rows: [hasDm] } = await pool.query("SELECT c.id FROM chats c JOIN chat_members cm1 ON c.id=cm1.chat_id AND cm1.user_id=$1 JOIN chat_members cm2 ON c.id=cm2.chat_id AND cm2.user_id=$2 WHERE c.type='dm' LIMIT 1", [req.user.id, bot.id]);
+        if (!hasDm) {
+          const { rows: [dm] } = await pool.query("INSERT INTO chats (type,created_by) VALUES ('dm',$1) RETURNING id", [req.user.id]);
+          await pool.query("INSERT INTO chat_members (chat_id,user_id,role) VALUES ($1,$2,'member'),($1,$3,'member')", [dm.id, req.user.id, bot.id]);
+          await pool.query("INSERT INTO messages (chat_id,user_id,content) VALUES ($1,$2,$3)", [dm.id, bot.id, "👋 Hi! I'm DrFX AI, your built-in assistant. Ask me anything about using the platform or learning to trade Forex, Gold, and Crypto. I'm here to help — I'm not a financial advisor, so always trade carefully."]);
+        }
+      }
+    } catch (e) { console.error("ensure AI DM:", e.message); }
+
     const { rows: chats } = await pool.query(`
       SELECT c.*, cm.role AS my_role, cm.last_read_id,
         (up.user_id IS NOT NULL) AS pinned,
