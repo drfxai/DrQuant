@@ -14,8 +14,7 @@
  *       - Baby Trader card      -> the original Easy Trade game (captured)
  *       - Baby Pick card        -> Baby Pick (window.dqBabyPick.open)
  *
- * Load LAST, before </body> (after babypick.js). Card images live in public/:
- *   /easytrade-league.jpg  /easytrade-baby-trader.jpg  /easytrade-baby-pick.jpg
+ * Load LAST, before </body> (after babypick.js). Cards are drawn in code (SVG/CSS).
  * All targets are resolved at click time, so load order is forgiving.
  * =========================================================================== */
 (function () {
@@ -85,9 +84,7 @@
   if (window.__dqEzHub) return;
   window.__dqEzHub = true;
 
-  var IMG_LEAGUE = "/easytrade-league.jpg";
-  var IMG_TRADER = "/easytrade-baby-trader.jpg";
-  var IMG_PICK   = "/easytrade-baby-pick.jpg";
+  // Card art is drawn in code (SVG + CSS) below - no external images.
 
   // Capture the original Easy Trade (Baby Trader) opener before we override it.
   var babyTraderOpen = (typeof window.openEasyTrade === "function") ? window.openEasyTrade : null;
@@ -140,26 +137,76 @@
     ov.innerHTML =
       '<style>' +
         '@keyframes ezhIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}' +
+        '@keyframes ezhGlow{0%,100%{opacity:.72}50%{opacity:1}}' +
         '.ezh-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;display:flex;align-items:center;justify-content:center;padding:16px;-webkit-overflow-scrolling:touch}' +
         '.ezh-col{width:min(430px,94vw);display:flex;flex-direction:column;gap:12px;padding:2px;animation:ezhIn .3s ease}' +
-        '.ezh-card{position:relative;cursor:pointer;border-radius:18px;overflow:hidden;border:1px solid rgba(150,180,255,.18);box-shadow:0 10px 30px rgba(0,0,0,.45);transition:transform .16s ease,box-shadow .2s ease,border-color .2s ease;background:#0a1126}' +
-        '.ezh-card img{width:100%;height:auto;display:block;-webkit-user-select:none;user-select:none}' +
+        '.ezh-card{position:relative;cursor:pointer;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.07);border:1px solid rgba(150,180,255,.18);transition:transform .16s ease,box-shadow .2s ease,border-color .2s ease}' +
         '.ezh-card:hover{transform:translateY(-3px)}' +
         '.ezh-card:active{transform:translateY(-1px) scale(.992)}' +
-        '.ezh-league img{aspect-ratio:534 / 545;object-fit:cover}' +
-        '.ezh-league:hover{border-color:rgba(245,200,90,.85);box-shadow:0 16px 42px rgba(220,170,40,.42)}' +
+        '.ezh-card *{pointer-events:none}' +
+        '.ezh-glow{position:absolute;inset:0;z-index:1;animation:ezhGlow 3.6s ease-in-out infinite}' +
+        '.ezh-in{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;text-align:center}' +
+        '.ezh-ic{display:block;margin-bottom:11px;filter:drop-shadow(0 4px 10px rgba(0,0,0,.35))}' +
+        '.ezh-ttl{font-weight:800;letter-spacing:.5px;line-height:1.08}' +
+        '.ezh-sub{font-weight:700;opacity:.92}' +
+        '.ezh-cta{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-weight:800;border-radius:999px;white-space:nowrap}' +
+        '.ezh-cta svg{width:15px;height:15px}' +
+        '.ezh-league{background:linear-gradient(160deg,#1b1505 0%,#2f2207 52%,#0c0a02 100%);border-color:rgba(245,200,90,.4)}' +
+        '.ezh-league:hover{border-color:rgba(245,200,90,.9);box-shadow:0 16px 42px rgba(220,170,40,.45)}' +
+        '.ezh-league .ezh-glow{background:radial-gradient(120% 82% at 50% -6%,rgba(245,200,90,.34),transparent 60%)}' +
+        '.ezh-league .ezh-in{padding:26px 18px 23px}' +
+        '.ezh-league .ezh-ttl{font-size:27px;background:linear-gradient(180deg,#ffeaa6,#f1b539);-webkit-background-clip:text;background-clip:text;color:transparent}' +
+        '.ezh-league .ezh-sub{color:#f6d68c;font-size:11px;letter-spacing:2.6px;margin-top:9px}' +
+        '.ezh-league .ezh-cta{margin-top:17px;background:linear-gradient(180deg,#ffd76a,#e0a92e);color:#3a2706;padding:11px 30px;font-size:15px;box-shadow:0 7px 18px rgba(224,169,46,.5)}' +
         '.ezh-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
-        '.ezh-row .ezh-card img{aspect-ratio:283 / 334;object-fit:cover;height:auto}' +
-        '.ezh-trader:hover{border-color:rgba(96,170,255,.9);box-shadow:0 16px 42px rgba(60,140,255,.44)}' +
-        '.ezh-pick:hover{border-color:rgba(255,170,60,.9);box-shadow:0 16px 42px rgba(255,150,40,.44)}' +
+        '.ezh-row .ezh-in{padding:18px 12px 16px}' +
+        '.ezh-row .ezh-ttl{font-size:18px}' +
+        '.ezh-row .ezh-sub{font-size:9.5px;margin-top:6px;letter-spacing:.6px}' +
+        '.ezh-row .ezh-cta{margin-top:14px;padding:9px 0;width:82%;font-size:12.5px;letter-spacing:.6px}' +
+        '.ezh-trader{background:linear-gradient(160deg,#0a1838 0%,#112c60 58%,#070f24 100%);border-color:rgba(96,170,255,.32)}' +
+        '.ezh-trader:hover{border-color:rgba(96,170,255,.95);box-shadow:0 16px 42px rgba(60,140,255,.45)}' +
+        '.ezh-trader .ezh-glow{background:radial-gradient(130% 92% at 50% -4%,rgba(70,140,255,.32),transparent 62%)}' +
+        '.ezh-trader .ezh-ttl{color:#d5e6ff}' +
+        '.ezh-trader .ezh-sub{color:#8fb6ee}' +
+        '.ezh-trader .ezh-cta{background:linear-gradient(180deg,#4ea0ff,#2563eb);color:#fff;box-shadow:0 6px 16px rgba(37,99,235,.5)}' +
+        '.ezh-pick{background:linear-gradient(160deg,#2a1605 0%,#5a2f0a 58%,#1a0d02 100%);border-color:rgba(255,170,60,.32)}' +
+        '.ezh-pick:hover{border-color:rgba(255,170,60,.95);box-shadow:0 16px 42px rgba(255,150,40,.45)}' +
+        '.ezh-pick .ezh-glow{background:radial-gradient(130% 92% at 50% -4%,rgba(255,150,50,.32),transparent 62%)}' +
+        '.ezh-pick .ezh-ttl{color:#ffe2bb}' +
+        '.ezh-pick .ezh-sub{color:#f0b07a}' +
+        '.ezh-pick .ezh-cta{background:linear-gradient(180deg,#ffb04e,#f97316);color:#3a1d05;box-shadow:0 6px 16px rgba(249,115,22,.5)}' +
       '</style>' +
       '<button id="ezh-x" type="button" title="Close" style="position:absolute;top:calc(14px + var(--sat));right:14px;z-index:5001;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(6,10,24,.6);color:#dce8ff;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>' +
       '<div class="ezh-scroll">' +
         '<div class="ezh-col">' +
-          '<div id="ezh-league" class="ezh-card ezh-league" role="button" tabindex="0" title="Enter the League"><img src="' + IMG_LEAGUE + '" alt="Legendary League" draggable="false"/></div>' +
+          '<div id="ezh-league" class="ezh-card ezh-league" role="button" tabindex="0" title="Enter the League">' +
+            '<div class="ezh-glow"></div>' +
+            '<div class="ezh-in">' +
+              '<svg class="ezh-ic" viewBox="0 0 64 54" width="60" height="50" fill="none"><defs><linearGradient id="ezLg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffeaa6"/><stop offset="1" stop-color="#e6a92e"/></linearGradient></defs><path d="M6 40 L10 15 L23 29 L32 9 L41 29 L54 15 L58 40 Z" fill="url(#ezLg)" stroke="#8a6516" stroke-width="2" stroke-linejoin="round"/><rect x="8" y="40" width="48" height="9" rx="2.5" fill="url(#ezLg)" stroke="#8a6516" stroke-width="2"/><circle cx="32" cy="23" r="3" fill="#fff6d8"/><circle cx="14.5" cy="44.5" r="2.3" fill="#7a5512"/><circle cx="32" cy="44.5" r="2.3" fill="#7a5512"/><circle cx="49.5" cy="44.5" r="2.3" fill="#7a5512"/></svg>' +
+              '<div class="ezh-ttl">LEGENDARY<br>LEAGUE</div>' +
+              '<div class="ezh-sub">RULE THE MARKETS</div>' +
+              '<span class="ezh-cta">ENTER <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>' +
+            '</div>' +
+          '</div>' +
           '<div class="ezh-row">' +
-            '<div id="ezh-baby" class="ezh-card ezh-trader" role="button" tabindex="0" title="Baby Trader"><img src="' + IMG_TRADER + '" alt="Baby Trader" draggable="false"/></div>' +
-            '<div id="ezh-pick" class="ezh-card ezh-pick" role="button" tabindex="0" title="Baby Pick"><img src="' + IMG_PICK + '" alt="Baby Pick" draggable="false"/></div>' +
+            '<div id="ezh-baby" class="ezh-card ezh-trader" role="button" tabindex="0" title="Baby Trader">' +
+              '<div class="ezh-glow"></div>' +
+              '<div class="ezh-in">' +
+                '<svg class="ezh-ic" viewBox="0 0 64 58" width="48" height="44" fill="none"><defs><linearGradient id="ezBt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d5e6ff"/><stop offset="1" stop-color="#3b82f6"/></linearGradient></defs><path d="M32 11 L59 24 L32 37 L5 24 Z" fill="url(#ezBt)" stroke="#1e3a6e" stroke-width="2" stroke-linejoin="round"/><path d="M15 29 V41 C15 45.5 23 49 32 49 C41 49 49 45.5 49 41 V29" fill="none" stroke="#7fb0ff" stroke-width="3" stroke-linecap="round"/><line x1="59" y1="24" x2="59" y2="40" stroke="#7fb0ff" stroke-width="2.6" stroke-linecap="round"/><circle cx="59" cy="42.5" r="3" fill="#7fb0ff"/></svg>' +
+                '<div class="ezh-ttl">Baby Trader</div>' +
+                '<div class="ezh-sub">LEARN &amp; TRADE</div>' +
+                '<span class="ezh-cta">START</span>' +
+              '</div>' +
+            '</div>' +
+            '<div id="ezh-pick" class="ezh-card ezh-pick" role="button" tabindex="0" title="Baby Pick">' +
+              '<div class="ezh-glow"></div>' +
+              '<div class="ezh-in">' +
+                '<svg class="ezh-ic" viewBox="0 0 64 58" width="50" height="44" fill="none"><path d="M23 37 V20 M23 20 L16 27 M23 20 L30 27" stroke="#2fcf8e" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M41 21 V38 M41 38 L34 31 M41 38 L48 31" stroke="#ff5d5d" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/></svg>' +
+                '<div class="ezh-ttl">Baby Pick</div>' +
+                '<div class="ezh-sub">MAKE YOUR CHOICE</div>' +
+                '<span class="ezh-cta">PLAY</span>' +
+              '</div>' +
+            '</div>' +
           '</div>' +
         '</div>' +
       '</div>' +
