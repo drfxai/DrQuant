@@ -156,7 +156,7 @@
       '.qo-mode{width:30px;height:26px;border-radius:6px;border:none;background:transparent;color:' + c.t3 + ';cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .14s,color .14s}' +
       '.qo-mode:hover{color:' + c.t2 + '}' +
       '.qo-mode.on{background:' + hexA(c.blue, .16) + ';color:' + c.blue + '}' +
-      '.qo-canvas{display:block;width:100%;height:290px;touch-action:pan-y}' +
+      '.qo-canvas{display:block;width:100%;height:340px;touch-action:pan-y}' +
       '.qo-seg{display:flex;gap:9px;margin-bottom:12px}' +
       '.qo-dir{flex:1;border-radius:10px;padding:13px 10px;border:1px solid ' + c.bd + ';background:' + c.panel + ';cursor:pointer;text-align:center;transition:border-color .15s,background .15s,transform .12s;position:relative;overflow:hidden}' +
       '.qo-dir:hover{border-color:' + hexA(c.blue, .35) + '}' +
@@ -287,7 +287,7 @@
     var cv = document.getElementById("qo-canvas"); if (!cv) return null;
     var dpr = window.devicePixelRatio || 1;
     var w = cv.clientWidth || cv.parentNode.clientWidth || 320;
-    var h = cv.clientHeight || 290;
+    var h = cv.clientHeight || 340;
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
       cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     }
@@ -318,7 +318,7 @@
       return;
     }
 
-    var padL = 10, padR = 92, padT = 8, padB = 20;
+    var padL = 3, padR = 92, padT = 4, padB = 16;
     var plotW = W - padL - padR, plotH = H - padT - padB;
 
     // y-range over what is drawn, widened to include levels + the live price
@@ -336,7 +336,7 @@
       for (i = 0; i < ts.length; i++) { if (ts[i] < lo) lo = ts[i]; if (ts[i] > hi) hi = ts[i]; }
     }
     if (!(hi > lo)) { hi = lo + 1; }
-    var pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+    var pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
     function Y(v) { return padT + plotH - ((v - lo) / (hi - lo)) * plotH; }
     function Xl(idx, n) { return padL + (n <= 1 ? 0 : (idx / (n - 1)) * plotW); }
 
@@ -353,10 +353,19 @@
       if (tt != null) { ctx.fillStyle = c.t4; ctx.textAlign = "center"; ctx.fillText(hhmm(tt), vx, padT + plotH + 10); }
     }
     ctx.font = "600 9.5px Outfit, sans-serif";
+    var lvlYs = [];
+    if (hasLevels) {
+      var lps = [Number(pos.entry), Number(pos.stop), Number(pos.tp1), Number(pos.tp2), Number(pos.tp3)];
+      for (i = 0; i < lps.length; i++) { if (Number.isFinite(lps[i])) lvlYs.push(Math.max(padT + 8, Math.min(padT + plotH - 8, Y(lps[i])))); }
+    }
     for (var g = 0; g <= 4; g++) {
       var yy = padT + (plotH * g) / 4;
       ctx.strokeStyle = c.grid; ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(padL + plotW, yy); ctx.stroke();
-      if (g > 0 && g < 4) { var pv = lo + (hi - lo) * (1 - g / 4); ctx.fillStyle = c.t3; ctx.textAlign = "left"; ctx.fillText(fmtP(pv, dp), padL + plotW + 7, yy); }
+      if (g > 0 && g < 4) {
+        var clash = false;
+        for (var li = 0; li < lvlYs.length; li++) { if (Math.abs(yy - lvlYs[li]) < 12) { clash = true; break; } }
+        if (!clash) { var pv = lo + (hi - lo) * (1 - g / 4); ctx.fillStyle = c.t3; ctx.textAlign = "left"; ctx.fillText(fmtP(pv, dp), padL + plotW + 7, yy); }
+      }
     }
     ctx.strokeStyle = c.bdSoft; ctx.beginPath(); ctx.moveTo(padL + plotW + 0.5, padT); ctx.lineTo(padL + plotW + 0.5, padT + plotH); ctx.stroke();
 

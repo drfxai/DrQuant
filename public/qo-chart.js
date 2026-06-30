@@ -94,7 +94,7 @@
         height: container.clientHeight || 240,
         layout: { background: { color: "transparent" }, textColor: c.text || "#9fb0cc", fontFamily: "Outfit, system-ui, sans-serif", fontSize: 11, attributionLogo: false },
         grid: { vertLines: { color: c.grid || "rgba(120,150,200,.07)" }, horzLines: { color: c.grid || "rgba(120,150,200,.07)" } },
-        rightPriceScale: { borderColor: c.border || "rgba(120,150,200,.16)", borderVisible: true, scaleMargins: { top: 0.12, bottom: 0.12 } },
+        rightPriceScale: { borderColor: c.border || "rgba(120,150,200,.16)", borderVisible: true, scaleMargins: { top: 0.06, bottom: 0.06 } },
         timeScale: { borderColor: c.border || "rgba(120,150,200,.16)", timeVisible: true, secondsVisible: false },
         crosshair: {
           mode: (LWC.CrosshairMode && LWC.CrosshairMode.Normal != null) ? LWC.CrosshairMode.Normal : 0,
