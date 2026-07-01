@@ -191,7 +191,13 @@ async function initDB() {
       };
       const drfxId = await ensureChannel("drfx", "DrFX", "Official DrFX channel — announcements and updates from the team.", "📈", false);
       const drsignalId = await ensureChannel(signalUsername, "Dr Signal", "Automated trading signals delivered from TradingView. Only admins post here.", "📊", true);
-      console.log("✅ Default channels ready (DrFX, Dr Signal)");
+      // Public indicator-signal channels (same shape as Dr Signal): everyone is
+      // auto-joined, admin-post-only, and each carries its OWN webhook token, so
+      // it gets a dedicated TradingView URL: /api/webhooks/tradingview/<token>
+      // (copy it from the channel's info panel).
+      const chartPrimeId = await ensureChannel("chartprime", "Chart Prime", "ChartPrime indicator signals delivered from TradingView. Only admins post here.", "🔷", true);
+      const luxAlgoId = await ensureChannel("luxalgo", "Lux Algo", "LuxAlgo indicator signals delivered from TradingView. Only admins post here.", "🌟", true);
+      console.log("✅ Default channels ready (DrFX, Dr Signal, Chart Prime, Lux Algo)");
 
       // ── VIP (Pro-only) channels ───────────────────────────────────────────
       // Same shape as the default channels, but pro_only=TRUE and members are
@@ -236,7 +242,7 @@ async function initDB() {
       // Lower pin_rank = higher in EVERY user's chat list. Seeded once (only when
       // unset) so a later admin reorder via PUT /chats/:id/pin-rank persists across
       // reboots. Regular users can never change these.
-      const fixedPins = [[vipSigId, 1], [vipAlgoId, 2], [vipStratId, 3], [drsignalId, 4], [drfxId, 5]];
+      const fixedPins = [[vipSigId, 1], [vipAlgoId, 2], [vipStratId, 3], [drsignalId, 4], [drfxId, 5], [chartPrimeId, 6], [luxAlgoId, 7]];
       for (const [cid, rank] of fixedPins) {
         if (cid) await client.query("UPDATE chats SET pin_rank=$1 WHERE id=$2 AND pin_rank IS NULL", [rank, cid]).catch(() => {});
       }

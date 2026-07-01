@@ -27,7 +27,7 @@ try{
   var FA=[['ض','ص','ث','ق','ف','غ','ع','ه','خ','ح','ج','چ'],['ش','س','ی','ب','ل','ا','ت','ن','م','ک','گ'],['ظ','ط','ز','ر','ذ','د','پ','و','ژ','{bs}'],['{sym}','{lang}','{space}','،','{enter}']];
   var SYM=[['1','2','3','4','5','6','7','8','9','0'],['@','#','$','_','&','-','+','(',')','/'],['{sym2}','*','"',"'",':',';','!','?','{bs}'],['{abc}','{lang}','{space}','.','{enter}']];
   var SYM2=[['~','`','|','•','√','π','÷','×','¶','∆'],['£','€','¥','^','=','{','}','[',']','%'],['{sym}','©','®','™','§','<','>','°','…','{bs}'],['{abc}','{lang}','{space}','.','{enter}']];
-  var st={lay:'en',alpha:'en',shift:false,cur:null};
+  var st={lay:'en',alpha:'en',shift:false,caps:false,lastShift:0,cur:null};
   function curLayout(){return st.lay==='fa'?FA:st.lay==='sym'?SYM:st.lay==='sym2'?SYM2:EN;}
 
   // ── Native-keyboard suppression ──────────────────────────────────────────
@@ -64,6 +64,7 @@ try{
       k.addEventListener('pointerdown',function(e){e.preventDefault();},{passive:false});
       k.addEventListener('selectstart',function(e){e.preventDefault();});
       k.addEventListener('contextmenu',function(e){e.preventDefault();});
+      k.addEventListener('pointerup',stopRepeat);k.addEventListener('pointercancel',stopRepeat);k.addEventListener('pointerleave',stopRepeat);
       document.body.appendChild(k);
     }
     k.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:9600;background:'+p.bg+';padding:7px 4px calc(7px + var(--sab,0px));box-shadow:0 -6px 24px rgba(0,0,0,.4);font-family:Outfit,system-ui,sans-serif;-webkit-user-select:none;user-select:none;direction:ltr;touch-action:none';
@@ -72,13 +73,13 @@ try{
   function lbl(key){
     if(key==='{bs}')return '⌫';
     if(key==='{enter}')return '⏎';
-    if(key==='{shift}')return st.shift?'⇪':'⇧';
+    if(key==='{shift}')return st.caps?'⇪':(st.shift?'⬆':'⇧');
     if(key==='{space}')return 'space';
     if(key==='{sym}')return '123';
     if(key==='{sym2}')return '#+=';
     if(key==='{abc}')return 'ABC';
     if(key==='{lang}')return st.alpha==='en'?'فا':'EN';
-    return (st.shift&&st.lay==='en')?key.toUpperCase():key;
+    return ((st.shift||st.caps)&&st.lay==='en')?key.toUpperCase():key;
   }
   function render(){
     var k=getKb();var p=pal();k.innerHTML='';
@@ -93,7 +94,7 @@ try{
         var b=document.createElement('button');b.type='button';
         b.style.cssText='flex:'+flex+';min-width:0;height:46px;border:0;border-radius:7px;background:'+bg+';color:'+col+';font-size:'+(sp?'13px':'19px')+';font-weight:500;font-family:inherit;cursor:pointer;box-shadow:'+p.ksh+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;padding:0;touch-action:none';
         b.innerHTML=lbl(key);
-        b.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();press(key);},{passive:false});
+        b.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();press(key);fxKeyPop(b,key);buzz(key==='{bs}'?12:(key==='{enter}'?16:7));clickSnd(key);if(key==='{bs}'){stopRepeat();kbHoldTimer=setTimeout(function(){kbRepeat=setInterval(function(){press('{bs}');buzz(9);clickSnd('{bs}');},55);},320);}},{passive:false});
         r.appendChild(b);
       });
       wrap.appendChild(r);
@@ -101,8 +102,38 @@ try{
     k.appendChild(wrap);
   }
   function tgt(){var c=st.cur;if(c&&document.contains(c)&&isTextField(c))return c;var a=document.activeElement;return isTextField(a)?a:null;}
+  // ── Tactile / audio / visual feedback (haptics, click, key-pop) ───────
+  var KBFX={vib:localStorage.getItem('dq_kb_vib')!=='off',snd:localStorage.getItem('dq_kb_snd')==='on',ac:null};
+  function buzz(ms){if(!KBFX.vib)return;try{if(navigator.vibrate)navigator.vibrate(ms||7);}catch(_){}}
+  function clickSnd(key){
+    if(!KBFX.snd)return;
+    try{
+      var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+      if(!KBFX.ac)KBFX.ac=new AC();var ac=KBFX.ac;if(ac.state==='suspended'){try{ac.resume();}catch(_){}}
+      var f=key==='{bs}'?150:key==='{enter}'?300:key==='{space}'?170:230;
+      var o=ac.createOscillator(),g=ac.createGain();o.type='triangle';o.frequency.value=f;
+      o.connect(g);g.connect(ac.destination);var n=ac.currentTime;
+      g.gain.setValueAtTime(0.05,n);g.gain.exponentialRampToValueAtTime(0.0001,n+0.06);
+      o.start(n);o.stop(n+0.07);
+    }catch(_){}
+  }
+  function printableLabel(key){if(!key||key.charAt(0)==='{')return null;return((st.shift||st.caps)&&st.lay==='en')?key.toUpperCase():key;}
+  function fxKeyPop(btn,key){
+    try{
+      btn.style.transition='transform .05s ease';btn.style.transform='scale(.9)';
+      setTimeout(function(){try{btn.style.transform='';}catch(_){}},80);
+      var ch=printableLabel(key);if(!ch)return;var p=pal();var r=btn.getBoundingClientRect();
+      var f=document.createElement('div');f.textContent=ch;
+      f.style.cssText='position:fixed;left:'+(r.left+r.width/2)+'px;top:'+(r.top-4)+'px;transform:translate(-50%,0) scale(1);font-size:24px;font-weight:700;color:'+p.accC+';background:'+p.acc+';border-radius:11px;min-width:34px;text-align:center;padding:6px 12px;pointer-events:none;z-index:9700;box-shadow:0 8px 22px rgba(0,0,0,.45);opacity:1;transition:transform .3s cubic-bezier(.2,.75,.25,1),opacity .3s ease';
+      document.body.appendChild(f);
+      requestAnimationFrame(function(){f.style.transform='translate(-50%,-52px) scale(1.15)';f.style.opacity='0';});
+      setTimeout(function(){try{f.remove();}catch(_){}},320);
+    }catch(_){}
+  }
+  var kbRepeat=null,kbHoldTimer=null;
+  function stopRepeat(){if(kbHoldTimer){clearTimeout(kbHoldTimer);kbHoldTimer=null;}if(kbRepeat){clearInterval(kbRepeat);kbRepeat=null;}}
   function press(key){
-    if(key==='{shift}'){st.shift=!st.shift;render();return;}
+    if(key==='{shift}'){var now=Date.now();if(st.caps){st.caps=false;st.shift=false;}else if(now-(st.lastShift||0)<320){st.caps=true;st.shift=true;}else{st.shift=!st.shift;}st.lastShift=now;render();return;}
     if(key==='{sym}'){st.lay='sym';render();return;}
     if(key==='{sym2}'){st.lay='sym2';render();return;}
     if(key==='{abc}'){st.lay=st.alpha;render();return;}
@@ -111,8 +142,8 @@ try{
     if(key==='{space}'){ins(t,' ');return;}
     if(key==='{bs}'){bks(t);return;}
     if(key==='{enter}'){try{t.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));}catch(e){}return;}
-    var ch=(st.shift&&st.lay==='en')?key.toUpperCase():key;ins(t,ch);
-    if(st.shift&&st.lay==='en'){st.shift=false;render();}
+    var ch=((st.shift||st.caps)&&st.lay==='en')?key.toUpperCase():key;ins(t,ch);
+    if(st.shift&&!st.caps&&st.lay==='en'){st.shift=false;render();}
   }
   function ins(t,ch){
     try{var s=t.selectionStart,e=t.selectionEnd;
@@ -154,6 +185,10 @@ try{
   // Public API used by Settings -> Keyboard toggle.
   window.DQKB={
     isDeviceMobile:deviceMobile,
+    get vibrate(){return KBFX.vib;},
+    set vibrate(v){KBFX.vib=!!v;localStorage.setItem('dq_kb_vib',v?'on':'off');},
+    get sound(){return KBFX.snd;},
+    set sound(v){KBFX.snd=!!v;localStorage.setItem('dq_kb_snd',v?'on':'off');},
     get on(){return userOn();},
     set on(v){
       localStorage.setItem('dq_kb',v?'on':'off');
