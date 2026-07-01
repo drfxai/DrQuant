@@ -233,6 +233,25 @@ router.get("/:id", async (req, res) => {
 });
 
 // Update chat
+// PUT /api/chats/bot/profile — admins edit the DrFX AI bot's profile
+// (name / avatar / bio), the same way they edit a channel. The bot is a
+// users row (role='bot'), so this updates the user, not a chat.
+router.put("/bot/profile", async (req, res) => {
+  const pool = req.app.get("pool");
+  try {
+    if (req.user.role !== "admin" && req.user.role !== "superadmin") return res.status(403).json({ error: "Admin required" });
+    const { name, bio, avatar } = req.body;
+    const u = [], v = []; let i = 1;
+    if (name !== undefined) { const nm = String(name).trim().slice(0, 100); if (!nm) return res.status(400).json({ error: "Name required" }); u.push("name=$" + (i++)); v.push(nm); }
+    if (bio !== undefined) { u.push("bio=$" + (i++)); v.push(String(bio).slice(0, 500)); }
+    if (avatar !== undefined) { if (badAvatar(avatar)) return res.status(400).json({ error: "Invalid avatar" }); u.push("avatar=$" + (i++)); v.push(String(avatar).slice(0, 500)); }
+    if (!u.length) return res.status(400).json({ error: "Nothing to update" });
+    const { rows: [bot] } = await pool.query(`UPDATE users SET ${u.join(",")} WHERE role='bot' RETURNING id,name,avatar,bio,role`, v);
+    if (!bot) return res.status(404).json({ error: "Bot not found" });
+    res.json(bot);
+  } catch (err) { console.error("[chats] bot profile:", err.message); res.status(500).json({ error: "Server error" }); }
+});
+
 router.put("/:id", async (req, res) => {
   const pool = req.app.get("pool");
   try {
@@ -393,7 +412,7 @@ router.post("/:id/messages", async (req, res) => {
       const { rows: [botMem] } = await pool.query("SELECT u.id FROM users u JOIN chat_members cm ON u.id=cm.user_id WHERE cm.chat_id=$1 AND u.role='bot' LIMIT 1", [chatId]);
       if (botMem) {
         const { rows: [usr] } = await pool.query("SELECT subscription_status FROM users WHERE id=$1", [req.user.id]);
-        if (usr?.subscription_status === "free") {
+        if (usr?.subscription_status !== "active") {
           const { rows: [cnt] } = await pool.query("SELECT COUNT(*)::int AS c FROM messages WHERE chat_id=$1 AND user_id=$2 AND created_at>NOW()-INTERVAL '24 hours'", [chatId, req.user.id]);
           if (cnt.c > FREE_DAILY_LIMIT) {
             const { rows: [lm] } = await pool.query("INSERT INTO messages (chat_id,user_id,content) VALUES ($1,$2,$3) RETURNING *", [chatId, botMem.id, `⚠️ Free limit reached (${FREE_DAILY_LIMIT}/day). Upgrade to Pro for unlimited AI.`]);

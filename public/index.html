@@ -2063,6 +2063,30 @@ function openUserProfile(u){
       ${u.email&&role!=="bot"?`<div style="color:${t.t3};font-size:12px;margin-top:3px">${esc(u.email)}</div>`:""}</div>
       <div style="margin-top:16px"><div style="color:${t.t2};font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px">Bio</div>
       <div style="color:${u.bio?t.t1:t.t4};font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word">${u.bio?esc(u.bio):"No bio yet."}</div></div>`;
+    if(role==="bot"&&S.user&&S.user.role==="admin"){var _eb=document.createElement("button");_eb.className="pb";_eb.type="button";_eb.style.cssText="margin-top:16px;width:100%;padding:11px;font-size:14px";_eb.textContent="Edit Profile";_eb.onclick=function(){close();openEditBot(u);};body.appendChild(_eb);}
+  });
+}
+function openEditBot(u){
+  modal("Edit Bot Profile",(body,close)=>{
+    body.innerHTML=`<label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Name</label><input id="eb-n" class="gi" value="${esc(u.name||"")}" style="margin-bottom:10px;font-size:14px"/>`
+      +`<label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Avatar (emoji or image URL)</label><input id="eb-a" class="gi" value="${esc(u.avatar||"")}" style="margin-bottom:10px;font-size:14px"/>`
+      +`<label style="color:${t.t2};font-size:11px;font-weight:600;display:block;margin-bottom:5px">Bio</label><textarea id="eb-b" class="gi" rows="3" style="resize:none;margin-bottom:14px;font-size:14px">${esc(u.bio||"")}</textarea>`
+      +`<button id="eb-sv" class="pb" type="button" style="width:100%;padding:11px;font-size:14px">Save</button>`;
+    body.querySelector("#eb-sv").onclick=async()=>{
+      const name=body.querySelector("#eb-n").value.trim();
+      const avatar=body.querySelector("#eb-a").value.trim();
+      const bio=body.querySelector("#eb-b").value;
+      if(!name){showToast("Name required","");return;}
+      try{
+        const r=await api("/chats/bot/profile",{method:"PUT",body:{name,avatar,bio}});
+        u.name=r.name;u.avatar=r.avatar;u.bio=r.bio;
+        (S.chats||[]).forEach(c=>{const p=c.partner;if(p&&(p.role==="bot"||p.user_role==="bot")){p.name=r.name;p.avatar=r.avatar;p.bio=r.bio;}});
+        if(S.chatInfo&&S.chatInfo.members)S.chatInfo.members.forEach(m=>{if(m.role==="bot"||m.user_role==="bot"){m.name=r.name;m.avatar=r.avatar;m.bio=r.bio;}});
+        close();showToast("Bot profile updated","");
+        if(typeof renderChatList==="function")renderChatList();
+        if(typeof renderChatView==="function")renderChatView();
+      }catch(e){showToast("Update failed",(e&&e.message)||"");}
+    };
   });
 }
 function openDMProfile(){
@@ -2224,8 +2248,8 @@ window.addEventListener("resize",()=>{
   render();if(S.token)connectSocket();initNotify();
 })();
 </script>
-<script src="/keyboard.js?v=20260701-1"></script>
-<script src="/backnav.js?v=20260630-2"></script>
+<script src="/keyboard.js?v=20260701-2"></script>
+<script src="/backnav.js?v=20260701-1"></script>
 <script src="/wallet.js"></script>
 <script src="/control-deck.js"></script>
 <script src="/admin-ui.js"></script>

@@ -185,6 +185,7 @@ try{
   // Public API used by Settings -> Keyboard toggle.
   window.DQKB={
     isDeviceMobile:deviceMobile,
+    dismiss:function(){try{var a=document.activeElement;if(a&&a.blur)a.blur();}catch(_){}hide();},
     get vibrate(){return KBFX.vib;},
     set vibrate(v){KBFX.vib=!!v;localStorage.setItem('dq_kb_vib',v?'on':'off');},
     get sound(){return KBFX.snd;},

@@ -108,6 +108,14 @@
         return true;
       }
 
+      // On-screen keyboard open? Back dismisses it first (and re-syncs the app
+      // shell so no empty band is left behind) before navigating out of the chat.
+      if (window.DQKB && window.DQKB.on && byId("dq-kb") && byId("dq-kb").style.display !== "none"
+          && document.documentElement.classList.contains("dqkb-open")) {
+        try { if (window.DQKB.dismiss) window.DQKB.dismiss(); } catch (e) {}
+        return true;
+      }
+
       if (inMobileChat() && typeof goBack === "function") { goBack(); return true; }
     } catch (e) { /* never let Back handling throw */ }
     return false;
