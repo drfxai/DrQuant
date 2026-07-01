@@ -144,16 +144,19 @@
   window.addEventListener("popstate", function () {
     if (SYNC) { SYNC = false; return; }      // our own rewind — ignore
     if (letExit) { letExit = false; DEPTH = 0; return; } // Exit confirmed — let this one through
-    if (closeTop()) {
-      // Always re-arm: the app keeps exactly one sentinel so Back never hard-exits.
-      try { history.pushState({ dqBack: 1 }, ""); } catch (e) {} DEPTH = 1;
-    } else {
-      // Nothing left to close — ask before leaving, stay armed. Confirming Exit
-      // releases the lock and best-effort closes (web cannot force-quit a PWA).
+    // Re-arm FIRST, unconditionally, so exactly one sentinel always remains on the
+    // stack and the NEXT Back is guaranteed to be captured — even if closeTop()
+    // throws or the sentinel bookkeeping drifted from an async reconcile. Back pops
+    // one sentinel and we immediately push one back, so the count never drifts. This
+    // is what makes the exit card appear reliably at the root instead of sometimes
+    // going missing (or the app hard-exiting) when the counter had gone out of sync.
+    try { history.pushState({ dqBack: 1 }, ""); } catch (e) {} DEPTH = 1;
+    if (!closeTop()) {
+      // Nothing left to close — confirm before leaving. Confirming Exit best-effort
+      // closes the window (web cannot force-quit an installed PWA).
       if (window.dqExit && window.dqExit.show) {
         window.dqExit.show(function () { letExit = true; DEPTH = 0; try { window.close(); } catch (e) {} try { history.go(-1); } catch (e) {} });
       }
-      try { history.pushState({ dqBack: 1 }, ""); } catch (e) {} DEPTH = 1;
     }
   });
 
