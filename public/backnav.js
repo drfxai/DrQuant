@@ -131,15 +131,15 @@
   function arm() {
     if (DEPTH === 0) { try { history.pushState({ dqBack: 1 }, ""); DEPTH = 1; } catch (e) {} }
   }
-  function rewindStale() {
-    SYNC = true; DEPTH = 0;
-    try { history.back(); } catch (e) { SYNC = false; }
-  }
-  // Keep history armed while any layer is open; clean up a leftover sentinel once
-  // the last layer was closed by something other than Back.
-  function reconcile() {
-    arm(); // always hold one sentinel so Back is always captured and never drops out of the app
-  }
+  // Force a FRESH sentinel even if we believe one is already armed. Browsers can
+  // silently ignore a history.pushState made before the first user gesture, so the
+  // load-time sentinel may never actually reach the stack; and once DEPTH says "1"
+  // the guarded arm() above refuses to make a new one, leaving the app with no live
+  // Back-stop. Re-forcing on the first real interaction guarantees Back is captured
+  // from then on. This is the core fix for "Back exits instantly on entry or after
+  // leaving a chat/channel" — the main page simply wasn't being re-armed.
+  function forceArm() { DEPTH = 0; arm(); }
+  function reconcile() { arm(); }
 
   window.addEventListener("popstate", function () {
     if (SYNC) { SYNC = false; return; }      // our own rewind — ignore
@@ -166,9 +166,20 @@
     new MutationObserver(reconcile).observe(document.body, { childList: true });
   } catch (e) {}
 
-  // State-only layers (open chat, info panel, side-menu/emoji toggles) change via
-  // re-render rather than a body child add/remove, so reconcile right after a tap.
-  document.addEventListener("click", function () { setTimeout(reconcile, 0); }, true);
+  // State-only navigations (opening/closing a chat, info panel, side-menu/emoji
+  // toggles) change via re-render rather than a body child add/remove, so the
+  // observer above cannot see them. Re-assert the sentinel on every interaction,
+  // and FORCE a fresh one on the first gesture (the load-time push may have been
+  // ignored before any user activation).
+  var didFirstGesture = false;
+  function onGesture() {
+    if (!didFirstGesture) { didFirstGesture = true; forceArm(); }
+    else arm();
+  }
+  document.addEventListener("click", function () { setTimeout(onGesture, 0); }, true);
+  document.addEventListener("touchstart", function () { setTimeout(onGesture, 0); }, { capture: true, passive: true });
+  // A resumed PWA / bfcache restore can drop our history entry — re-assert it.
+  window.addEventListener("pageshow", function (e) { if (e && e.persisted) forceArm(); else arm(); });
 
-  arm(); // hold a sentinel from load so the very first Back is captured, not an app exit
+  arm(); // best-effort sentinel from load (first-gesture forceArm covers pre-gesture drops)
 })();
