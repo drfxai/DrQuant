@@ -344,6 +344,19 @@ async function rebuildFromMessages(pool) {
       });
       if (ok) ingested++;
     }
+    // Resolve real display names for every public group/channel (not just the ones
+    // with recently-scanned messages) so webhook-sourced signals show the actual
+    // channel name instead of a "Channel #<id>" placeholder.
+    try {
+      const { rows: chRows } = await pool.query(
+        `SELECT id, name, username FROM chats
+          WHERE type IN ('group','channel') AND visibility = 'public'`
+      );
+      for (const c of chRows) {
+        const nm = c.name || (c.username ? "@" + c.username : null);
+        if (nm) chatNames.set(Number(c.id), nm);
+      }
+    } catch (e) {}
     expireStale();
     lastRebuildAt = Date.now();
     return { ingested, scanned: rows.length };
@@ -411,9 +424,14 @@ function groupBy(keyFn, labelFn) {
 }
 
 function tables() {
+  const chanLabel = (s) => {
+    if (s.chatId == null) return "TradingView";
+    const real = chatNames.get(s.chatId) || chatNames.get(Number(s.chatId));
+    return real || s.chatName || ("Channel #" + s.chatId);
+  };
   const channels = groupBy(
     (s) => (s.chatId != null ? s.chatId : "tv"),
-    (s) => s.chatName || (s.chatId != null ? "Channel #" + s.chatId : "TradingView")
+    chanLabel
   ).map((r) => Object.assign(r, { channel_id: r.key === "tv" ? null : Number(r.key) }));
 
   const symbols = groupBy((s) => s.symbol, (s) => s.symbol);
