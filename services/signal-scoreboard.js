@@ -344,13 +344,14 @@ async function rebuildFromMessages(pool) {
       });
       if (ok) ingested++;
     }
-    // Resolve real display names for every public group/channel (not just the ones
-    // with recently-scanned messages) so webhook-sourced signals show the actual
-    // channel name instead of a "Channel #<id>" placeholder.
+    // Resolve real display names for every group/channel (public AND private, and
+    // not only the ones with recently-scanned messages) so webhook-sourced signals
+    // show the actual channel name instead of a "Channel #<id>" placeholder. The
+    // name is only used as a label for channels that already appear on the
+    // scoreboard, so loading private names here exposes nothing new.
     try {
       const { rows: chRows } = await pool.query(
-        `SELECT id, name, username FROM chats
-          WHERE type IN ('group','channel') AND visibility = 'public'`
+        `SELECT id, name, username FROM chats WHERE type IN ('group','channel')`
       );
       for (const c of chRows) {
         const nm = c.name || (c.username ? "@" + c.username : null);
