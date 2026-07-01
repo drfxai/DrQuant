@@ -2156,10 +2156,46 @@ function openAdmin(){if(window.dqAdminDashboard)return window.dqAdminDashboard()
 });}
 
 // ━━━ NOTIFICATIONS — top-of-screen banner + OS notification (sound via playNotif) ━━━
+// Web Push (service worker registration + push subscription)
+function dqUrlB64ToU8(base64){
+  var pad="=".repeat((4-base64.length%4)%4);
+  var b64=(base64+pad).replace(/-/g,"+").replace(/_/g,"/");
+  var raw=atob(b64),out=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+var dqSWReg=null;
+function dqInitPush(){
+  if(!("serviceWorker" in navigator)||!("PushManager" in window))return;
+  navigator.serviceWorker.register("/sw.js").then(function(reg){
+    dqSWReg=reg;
+    navigator.serviceWorker.addEventListener("message",function(ev){
+      var d=ev.data||{};
+      if(d.type==="dq-open-chat"&&d.chatId!=null&&typeof dqGoToChat==="function")dqGoToChat(d.chatId);
+    });
+    if(("Notification" in window)&&Notification.permission==="granted")dqSubscribePush();
+  }).catch(function(){});
+}
+function dqSubscribePush(){
+  if(!dqSWReg||typeof S==="undefined"||!S.token)return;
+  fetch("/api/push/vapid-public-key",{headers:{Authorization:"Bearer "+S.token}})
+    .then(function(r){return r.ok?r.json():null;})
+    .then(function(j){
+      if(!j||!j.key)return;
+      return dqSWReg.pushManager.getSubscription().then(function(existing){
+        if(existing)return existing;
+        return dqSWReg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:dqUrlB64ToU8(j.key)});
+      });
+    })
+    .then(function(sub){
+      if(!sub)return;
+      return fetch("/api/push/subscribe",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+S.token},body:JSON.stringify({subscription:sub})});
+    }).catch(function(){});
+}
 function initNotify(){
   if(!("Notification" in window))return;
   if(Notification.permission!=="default")return;
-  const ask=()=>{try{Notification.requestPermission().catch(()=>{});}catch(e){}document.removeEventListener("click",ask);document.removeEventListener("touchstart",ask);};
+  const ask=()=>{try{Notification.requestPermission().then(function(p){if(p==="granted"&&typeof dqSubscribePush==="function")dqSubscribePush();}).catch(()=>{});}catch(e){}document.removeEventListener("click",ask);document.removeEventListener("touchstart",ask);};
   document.addEventListener("click",ask,{once:true});
   document.addEventListener("touchstart",ask,{once:true});
 }
@@ -2245,7 +2281,7 @@ window.addEventListener("resize",()=>{
 (async()=>{applyCSS();setVH();
   $("#app").innerHTML=`<div style="width:100vw;height:calc(var(--vh,1vh)*100);display:flex;align-items:center;justify-content:center;background:#030812"><div style="text-align:center;animation:pu 1.5s ease infinite"><div style="font-size:44px;margin-bottom:14px">📈</div><div style="color:#607090;font-size:14px;font-family:'Outfit',sans-serif">Loading...</div></div></div>`;
   if(S.token){try{const u=await api("/auth/me");S.user=u;localStorage.setItem("dq_u",JSON.stringify(u));}catch{S.token=null;S.user=null;localStorage.removeItem("dq_t");localStorage.removeItem("dq_u");}}
-  render();if(S.token)connectSocket();initNotify();
+  render();if(S.token)connectSocket();initNotify();if(S.token)dqInitPush();
 })();
 </script>
 <script src="/keyboard.js?v=20260701-2"></script>

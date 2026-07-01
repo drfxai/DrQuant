@@ -406,6 +406,21 @@ router.post("/:id/messages", async (req, res) => {
     const payload = { ...msg, sender_name: sender.name, sender_avatar: sender.avatar, sender_role: sender.role, sender_subscription: sender.subscription_status, ...replyInfo };
     const { rows: members } = await pool.query("SELECT user_id FROM chat_members WHERE chat_id=$1", [chatId]);
     members.forEach(m => io.to(`user_${m.user_id}`).emit("chat_message", payload));
+    // Web Push to recipients whose app is closed (no active socket) — best-effort, non-blocking.
+    try {
+      const pushSvc = require("../services/push");
+      if (pushSvc.isEnabled()) {
+        const pTitle = payload.sender_name || "New message";
+        const pBody = (text || (img ? "Sent a photo" : "New message")).slice(0, 120);
+        members.forEach(m => {
+          if (m.user_id === req.user.id) return;
+          io.in(`user_${m.user_id}`).allSockets().then(socks => {
+            if (socks && socks.size > 0) return;
+            pushSvc.sendToUser(pool, m.user_id, { title: pTitle, body: pBody, chatId, url: "/", tag: "dq-chat-" + chatId });
+          }).catch(() => {});
+        });
+      }
+    } catch (e) {}
     await pool.query("UPDATE chat_members SET last_read_id=$1 WHERE chat_id=$2 AND user_id=$3", [msg.id, chatId, req.user.id]);
     // AI Bot
     if (chat?.type === "dm" && text) {

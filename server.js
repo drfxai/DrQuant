@@ -129,6 +129,7 @@ try { app.use("/api/quantoption", require("./routes/quantoption")); } catch (e) 
 app.use("/api/translate", require("./routes/translate")); // chat translation (provider-agnostic; degrades to no-op if unconfigured)
 app.use("/api/wizard", require("./routes/wizard")); // wizard ("guard") panel: scoped moderation over regular users only
 try { app.use("/api/leagues", require("./routes/leagues")); } catch (e) { console.error("Leagues route disabled:", e.message); } // QNTM Leagues + League Unlock Ritual
+try { app.use("/api/push", require("./routes/push")); } catch (e) { console.error("Push route disabled:", e.message); } // Web Push: message notifications when the app is closed
 
 // QNTM economy — internal ledger/wallet admin routes (mounts at /api/qntm/admin),
 // guarded by the host's auth + admin middleware so it shares one RBAC path.

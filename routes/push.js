@@ -1,6 +1,10 @@
 // routes/push.js — Web Push subscription management for the authenticated user.
 const express = require("express");
 const router = express.Router();
+
+// Same auth gate the other API routes use (populates req.user).
+router.use((req, res, next) => req.app.get("authMiddleware")(req, res, next));
+
 const push = require("../services/push");
 
 // Public VAPID key so the client can build a push subscription.
