@@ -120,7 +120,7 @@ function evaluate(pos, nowMs, maxTicks) {
   if (!resolved && nowSteps >= expirySteps) {
     // reached expiry with no early hit → distance verdict at the expiry price
     resolved = true;
-    outcome = expiryOutcome(price, target, stop);
+    outcome = pos.voidOnTimeout ? "void" : expiryOutcome(price, target, stop);
     exitPrice = price;
     exitStep = expirySteps;
   }
@@ -157,7 +157,7 @@ function profitOf(stake) {
 //   lose → credit = 0            (escrow stays in pool; user net -stake)
 function settleAmounts(outcome, stake) {
   if (outcome === "win") { const profit = profitOf(stake); return { credit: decimal.add(stake, profit), profit: profit }; }
-  if (outcome === "draw") return { credit: stake, profit: "0" };
+  if (outcome === "draw" || outcome === "void") return { credit: stake, profit: "0" };
   return { credit: "0", profit: decimal.neg(stake) };
 }
 

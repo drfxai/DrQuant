@@ -108,7 +108,7 @@ async function ensureSchema() {
       step_ms     INT NOT NULL,
       server_seed TEXT NOT NULL,
       seed_hash   TEXT NOT NULL,
-      status      TEXT NOT NULL DEFAULT 'open',   -- open | won | lost | draw
+      status      TEXT NOT NULL DEFAULT 'open',   -- open | won | lost | draw | void
       exit_price  NUMERIC,
       payout      NUMERIC NOT NULL DEFAULT 0,
       stake_txn   TEXT,
@@ -119,6 +119,7 @@ async function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS qo_pos_user ON quantoption_positions(user_id, status, id DESC);
     CREATE INDEX IF NOT EXISTS qo_pos_open ON quantoption_positions(status, expires_at) WHERE status = 'open';
+    ALTER TABLE quantoption_positions ADD COLUMN IF NOT EXISTS void_on_timeout BOOLEAN NOT NULL DEFAULT false;
   `);
   // Signal-bound positions (real God Mode trades) live in their OWN table so the
   // simulated-engine queries in this file never touch a seedless signal row. The
@@ -261,6 +262,9 @@ async function openPosition(userId, input) {
   if (!Number.isFinite(stakeNum) || stakeNum < MIN_STAKE) { const e = new Error("stake below minimum"); e.code = "bad_stake"; throw e; }
   if (stakeNum > MAX_STAKE) { const e = new Error("stake above maximum"); e.code = "bad_stake"; throw e; }
   const stake = String(stakeNum);
+  // optional "auto-close time limit": VOID+refund the stake if neither TP nor SL is
+  // touched by expiry (instead of the default distance verdict at the deadline).
+  const voidOnTimeout = input.voidOnTimeout === true || input.voidOnTimeout === "true";
 
   // SIMULATED mode keeps one open position per user (simple UX + settlement, like
   // Easy Trade). REAL mode allows stacking concurrent positions, so the guard is
@@ -324,10 +328,10 @@ async function openPosition(userId, input) {
     const uwId = await userWalletId(userId, cx);
     const { rows: pr } = await cx.query(
       `INSERT INTO quantoption_positions
-         (user_id, symbol, direction, stake, entry_price, target_price, stop_price, expiry_sec, vol, step_ms, server_seed, seed_hash, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+         (user_id, symbol, direction, stake, entry_price, target_price, stop_price, expiry_sec, vol, step_ms, server_seed, seed_hash, expires_at, void_on_timeout)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [String(userId), cfg.symbol, dir, stake, String(entry), String(target), String(stop),
-       expirySec, String(cfg.vol), STEP_MS, seedPair.seed, seedPair.hash, expiresAt]);
+       expirySec, String(cfg.vol), STEP_MS, seedPair.seed, seedPair.hash, expiresAt, voidOnTimeout]);
     const p = pr[0];
     // debit the user, credit the pool — overdraw throws InsufficientFunds and
     // rolls the whole open back (position insert included).
@@ -451,8 +455,9 @@ async function realEvaluate(row, nowMs) {
 
   // rule 3 — reached expiry with no touch → distance verdict
   if (nowMs >= expiryMs) {
-    const outcome = engine.expiryOutcome(livePrice, target, stop);
-    return { resolved: true, outcome, livePrice, exitPrice: livePrice, reason: "expiry_distance" };
+    const outcome = row.void_on_timeout ? "void" : engine.expiryOutcome(livePrice, target, stop);
+    return { resolved: true, outcome, livePrice, exitPrice: livePrice,
+             reason: row.void_on_timeout ? "expiry_void" : "expiry_distance" };
   }
 
   // still live, no touch yet
@@ -466,6 +471,7 @@ function enginePos(row) {
     stop: Number(row.stop_price), vol: Number(row.vol), stepMs: Number(row.step_ms),
     expirySec: Number(row.expiry_sec), seed: row.server_seed,
     openedMs: new Date(row.opened_at).getTime(),
+    voidOnTimeout: !!row.void_on_timeout,
   };
 }
 
@@ -477,23 +483,25 @@ async function resolve(positionId, outcome, exitPrice) {
     const p = rows[0];
     if (p.status !== "open") return { ok: true, already: true };
 
-    const status = outcome === "win" ? "won" : outcome === "draw" ? "draw" : "lost";
+    const status = outcome === "win" ? "won" : outcome === "draw" ? "draw" : outcome === "void" ? "void" : "lost";
     const amt = engine.settleAmounts(outcome, p.stake);
     let payoutTxnId = null;
 
     if (decimal.isPositive(amt.credit)) {
       // win → 1.85× ; draw → 1× : pool pays the user
       const isWin = outcome === "win";
+      const isVoid = outcome === "void";
+      const refundDesc = isVoid ? "Quant Option void refund" : "Quant Option draw refund";
       const txn = await postTransaction({
         type: isWin ? "tournament_prize" : "refund", amount: amt.credit,
         movements: [
-          { walletId: _poolWalletId, direction: "debit", amount: amt.credit, description: isWin ? "Quant Option win" : "Quant Option draw refund" },
-          { walletId: await userWalletId(p.user_id, cx), direction: "credit", amount: amt.credit, description: isWin ? "Quant Option win" : "Quant Option draw refund" },
+          { walletId: _poolWalletId, direction: "debit", amount: amt.credit, description: isWin ? "Quant Option win" : refundDesc },
+          { walletId: await userWalletId(p.user_id, cx), direction: "credit", amount: amt.credit, description: isWin ? "Quant Option win" : refundDesc },
         ],
         initiatorUserId: p.user_id,
         reference: { type: "quantoption_position", id: p.id },
         idempotencyKey: (isWin ? "qo:payout:" : "qo:refund:") + p.id,
-        metadata: { app: "quantoption", kind: isWin ? "payout" : "draw", outcome },
+        metadata: { app: "quantoption", kind: isWin ? "payout" : (isVoid ? "void" : "draw"), outcome },
       }, cx);
       payoutTxnId = txn.public_id;
     }
@@ -589,20 +597,21 @@ async function history(userId, limitInput, offsetInput) {
     `SELECT * FROM quantoption_positions WHERE user_id=$1 ORDER BY id DESC LIMIT $2 OFFSET $3`,
     [String(userId), limit, offset]);
   const { rows: agg } = await pool.query(
-    `SELECT COUNT(*) FILTER (WHERE status IN ('won','lost','draw')) AS settled,
+    `SELECT COUNT(*) FILTER (WHERE status IN ('won','lost','draw','void')) AS settled,
             COUNT(*) FILTER (WHERE status='won')   AS won,
             COUNT(*) FILTER (WHERE status='lost')  AS lost,
             COUNT(*) FILTER (WHERE status='draw')  AS draw,
+            COUNT(*) FILTER (WHERE status='void')  AS voided,
             COUNT(*) FILTER (WHERE status='open')  AS open,
-            COALESCE(SUM(stake)  FILTER (WHERE status IN ('won','lost','draw')),0) AS staked,
-            COALESCE(SUM(payout) FILTER (WHERE status IN ('won','draw')),0)        AS paid
+            COALESCE(SUM(stake)  FILTER (WHERE status IN ('won','lost','draw','void')),0) AS staked,
+            COALESCE(SUM(payout) FILTER (WHERE status IN ('won','draw','void')),0)        AS paid
        FROM quantoption_positions WHERE user_id=$1`, [String(userId)]);
   const a = agg[0] || {};
   const settled = Number(a.settled || 0), won = Number(a.won || 0), lost = Number(a.lost || 0);
   return {
     items: rows.map((r) => positionView(r, { brief: true })),
     summary: {
-      settled, won, lost, draw: Number(a.draw || 0), open: Number(a.open || 0),
+      settled, won, lost, draw: Number(a.draw || 0), voided: Number(a.voided || 0), open: Number(a.open || 0),
       winRate: (won + lost) ? Math.round((won / (won + lost)) * 100) : null,
       staked: a.staked || "0", paid: a.paid || "0",
       net: decimal.sub(a.paid || "0", a.staked || "0"),
@@ -756,6 +765,7 @@ function positionView(p, extra) {
     tp2: roundPx(p.symbol, Number(p.entry_price) + (Number(p.target_price) - Number(p.entry_price)) * 2 / 3),
     tp3: roundPx(p.symbol, Number(p.target_price)),
     expirySec: Number(p.expiry_sec), stepMs: Number(p.step_ms), dp: (symCfg(p.symbol) || {}).dp,
+    voidOnTimeout: !!p.void_on_timeout,
     openedAt: p.opened_at, expiresAt: p.expires_at, settledAt: p.settled_at,
     seedHash: p.seed_hash,                                  // commitment (always visible)
     payout: p.payout, exitPrice: p.exit_price,

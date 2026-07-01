@@ -124,6 +124,7 @@
     openPositions: [],        // all open positions (real mode can stack)
     focusId: null,            // id of the position whose levels overlay the chart
     manualTP: "", manualSL: "", // optional user-entered TP(=TP3)/SL for the Trade tab (blank = auto)
+    voidOnTimeout: false,     // opt-in: refund the stake if neither TP nor SL is touched by expiry
     tpHit: {},                // fired TP-cross celebrations (per position id) so each pops once
     realCandles: {},          // symbol -> [{t,o,h,l,c}] from /quantoption/chart
     chartProvider: null,      // 'binance' | 'twelvedata' (from /chart)
@@ -191,6 +192,10 @@
       '.qo-exp{padding:10px 0;border-radius:8px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';color:' + c.t2 + ';font-size:12.5px;font-weight:800;cursor:pointer;font-family:inherit;text-align:center;transition:border-color .14s,background .14s,color .14s}' +
       '.qo-exp:hover{border-color:' + hexA(c.blue, .35) + ';color:' + c.t1 + '}' +
       '.qo-exp.on{border-color:' + hexA(c.blue, .55) + ';background:' + hexA(c.blue, .12) + ';color:' + c.blue + '}' +
+      '.qo-switch{position:relative;width:46px;height:27px;border-radius:14px;border:1px solid ' + c.bd + ';background:' + c.panel3 + ';cursor:pointer;flex-shrink:0;padding:0;transition:background .16s,border-color .16s}' +
+      '.qo-switch .qo-switch-knob{position:absolute;top:2px;left:2px;width:21px;height:21px;border-radius:50%;background:' + c.t4 + ';transition:transform .18s,background .18s}' +
+      '.qo-switch.on{background:' + hexA(c.blue, .85) + ';border-color:' + c.blue + '}' +
+      '.qo-switch.on .qo-switch-knob{transform:translateX(19px);background:#fff}' +
       '.qo-pre{display:flex;gap:9px;margin-bottom:12px}' +
       '.qo-pre .b{flex:1;border-radius:8px;background:' + c.panel + ';border:1px solid ' + c.bd + ';padding:10px 11px}' +
       '.qo-pre .k{font-size:9px;letter-spacing:.8px;text-transform:uppercase;font-weight:800;color:' + c.t4 + ';margin-bottom:4px}' +
@@ -558,6 +563,15 @@
         '<input class="qo-inp" id="qo-sl" type="number" inputmode="decimal" step="any" placeholder="SL (stop)" value="' + (QO.manualSL != null ? QO.manualSL : "") + '" style="flex:1;min-width:0">' +
       '</div>' +
     '</div>' +
+    '<div class="qo-card" id="qo-void-card">' +
+      '<div style="display:flex;align-items:center;gap:12px">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:13.5px;font-weight:800;color:' + c.t1 + '">Auto-close time limit</div>' +
+          '<div style="font-size:11px;color:' + c.t3 + ';margin-top:2px;line-height:1.35">Optional — refunds your stake if the trade hasn’t resolved by then</div>' +
+        '</div>' +
+        '<button type="button" id="qo-void-tog" role="switch" aria-checked="' + (QO.voidOnTimeout ? 'true' : 'false') + '" class="qo-switch' + (QO.voidOnTimeout ? ' on' : '') + '"><span class="qo-switch-knob"></span></button>' +
+      '</div>' +
+    '</div>' +
     '<div class="qo-pre">' +
       '<div class="b"><div class="k">Potential payout</div><div class="v" id="qo-payout" style="color:' + c.green + '">' + fmtQ(payout) + '</div></div>' +
       '<div class="b"><div class="k">Profit</div><div class="v" style="color:' + c.green + '">+' + Math.round((QO.payoutBps || 8500) / 100) + '%</div></div>' +
@@ -630,10 +644,10 @@
     '</div>';
     if (!h.items || !h.items.length) return head + '<div class="qo-empty">No positions yet. Open your first trade.</div>';
     var rows = h.items.map(function (p) {
-      var win = p.status === "won", draw = p.status === "draw", open = p.status === "open";
-      var col = win ? c.green : draw ? c.gold : open ? c.blue : c.red;
-      var tag = win ? "WIN" : draw ? "DRAW" : open ? "LIVE" : "LOSS";
-      var prof = win ? "+" + fmtQ(Number(p.payout) - Number(p.stake)) : draw ? "0" : open ? "—" : "-" + fmtQ(p.stake);
+      var win = p.status === "won", draw = p.status === "draw", voidR = p.status === "void", open = p.status === "open";
+      var col = win ? c.green : draw ? c.gold : voidR ? c.t3 : open ? c.blue : c.red;
+      var tag = win ? "WIN" : draw ? "DRAW" : voidR ? "VOID" : open ? "LIVE" : "LOSS";
+      var prof = win ? "+" + fmtQ(Number(p.payout) - Number(p.stake)) : (draw || voidR) ? "0" : open ? "—" : "-" + fmtQ(p.stake);
       return '<div style="display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:8px;background:' + c.panel + ';border:1px solid ' + c.bd + ';margin-bottom:7px">' +
         '<span class="qo-badge" style="background:' + hexA(col, .14) + ';color:' + col + ';flex-shrink:0">' + tag + '</span>' +
         '<div style="flex:1;min-width:0"><div style="font-size:12.5px;font-weight:800;color:' + c.t1 + '">' + ESC(p.label || p.symbol) + ' · ' + (p.dir === "long" ? "Long" : "Short") + '</div>' +
@@ -716,6 +730,7 @@
       st.querySelectorAll(".qo-exp").forEach(function (b) {
         b.onclick = function () { var i = +b.getAttribute("data-i"); if (i !== QO.expIdx) { QO.expIdx = i; rerender(); } };
       });
+      var vtog = T("#qo-void-tog"); if (vtog) vtog.onclick = function () { QO.voidOnTimeout = !QO.voidOnTimeout; rerender(); };
       var tpI = T("#qo-tp"); if (tpI) tpI.oninput = function () { QO.manualTP = tpI.value; };
       var slI = T("#qo-sl"); if (slI) slI.oninput = function () { QO.manualSL = slI.value; };
       var open = T("#qo-open"); if (open) open.onclick = openPosition;
@@ -751,7 +766,7 @@
     if (balNum() < stake) { toast("Not enough QNTM in your wallet", "error"); return; }
     QO.busy = true;
     var btn = document.getElementById("qo-open"); if (btn) { btn.disabled = true; btn.style.opacity = ".6"; }
-    API("/quantoption/open", { method: "POST", body: { symbol: sym.symbol, direction: QO.dir, expirySec: curExpiry(), stake: stake, target: QO.manualTP, stop: QO.manualSL } })
+    API("/quantoption/open", { method: "POST", body: { symbol: sym.symbol, direction: QO.dir, expirySec: curExpiry(), stake: stake, target: QO.manualTP, stop: QO.manualSL, voidOnTimeout: QO.voidOnTimeout } })
       .then(function (r) {
         QO.busy = false;
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); rerender(); return; }
@@ -820,12 +835,12 @@
 
   function showResult(p) {
     var c = TH();
-    var win = p.status === "won", draw = p.status === "draw";
+    var win = p.status === "won", draw = p.status === "draw", voidR = p.status === "void";
     if (win && window.dqQOFx) { try { window.dqQOFx.burst(); } catch (e) {} }
-    var col = win ? c.green : draw ? c.gold : c.red;
-    var title = win ? "WIN" : draw ? "DRAW" : "LOSS";
-    var profit = win ? (Number(p.payout) - Number(p.stake)) : draw ? 0 : -Number(p.stake);
-    var icon = win ? '<path d="M20 6L9 17l-5-5"/>' : draw ? '<path d="M5 12h14"/>' : '<path d="M18 6 6 18M6 6l12 12"/>';
+    var col = win ? c.green : draw ? c.gold : voidR ? c.t3 : c.red;
+    var title = win ? "WIN" : draw ? "DRAW" : voidR ? "VOID" : "LOSS";
+    var profit = win ? (Number(p.payout) - Number(p.stake)) : (draw || voidR) ? 0 : -Number(p.stake);
+    var icon = win ? '<path d="M20 6L9 17l-5-5"/>' : draw ? '<path d="M5 12h14"/>' : voidR ? '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/>' : '<path d="M18 6 6 18M6 6l12 12"/>';
     var ov = document.createElement("div");
     ov.id = "qo-result";
     ov.style.cssText = "position:fixed;inset:0;z-index:6300;display:flex;align-items:center;justify-content:center;padding:22px;background:rgba(3,6,14,.76);-webkit-backdrop-filter:blur(7px);backdrop-filter:blur(7px)";
@@ -835,7 +850,7 @@
           '<div style="width:58px;height:58px;border-radius:50%;margin:0 auto;display:flex;align-items:center;justify-content:center;background:' + hexA(col, .16) + ';animation:qoStamp .5s cubic-bezier(.2,1.2,.3,1)">' +
             '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="' + col + '" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' + icon + '</svg></div>' +
           '<div style="font-size:30px;font-weight:900;letter-spacing:2px;color:' + col + ';margin-top:10px">' + title + '</div>' +
-          '<div style="font-size:24px;font-weight:800;color:' + c.t1 + ';margin-top:4px;font-variant-numeric:tabular-nums">' + fmtSigned(profit) + ' <span style="font-size:13px;color:' + c.t3 + '">QNTM</span></div>' +
+          '<div style="font-size:24px;font-weight:800;color:' + c.t1 + ';margin-top:4px;font-variant-numeric:tabular-nums">' + fmtSigned(profit) + ' <span style="font-size:13px;color:' + c.t3 + '">QNTM</span></div>' + (voidR ? '<div style="font-size:11.5px;color:' + c.t3 + ';margin-top:7px;line-height:1.4">Stake refunded — the trade didn’t reach TP or SL before the time limit.</div>' : '') +
         '</div>' +
         '<div style="padding:14px 18px 4px">' +
           kv("Symbol", ESC((p.label || p.symbol) + " · " + (p.dir === "long" ? "Long" : "Short")), c) +
