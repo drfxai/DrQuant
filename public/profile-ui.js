@@ -343,6 +343,7 @@
       // values: live (seeded from S.user) or SAMPLE preview
       var V = buildValues();
       var LIVE_AVATAR = null;   // set if the user uploads a new avatar this session
+      var _lt = false; try { _lt = document.documentElement.classList.contains("dq-light"); } catch (e) {}  // follow the app light/dark theme
 
       // widen + de-pad the host modal so cards reach the edges like the mockup
       var md = body.closest(".dq-modal-md");
@@ -357,7 +358,7 @@
         md.style.border = "none";
         md.style.overflowY = "auto";
         md.style.setProperty("max-height", "none", "important");  // beat the .dq-modal-md CSS cap
-        md.style.background = "radial-gradient(130% 90% at 50% -10%,#0d1838,#080f26 55%,#05091c)";
+        md.style.background = _lt ? "radial-gradient(130% 90% at 50% -10%,#f4f8fd,#e9eff8 55%,#e3ebf6)" : "radial-gradient(130% 90% at 50% -10%,#0d1838,#080f26 55%,#05091c)";
         var _pov = md.parentNode;   // the .dq-modal-ov host: drop the centering pad, stretch full-height
         if (_pov && _pov.classList && _pov.classList.contains("dq-modal-ov")) {
           _pov.style.padding = "0";
@@ -367,8 +368,14 @@
         if (hdr && hdr.querySelector && hdr.querySelector("#md-cl")) hdr.style.display = "none";
       }
 
-      var cap = "#7d93b8", txt1 = "#eaf2ff", txt2 = "#b8c8e8";
-      var cardBg = "rgba(14,24,50,.55)", cardB = "rgba(120,160,255,.16)";
+      var cap, txt1, txt2, cardBg, cardB;
+      if (_lt) {
+        cap = "#5c6d8c"; txt1 = "#141a26"; txt2 = "#42536f";
+        cardBg = "rgba(255,255,255,.72)"; cardB = "rgba(70,110,180,.22)";
+      } else {
+        cap = "#7d93b8"; txt1 = "#eaf2ff"; txt2 = "#b8c8e8";
+        cardBg = "rgba(14,24,50,.55)"; cardB = "rgba(120,160,255,.16)";
+      }
 
       // ── LEFT: Profile header panel ──────────────────────────────────────────
       var leftHeader =
@@ -380,7 +387,7 @@
         // QNTM balance compact card
         '<div id="dq-wallet-chip" title="Open your QNTM wallet" style="cursor:pointer;display:flex;align-items:center;gap:12px;margin-top:16px;padding:12px 14px;border-radius:16px;background:' + cardBg + ';border:1px solid ' + cardB + '">' +
           '<div style="width:40px;height:40px;border-radius:11px;background:' + GREEN_GRAD + ';display:flex;align-items:center;justify-content:center;color:#04140d;font-size:19px;font-weight:900;box-shadow:0 4px 14px ' + GREEN_GLOW + '">Q</div>' +
-          '<div style="flex:1;min-width:0"><div style="color:' + cap + ';font-size:12px">QNTM Balance</div><div id="dq-wc-bal" style="color:#fff;font-size:20px;font-weight:900;line-height:1.15">' + V.qntm + '</div></div>' +
+          '<div style="flex:1;min-width:0"><div style="color:' + cap + ';font-size:12px">QNTM Balance</div><div id="dq-wc-bal" style="color:' + txt1 + ';font-size:20px;font-weight:900;line-height:1.15">' + V.qntm + '</div></div>' +
         '</div>';
 
       // emblem (concentric neon rings + winged DrFX crest), no avatar img by default
@@ -479,7 +486,7 @@
               '<div id="pp-league-name" style="color:' + txt1 + ';font-size:22px;font-weight:900;line-height:1.1">' + esc2(V.league) + '</div>' +
               // combined total XP headline
               '<div style="margin:7px 0 2px;display:flex;align-items:baseline;gap:7px">' +
-                '<span id="pp-xp-total" style="color:#fff;font-size:26px;font-weight:900;line-height:1;text-shadow:0 0 14px ' + BLUE_GLOW + '">' + initTotal + '</span>' +
+                '<span id="pp-xp-total" style="color:' + txt1 + ';font-size:26px;font-weight:900;line-height:1;text-shadow:0 0 14px ' + BLUE_GLOW + '">' + initTotal + '</span>' +
                 '<span style="color:' + cap + ';font-size:13px;font-weight:700">/ <span id="pp-xp-max">' + fmtN(t0.nextXp) + '</span> XP</span>' +
               '</div>' +
               '<div style="color:' + cap + ';font-size:11.5px;margin-bottom:8px">Total XP \u2014 Market + Easy Trade combined</div>' +

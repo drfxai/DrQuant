@@ -54,6 +54,18 @@
   /* ── palette (exchange dark; folds in app `t` accent) ───────────────────── */
   function TH() {
     var x = TG();
+    if (x && x.n === "light") {
+      return {
+        bg: "#eef2f8", panel: "#ffffff", panel2: "#f6f8fc", panel3: "#eef3fa",
+        bd: "rgba(70,100,160,.2)", bdSoft: "rgba(70,100,160,.1)",
+        t1: "#141a26", t2: "#42536f", t3: "#6b7d9a", t4: "#93a2bd",
+        blue: x.pr || "#2f6fe0", blueGlow: x.pgw || "rgba(47,111,224,.4)",
+        green: "#15a34a", greenD: "#0f7e39", greenGlow: "rgba(21,163,74,.35)",
+        red: "#e23a5c", redD: "#c41e44", redGlow: "rgba(226,58,92,.35)",
+        gold: "#c68f22", goldGlow: "rgba(198,143,34,.4)",
+        grid: "rgba(70,100,160,.12)"
+      };
+    }
     return {
       bg: "#070b16", panel: "#0d1525", panel2: "#101a2c", panel3: "#0a1120",
       bd: "rgba(120,150,200,.16)", bdSoft: "rgba(120,150,200,.09)",
@@ -207,6 +219,10 @@
       '@keyframes qoStamp{0%{transform:scale(.4) rotate(-10deg);opacity:0}60%{transform:scale(1.1) rotate(3deg)}100%{transform:scale(1) rotate(0);opacity:1}}';
     var el = document.createElement("style"); el.id = "qo-css"; el.textContent = css; document.head.appendChild(el);
   }
+
+  // Lets the app rebuild QuantOption's stylesheet when the global light/dark
+  // theme changes (all QO colours come from TH(), which follows the app theme).
+  window.qoApplyTheme = function () { try { var e = document.getElementById("qo-css"); if (e) { e.remove(); injectCSS(); } } catch (_) {} };
 
   /* ── data loaders ───────────────────────────────────────────────────────── */
   function loadMe() {

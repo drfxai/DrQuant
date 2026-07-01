@@ -83,7 +83,7 @@ if(window.visualViewport){
 }
 window.addEventListener("orientationchange",()=>setTimeout(()=>{setVH();syncAppViewport();},300));
 
-function applyCSS(){let el=$("#tcss");if(!el){el=ce("style");el.id="tcss";document.head.appendChild(el);}
+function applyCSS(){let el=$("#tcss");if(!el){el=ce("style");el.id="tcss";document.head.appendChild(el);}try{document.documentElement.classList.toggle("dq-light",!!(typeof t!=="undefined"&&t&&t.n==="light"));if(window.qoApplyTheme)window.qoApplyTheme();if(window.profileApplyTheme)window.profileApplyTheme();}catch(e){}
 el.textContent=`*{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;overflow:hidden;background:${t.bg}}body{background:${t.bg};color:${t.t1};-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:${t.sc};border-radius:3px}
 input,textarea,button,select{touch-action:auto}
@@ -2268,10 +2268,10 @@ window.addEventListener("resize",()=>{
 <script src="/easytrade-leaderboard.js?v=20260630-1"></script>
 <script src="/idcard.js"></script>
 <script src="/crystal3d.js"></script>
-<script src="/profile-ui.js?v=20260701-1"></script>
+<script src="/profile-ui.js?v=20260701-2"></script>
 <script src="/babypick.js?v=20260630-1"></script>
 <script src="/easytrade-hub.js?v=20260630-2"></script>
-<script src="/quant-option.js"></script>
+<script src="/quant-option.js?v=20260701-1"></script>
 <script src="/qo-realprice.js"></script>
 <script src="/qo-chart.js"></script>
 <script src="/qo-signals.js?v=20260630-2"></script>
