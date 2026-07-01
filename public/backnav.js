@@ -22,6 +22,7 @@
 
   var DEPTH = 0;     // sentinel entries we currently hold (0 or 1)
   var SYNC = false;  // true while we rewind history ourselves (popstate must ignore it)
+  var letExit = false; // true only between an Exit confirmation and the popstate it triggers
 
   function byId(id) { return document.getElementById(id); }
 
@@ -57,9 +58,13 @@
     } catch (e) { return false; }
   }
 
+  // The exit-confirmation card (exit-prompt.js) is treated as the top-most layer.
+  function exitOpen() { return !!(window.dqExit && window.dqExit.isOpen()); }
+  function closeExit() { if (window.dqExit && window.dqExit.close) window.dqExit.close(); }
+
   function anyLayerOpen() {
     try {
-      return !!(byId("ctx-menu") || emojiOpen() || document.querySelector(".dq-modal-ov") ||
+      return !!(exitOpen() || byId("ctx-menu") || emojiOpen() || document.querySelector(".dq-modal-ov") ||
                 fullscreenOverlay() ||
                 // Easy Trade / Baby Pick overlays style themselves via an injected
                 // stylesheet (not inline), so fullscreenOverlay() cannot see them.
@@ -74,6 +79,8 @@
   // Close the single top-most layer. Returns true if it closed something.
   function closeTop() {
     try {
+      if (exitOpen()) { closeExit(); return true; }
+
       var el = byId("ctx-menu");
       if (el) { el.remove(); return true; }
 
@@ -131,17 +138,22 @@
   // Keep history armed while any layer is open; clean up a leftover sentinel once
   // the last layer was closed by something other than Back.
   function reconcile() {
-    if (anyLayerOpen()) arm();
-    else if (DEPTH > 0) rewindStale();
+    arm(); // always hold one sentinel so Back is always captured and never drops out of the app
   }
 
   window.addEventListener("popstate", function () {
     if (SYNC) { SYNC = false; return; }      // our own rewind — ignore
+    if (letExit) { letExit = false; DEPTH = 0; return; } // Exit confirmed — let this one through
     if (closeTop()) {
-      if (anyLayerOpen()) { try { history.pushState({ dqBack: 1 }, ""); } catch (e) {} DEPTH = 1; }
-      else DEPTH = 0;
+      // Always re-arm: the app keeps exactly one sentinel so Back never hard-exits.
+      try { history.pushState({ dqBack: 1 }, ""); } catch (e) {} DEPTH = 1;
     } else {
-      DEPTH = 0;                              // nothing was open -> allow the app to exit
+      // Nothing left to close — ask before leaving, stay armed. Confirming Exit
+      // releases the lock and best-effort closes (web cannot force-quit a PWA).
+      if (window.dqExit && window.dqExit.show) {
+        window.dqExit.show(function () { letExit = true; DEPTH = 0; try { window.close(); } catch (e) {} try { history.go(-1); } catch (e) {} });
+      }
+      try { history.pushState({ dqBack: 1 }, ""); } catch (e) {} DEPTH = 1;
     }
   });
 
@@ -154,4 +166,6 @@
   // State-only layers (open chat, info panel, side-menu/emoji toggles) change via
   // re-render rather than a body child add/remove, so reconcile right after a tap.
   document.addEventListener("click", function () { setTimeout(reconcile, 0); }, true);
+
+  arm(); // hold a sentinel from load so the very first Back is captured, not an app exit
 })();
