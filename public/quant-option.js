@@ -694,12 +694,21 @@
   // listener below.
   function selectOpenChip(id) {
     id = +id; if (!id) return;
-    QO.focusId = id;
+    // Resolve the tapped position and switch focus + charted symbol to it.
     var fp = null, list = QO.openPositions || [], k;
     for (k = 0; k < list.length; k++) { if (list[k].id === id) { fp = list[k]; break; } }
-    if (fp) { for (k = 0; k < QO.symbols.length; k++) { if (QO.symbols[k].symbol === fp.symbol) { QO.symIdx = k; break; } } }
-    syncFocus(); rerender();
-    if (QO.realPrices) fetchChart(true);
+    if (!fp) return;                       // position no longer open — ignore the tap
+    QO.focusId = id;
+    for (k = 0; k < QO.symbols.length; k++) { if (QO.symbols[k].symbol === fp.symbol) { QO.symIdx = k; break; } }
+    syncFocus();                           // mirror the focused position into QO.pos
+    rerender();                            // paint chart + detail from the new focus now
+    if (QO.realPrices) {
+      // Candles for this symbol may not be cached yet; fetch then repaint fully so
+      // the chart AND the detail panel reflect this position once data arrives.
+      fetchChart(true).then(function () {
+        if (document.getElementById("qo-stage") && QO.view === "trade") { syncFocus(); rerender(); }
+      });
+    }
   }
   function wireStage() {
     var st = document.getElementById("qo-stage"); if (!st) return;
@@ -1050,7 +1059,7 @@
       if (document.getElementById("qo-stage") && QO.view === "trade") {
         var sub = document.getElementById("qo-pxsub"); if (sub) sub.textContent = (sym.label || sym.symbol) + " · " + feedLabel();
         var pxEl = document.getElementById("qo-px"); if (pxEl) pxEl.textContent = fmtP(headlinePrice(sym), sym.dp);
-        drawChart();
+        drawChart(); refreshPositionCard();
       }
     }).catch(function (e) {
       QO.chartBusy = false;
