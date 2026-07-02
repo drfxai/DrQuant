@@ -97,7 +97,12 @@ function evaluate(pos, nowMs, maxTicks) {
   const dir = pos.dir;
   const stepMs = Number(pos.stepMs);
   const openedMs = pos.openedMs;
-  const expirySteps = stepsFor(Number(pos.expirySec), stepMs);
+  // Open-ended positions (no auto-close time limit) have no expirySec: they settle
+  // ONLY when the seeded walk touches a barrier. We still cap how far we walk so a
+  // never-touching path can't loop unbounded; an uncapped run just stays "open".
+  const hasExpiry = Number.isFinite(Number(pos.expirySec)) && Number(pos.expirySec) > 0;
+  const OPEN_ENDED_MAX_STEPS = stepsFor(4 * 3600, stepMs); // hard ceiling ~= 4h of walk
+  const expirySteps = hasExpiry ? stepsFor(Number(pos.expirySec), stepMs) : OPEN_ENDED_MAX_STEPS;
   const nowSteps = Math.max(0, Math.floor((nowMs - openedMs) / stepMs));
   const scanTo = Math.min(nowSteps, expirySteps);
 
@@ -117,8 +122,10 @@ function evaluate(pos, nowMs, maxTicks) {
     if (hit) { resolved = true; outcome = hit; exitPrice = price; exitStep = i; break; }
   }
 
-  if (!resolved && nowSteps >= expirySteps) {
-    // reached expiry with no early hit → distance verdict at the expiry price
+  if (!resolved && hasExpiry && nowSteps >= expirySteps) {
+    // reached the auto-close time limit with no touch → VOID+refund (the limit is
+    // always opt-in, so voidOnTimeout is true here); distance verdict only remains
+    // for legacy expiry rows that predate the time-limit model.
     resolved = true;
     outcome = pos.voidOnTimeout ? "void" : expiryOutcome(price, target, stop);
     exitPrice = price;

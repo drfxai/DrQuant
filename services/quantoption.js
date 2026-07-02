@@ -55,6 +55,7 @@ const POOL_OWNER = ["platform", "quantoption", "reward_pool"]; // dedicated pool
 
 // expiries offered, in seconds
 const EXPIRIES = [30, 60, 120, 180, 300, 600, 900];
+const TIME_LIMITS = [300, 900, 3600, 14400]; // optional auto-close: 5m | 15m | 1h | 4h
 
 // tradeable symbols. `base` seeds the ambient price; `vol` is the per-step walk
 // sigma (also scales target/stop distance); `dp` is display decimals.
@@ -103,7 +104,7 @@ async function ensureSchema() {
       entry_price NUMERIC NOT NULL,
       target_price NUMERIC NOT NULL,
       stop_price  NUMERIC NOT NULL,
-      expiry_sec  INT NOT NULL,
+      expiry_sec  INT,
       vol         NUMERIC NOT NULL,
       step_ms     INT NOT NULL,
       server_seed TEXT NOT NULL,
@@ -114,12 +115,14 @@ async function ensureSchema() {
       stake_txn   TEXT,
       payout_txn  TEXT,
       opened_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-      expires_at  TIMESTAMPTZ NOT NULL,
+      expires_at  TIMESTAMPTZ,
       settled_at  TIMESTAMPTZ
     );
     CREATE INDEX IF NOT EXISTS qo_pos_user ON quantoption_positions(user_id, status, id DESC);
     CREATE INDEX IF NOT EXISTS qo_pos_open ON quantoption_positions(status, expires_at) WHERE status = 'open';
     ALTER TABLE quantoption_positions ADD COLUMN IF NOT EXISTS void_on_timeout BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE quantoption_positions ALTER COLUMN expires_at DROP NOT NULL;
+    ALTER TABLE quantoption_positions ALTER COLUMN expiry_sec  DROP NOT NULL;
   `);
   // Signal-bound positions (real God Mode trades) live in their OWN table so the
   // simulated-engine queries in this file never touch a seedless signal row. The
@@ -230,7 +233,7 @@ async function me(userId) {
   return {
     balance, pool: poolBal, min: MIN_STAKE, max: MAX_STAKE,
     payoutBps: engine.PAYOUT_BPS, payoutMult: PAYOUT_MULT, stepMs: STEP_MS,
-    expiries: EXPIRIES, symbols: await symbolList(),
+    expiries: EXPIRIES, timeLimits: TIME_LIMITS, symbols: await symbolList(),
     realPrices: REAL_PRICES,
     open: stillOpen[0] || null,        // newest open (backward-compatible single)
     openPositions: stillOpen,          // full list (real mode can stack positions)
@@ -256,15 +259,20 @@ async function openPosition(userId, input) {
   if (!cfg) { const e = new Error("unknown symbol"); e.code = "bad_symbol"; throw e; }
   const dir = String(input.direction || input.dir || "").toLowerCase();
   if (dir !== "long" && dir !== "short") { const e = new Error("direction must be long or short"); e.code = "bad_dir"; throw e; }
-  const expirySec = Math.floor(Number(input.expirySec || input.expiry));
-  if (EXPIRIES.indexOf(expirySec) < 0) { const e = new Error("invalid expiry"); e.code = "bad_expiry"; throw e; }
+  // Optional auto-close time limit. Absent/blank => open-ended: the position settles
+  // ONLY on a TP/SL touch and never times out. When present it must be one of the
+  // allowed durations, and an unresolved position VOIDs+refunds at the limit.
+  const rawLimit = input.timeLimitSec != null ? input.timeLimitSec : (input.expirySec != null ? input.expirySec : input.expiry);
+  const hasLimit = rawLimit != null && String(rawLimit).trim() !== "";
+  const timeLimitSec = hasLimit ? Math.floor(Number(rawLimit)) : null;
+  if (hasLimit && TIME_LIMITS.indexOf(timeLimitSec) < 0) { const e = new Error("invalid time limit"); e.code = "bad_expiry"; throw e; }
   const stakeNum = Math.floor(Number(input.stake));
   if (!Number.isFinite(stakeNum) || stakeNum < MIN_STAKE) { const e = new Error("stake below minimum"); e.code = "bad_stake"; throw e; }
   if (stakeNum > MAX_STAKE) { const e = new Error("stake above maximum"); e.code = "bad_stake"; throw e; }
   const stake = String(stakeNum);
-  // optional "auto-close time limit": VOID+refund the stake if neither TP nor SL is
-  // touched by expiry (instead of the default distance verdict at the deadline).
-  const voidOnTimeout = input.voidOnTimeout === true || input.voidOnTimeout === "true";
+  // A time limit is always the opt-in "auto-close" safety: if it elapses with no
+  // touch, the stake is refunded (VOID). Open-ended positions never void on time.
+  const voidOnTimeout = hasLimit;
 
   // SIMULATED mode keeps one open position per user (simple UX + settlement, like
   // Easy Trade). REAL mode allows stacking concurrent positions, so the guard is
@@ -302,6 +310,11 @@ async function openPosition(userId, input) {
   let target, stop;
   const mT = (input.target != null && String(input.target).trim() !== "") ? Number(input.target) : null;
   const mS = (input.stop != null && String(input.stop).trim() !== "") ? Number(input.stop) : null;
+  // Open-ended (no time limit) positions settle ONLY on a barrier, so both levels are
+  // required. With a time limit, the limit guarantees resolution, so blank auto-fills.
+  if (!hasLimit && (mT == null || mS == null)) {
+    const e = new Error("Set both a TP and an SL, or turn on an auto-close time limit"); e.code = "bad_levels"; throw e;
+  }
   if (mT != null || mS != null) {
     if (mT == null || mS == null || !Number.isFinite(mT) || !Number.isFinite(mS) || mT <= 0 || mS <= 0) {
       const e = new Error("Enter both a TP and an SL price"); e.code = "bad_levels"; throw e;
@@ -316,12 +329,13 @@ async function openPosition(userId, input) {
     }
     target = mT; stop = mS;
   } else {
-    const offset = engine.offsetFor(entry, cfg.vol, expirySec, STEP_MS);
+    const offset = engine.offsetFor(entry, cfg.vol, timeLimitSec || 300, STEP_MS);
     target = dir === "long" ? entry + offset : entry - offset;
     stop = dir === "long" ? entry - offset : entry + offset;
   }
   const seedPair = engine.newSeed();
-  const expiresAt = new Date(now + expirySec * 1000);
+  // Open-ended => no deadline (NULL). Timed => now + limit.
+  const expiresAt = hasLimit ? new Date(now + timeLimitSec * 1000) : null;
 
   return withTransaction(async (cx) => {
     if (!(await exposureOk(cx, stake))) { const e = new Error("Quant Option is at capacity — try a smaller stake"); e.code = "capacity"; throw e; }
@@ -331,7 +345,7 @@ async function openPosition(userId, input) {
          (user_id, symbol, direction, stake, entry_price, target_price, stop_price, expiry_sec, vol, step_ms, server_seed, seed_hash, expires_at, void_on_timeout)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [String(userId), cfg.symbol, dir, stake, String(entry), String(target), String(stop),
-       expirySec, String(cfg.vol), STEP_MS, seedPair.seed, seedPair.hash, expiresAt, voidOnTimeout]);
+       timeLimitSec, String(cfg.vol), STEP_MS, seedPair.seed, seedPair.hash, expiresAt, voidOnTimeout]);
     const p = pr[0];
     // debit the user, credit the pool — overdraw throws InsufficientFunds and
     // rolls the whole open back (position insert included).
@@ -344,7 +358,7 @@ async function openPosition(userId, input) {
       initiatorUserId: String(userId),
       reference: { type: "quantoption_position", id: p.id },
       idempotencyKey: "qo:stake:" + p.id,
-      metadata: { app: "quantoption", kind: "stake", symbol: cfg.symbol, dir, expirySec },
+      metadata: { app: "quantoption", kind: "stake", symbol: cfg.symbol, dir, timeLimitSec },
     }, cx);
     await cx.query(`UPDATE quantoption_positions SET stake_txn=$2 WHERE id=$1`, [p.id, txn.public_id]);
     return positionView({ ...p, stake_txn: txn.public_id }, { now });
@@ -422,7 +436,8 @@ async function liveView(row, userId) {
 // (draw/refund); a still-live position simply reports no live price yet.
 async function realEvaluate(row, nowMs) {
   const openedMs = new Date(row.opened_at).getTime();
-  const expiryMs = new Date(row.expires_at).getTime();
+  const hasLimit = row.expires_at != null;
+  const expiryMs = hasLimit ? new Date(row.expires_at).getTime() : Infinity;
   const windowEnd = Math.min(nowMs, expiryMs);
   const target = Number(row.target_price);
   const stop = Number(row.stop_price);
@@ -438,7 +453,7 @@ async function realEvaluate(row, nowMs) {
 
   // rule 4 — no reliable data at settlement
   if (!candles || candles.length === 0) {
-    if (nowMs >= expiryMs) {
+    if (hasLimit && nowMs >= expiryMs) {
       return { resolved: true, outcome: "draw", livePrice: Number(row.entry_price), exitPrice: Number(row.entry_price), reason: "no_data_void" };
     }
     return { resolved: false, outcome: null, livePrice: null, reason: "no_data_live" };
@@ -453,8 +468,9 @@ async function realEvaluate(row, nowMs) {
              ambiguous: !!touch.ambiguous, reason: touch.ambiguous ? "void_same_candle" : "barrier" };
   }
 
-  // rule 3 — reached expiry with no touch → distance verdict
-  if (nowMs >= expiryMs) {
+  // rule 3 — reached the auto-close time limit with no touch → VOID+refund. Only
+  // timed positions have a limit; open-ended ones stay live until a barrier is hit.
+  if (hasLimit && nowMs >= expiryMs) {
     const outcome = row.void_on_timeout ? "void" : engine.expiryOutcome(livePrice, target, stop);
     return { resolved: true, outcome, livePrice, exitPrice: livePrice,
              reason: row.void_on_timeout ? "expiry_void" : "expiry_distance" };
@@ -565,7 +581,7 @@ async function sweepMatured(limitInput) {
   const limit = Math.min(500, Math.max(1, Math.floor(Number(limitInput) || 200)));
   const { rows } = await pool.query(
     `SELECT * FROM quantoption_positions
-       WHERE status='open' AND expires_at < now() - ($1 * INTERVAL '1 millisecond')
+       WHERE status='open' AND expires_at IS NOT NULL AND expires_at < now() - ($1 * INTERVAL '1 millisecond')
        ORDER BY id LIMIT $2`, [MATURE_GRACE_MS, limit]);
   let settled = 0;
   for (const row of rows) {
@@ -756,7 +772,8 @@ function positionView(p, extra) {
   extra = extra || {};
   const now = extra.now || Date.now();
   const settled = p.status !== "open";
-  const expiresMs = new Date(p.expires_at).getTime();
+  const hasLimit = p.expires_at != null;
+  const expiresMs = hasLimit ? new Date(p.expires_at).getTime() : null;
   const out = {
     id: p.id, symbol: p.symbol, label: (symCfg(p.symbol) || {}).label || p.symbol,
     dir: p.direction, stake: p.stake, status: p.status,
@@ -764,7 +781,8 @@ function positionView(p, extra) {
     tp1: roundPx(p.symbol, Number(p.entry_price) + (Number(p.target_price) - Number(p.entry_price)) / 3),
     tp2: roundPx(p.symbol, Number(p.entry_price) + (Number(p.target_price) - Number(p.entry_price)) * 2 / 3),
     tp3: roundPx(p.symbol, Number(p.target_price)),
-    expirySec: Number(p.expiry_sec), stepMs: Number(p.step_ms), dp: (symCfg(p.symbol) || {}).dp,
+    expirySec: p.expiry_sec != null ? Number(p.expiry_sec) : null,
+    timeLimitSec: p.expiry_sec != null ? Number(p.expiry_sec) : null, stepMs: Number(p.step_ms), dp: (symCfg(p.symbol) || {}).dp,
     voidOnTimeout: !!p.void_on_timeout,
     openedAt: p.opened_at, expiresAt: p.expires_at, settledAt: p.settled_at,
     seedHash: p.seed_hash,                                  // commitment (always visible)
@@ -782,7 +800,7 @@ function positionView(p, extra) {
       const lp = (rev.livePrice != null && Number.isFinite(Number(rev.livePrice))) ? Number(rev.livePrice) : null;
       out.livePrice = lp != null ? roundPx(p.symbol, lp) : null;
       out.livePriceRaw = lp;
-      out.countdownMs = Math.max(0, expiresMs - now);
+      out.countdownMs = hasLimit ? Math.max(0, expiresMs - now) : null;
       out.realPrices = true;
       const entryN = Number(p.entry_price), targetN = Number(p.target_price);
       out.progress = (lp != null && targetN !== entryN) ? (lp - entryN) / (targetN - entryN) : 0;
@@ -790,7 +808,7 @@ function positionView(p, extra) {
       const ev = extra.ev || engine.evaluate(enginePos(p), now);
       out.livePrice = roundPx(p.symbol, ev.livePrice);
       out.livePriceRaw = ev.livePrice;
-      out.countdownMs = Math.max(0, expiresMs - now);
+      out.countdownMs = hasLimit ? Math.max(0, expiresMs - now) : null;
       out.ticks = ev.ticks.map((k) => ({ t: k.t, price: Number(roundPx(p.symbol, k.price)) }));
       // indicative progress toward target (1.0 = target, 0 = entry, <0 = toward stop)
       const entryN = Number(p.entry_price), targetN = Number(p.target_price);
@@ -806,5 +824,5 @@ module.exports = {
   init, me, openPosition, getPosition, listOpenPositions, chartData, prices, cashOut,
   resolve, sweepMatured, history,
   fundPool, topUpPool, poolStats, leaderboard,
-  MIN_STAKE, MAX_STAKE, EXPIRIES, SYMBOLS, STEP_MS, REAL_PRICES,
+  MIN_STAKE, MAX_STAKE, EXPIRIES, TIME_LIMITS, SYMBOLS, STEP_MS, REAL_PRICES,
 };

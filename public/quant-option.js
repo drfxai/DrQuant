@@ -110,9 +110,10 @@
     loaded: false,
     min: 10, max: 1000000, payoutBps: 8500, payoutMult: 1.85, stepMs: 220,
     expiries: [30, 60, 120, 180, 300, 600, 900],
+    timeLimits: [300, 900, 3600, 14400], // optional auto-close: 5m | 15m | 1h | 4h
     symbols: [],            // [{symbol,label,base,dp,vol,stepMs,price,wave}]
     balance: "0", pool: "0",
-    symIdx: 0, dir: "long", stake: 100, expIdx: 1,
+    symIdx: 0, dir: "long", stake: 100,
     chartMode: "candle",    // 'candle' | 'line'
     view: "trade",          // 'trade' | 'history'
     pos: null,              // open/most-recent position view (focused, in real mode)
@@ -124,7 +125,8 @@
     openPositions: [],        // all open positions (real mode can stack)
     focusId: null,            // id of the position whose levels overlay the chart
     manualTP: "", manualSL: "", // optional user-entered TP(=TP3)/SL for the Trade tab (blank = auto)
-    voidOnTimeout: false,     // opt-in: refund the stake if neither TP nor SL is touched by expiry
+    voidOnTimeout: false,     // opt-in auto-close time limit ON/OFF (OFF => open-ended, settles only on TP/SL)
+    timeLimitIdx: 1,          // selected duration index into timeLimits (5m|15m|1h|4h); used only when voidOnTimeout is on
     tpHit: {},                // fired TP-cross celebrations (per position id) so each pops once
     realCandles: {},          // symbol -> [{t,o,h,l,c}] from /quantoption/chart
     chartProvider: null,      // 'binance' | 'twelvedata' (from /chart)
@@ -132,7 +134,7 @@
     chartTimer: null, posTimer: null, countTimer: null, chartBusy: false
   };
   function curSym() { return QO.symbols[QO.symIdx] || null; }
-  function curExpiry() { return QO.expiries[QO.expIdx] != null ? QO.expiries[QO.expIdx] : 60; }
+  function curTimeLimit() { return QO.voidOnTimeout ? (QO.timeLimits[QO.timeLimitIdx] != null ? QO.timeLimits[QO.timeLimitIdx] : 900) : null; }
   function balNum() { return Number(QO.balance) || 0; }
 
   /* ── scoped stylesheet (once) ───────────────────────────────────────────── */
@@ -551,13 +553,7 @@
       '</div>' +
     '</div>' +
     '<div class="qo-card">' +
-      '<div class="qo-lab">Expiry</div>' +
-      '<div class="qo-exps">' + QO.expiries.map(function (s, i) {
-        return '<button class="qo-exp ' + (i === QO.expIdx ? "on" : "") + '" data-i="' + i + '" type="button">' + expLabel(s) + '</button>';
-      }).join("") + '</div>' +
-    '</div>' +
-    '<div class="qo-card">' +
-      '<div class="qo-lab">TP / SL price · optional (auto if blank)</div>' +
+      '<div class="qo-lab">' + (QO.voidOnTimeout ? "TP / SL price · optional (auto if blank)" : "TP / SL price · required") + '</div>' +
       '<div style="display:flex;gap:8px">' +
         '<input class="qo-inp" id="qo-tp" type="number" inputmode="decimal" step="any" placeholder="TP (target)" value="' + (QO.manualTP != null ? QO.manualTP : "") + '" style="flex:1;min-width:0">' +
         '<input class="qo-inp" id="qo-sl" type="number" inputmode="decimal" step="any" placeholder="SL (stop)" value="' + (QO.manualSL != null ? QO.manualSL : "") + '" style="flex:1;min-width:0">' +
@@ -571,7 +567,13 @@
         '</div>' +
         '<button type="button" id="qo-void-tog" role="switch" aria-checked="' + (QO.voidOnTimeout ? 'true' : 'false') + '" class="qo-switch' + (QO.voidOnTimeout ? ' on' : '') + '"><span class="qo-switch-knob"></span></button>' +
       '</div>' +
+      (QO.voidOnTimeout
+        ? '<div class="qo-exps" style="margin-top:12px">' + QO.timeLimits.map(function (s, i) {
+            return '<button class="qo-exp ' + (i === QO.timeLimitIdx ? "on" : "") + '" data-tl="' + i + '" type="button">' + expLabel(s) + '</button>';
+          }).join("") + '</div>'
+        : '') +
     '</div>' +
+
     '<div class="qo-pre">' +
       '<div class="b"><div class="k">Potential payout</div><div class="v" id="qo-payout" style="color:' + c.green + '">' + fmtQ(payout) + '</div></div>' +
       '<div class="b"><div class="k">Profit</div><div class="v" style="color:' + c.green + '">+' + Math.round((QO.payoutBps || 8500) / 100) + '%</div></div>' +
@@ -727,8 +729,8 @@
       st.querySelectorAll(".qo-chip").forEach(function (b) {
         b.onclick = function () { var v = b.getAttribute("data-v"); QO.stake = v === "max" ? Math.max(QO.min, Math.floor(balNum())) : Math.max(QO.min, +v); if (stake) stake.value = QO.stake; if (range) range.value = Math.min(QO.stake, +range.max); syncPayout(); };
       });
-      st.querySelectorAll(".qo-exp").forEach(function (b) {
-        b.onclick = function () { var i = +b.getAttribute("data-i"); if (i !== QO.expIdx) { QO.expIdx = i; rerender(); } };
+      st.querySelectorAll(".qo-exp[data-tl]").forEach(function (b) {
+        b.onclick = function () { var i = +b.getAttribute("data-tl"); if (i !== QO.timeLimitIdx) { QO.timeLimitIdx = i; rerender(); } };
       });
       var vtog = T("#qo-void-tog"); if (vtog) vtog.onclick = function () { QO.voidOnTimeout = !QO.voidOnTimeout; rerender(); };
       var tpI = T("#qo-tp"); if (tpI) tpI.oninput = function () { QO.manualTP = tpI.value; };
@@ -766,7 +768,7 @@
     if (balNum() < stake) { toast("Not enough QNTM in your wallet", "error"); return; }
     QO.busy = true;
     var btn = document.getElementById("qo-open"); if (btn) { btn.disabled = true; btn.style.opacity = ".6"; }
-    API("/quantoption/open", { method: "POST", body: { symbol: sym.symbol, direction: QO.dir, expirySec: curExpiry(), stake: stake, target: QO.manualTP, stop: QO.manualSL, voidOnTimeout: QO.voidOnTimeout } })
+    API("/quantoption/open", { method: "POST", body: { symbol: sym.symbol, direction: QO.dir, timeLimitSec: curTimeLimit(), stake: stake, target: QO.manualTP, stop: QO.manualSL } })
       .then(function (r) {
         QO.busy = false;
         var p = r && r.position; if (!p) { toast("Could not open position", "error"); rerender(); return; }
