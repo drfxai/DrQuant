@@ -675,7 +675,7 @@
     else if (QO.realPrices) {
       var hasOpen = !!(QO.openPositions && QO.openPositions.length);
       body = statsHTML() + symsHTML() + chartHTML() +
-             (hasOpen ? ((QO.openPositions.length > 1 ? openSwitcherHTML() : "") + positionHTML()) : "") +
+             (hasOpen ? (openSwitcherHTML() + positionHTML()) : "") +
              orderHTML();
     }
     else body = statsHTML() + symsHTML() + chartHTML() + (QO.pos && QO.pos.status === "open" ? positionHTML() : orderHTML());
@@ -701,7 +701,18 @@
         var i = +b.getAttribute("data-i"); if (isNaN(i) || i === QO.symIdx) return;
         if (!QO.realPrices && QO.pos && QO.pos.status === "open") return; // simulated: symbol locked while a position is open
         QO.symIdx = i;
-        if (QO.realPrices) { rerender(); fetchChart(true); }
+        // If an open position exists on the newly-selected symbol, focus it so its
+        // entry/TP/SL levels overlay this chart (real mode can hold several at once,
+        // one per symbol). Without this, switching to e.g. BTC while ETH is focused
+        // would show the BTC chart with no overlay.
+        if (QO.realPrices) {
+          var sm2 = curSym(), list = QO.openPositions || [], k;
+          for (k = 0; k < list.length; k++) {
+            if (sm2 && list[k].symbol === sm2.symbol && (list[k].status === "open" || list[k].exitPrice != null)) { QO.focusId = list[k].id; break; }
+          }
+          syncFocus();
+          rerender(); fetchChart(true);
+        }
         else { var sm = curSym(); if (sm) QO.amb[sm.symbol] = buildAmbient(sm); rerender(); }
       };
     });
