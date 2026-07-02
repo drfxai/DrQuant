@@ -430,7 +430,8 @@ async function getOpenSignalPosition(userId) {
     await refundExpired(p.id);
     return reread(userId, p.id);
   }
-  return signalPositionView(p, signal || null);
+  const lp = await livePriceFor(signal || { symbol: p.symbol, last_price: null });
+  return signalPositionView(p, signal || null, lp);
 }
 
 // All of the user's currently OPEN signal positions (multiple allowed - one per
@@ -450,6 +451,13 @@ async function listOpenSignalPositions(userId) {
     return (sigCache[extId] = s[0] || null);
   }
   const out = [];
+  const priceCache = {};
+  async function livePx(sym, signal) {
+    if (sym in priceCache) return priceCache[sym];
+    let lp = await priceFeed.getSpot(sym).catch(() => null);
+    if (!(Number.isFinite(Number(lp)) && Number(lp) > 0)) lp = (signal && signal.last_price != null ? Number(signal.last_price) : null);
+    return (priceCache[sym] = (Number.isFinite(Number(lp)) && Number(lp) > 0) ? Number(lp) : null);
+  }
   for (const p of rows) {
     const signal = await sigFor(p.signal_ext_id);
     if (signal && (signal.status === "won" || signal.status === "lost")) {
@@ -460,7 +468,8 @@ async function listOpenSignalPositions(userId) {
       await refundExpired(p.id);
       continue;   // time limit lapsed -> refunded (draw), drops out of open list
     }
-    out.push(signalPositionView(p, signal));
+    const lp = await livePx(p.symbol, signal);
+    out.push(signalPositionView(p, signal, lp));
   }
   return { positions: out };
 }
@@ -567,7 +576,23 @@ function signalView(s) {
     createdAt: s.created_at,
   };
 }
-function signalPositionView(p, signal) {
+function signalPositionView(p, signal, livePrice) {
+  // Indicative progress from entry (0) toward the winning target/TP3 (1), going
+  // negative toward the stop (-1). These positions settle as a FIXED payout on a
+  // win (target before stop) rather than linearly, so this is a visual gauge of
+  // how close the trade is to winning vs stopping out - not a mark-to-market P/L.
+  const entryN = p.entry_price != null ? Number(p.entry_price) : null;
+  const targetN = p.target_price != null ? Number(p.target_price) : null;
+  const stopN = p.stop_price != null ? Number(p.stop_price) : null;
+  const lpRaw = (livePrice != null && Number.isFinite(Number(livePrice)) && Number(livePrice) > 0)
+    ? Number(livePrice)
+    : (signal && signal.last_price != null ? Number(signal.last_price) : null);
+  let progress = null, winning = null;
+  if (lpRaw != null && entryN != null && targetN != null && targetN !== entryN) {
+    progress = (lpRaw - entryN) / (targetN - entryN); // 1 at target, 0 at entry, <0 toward stop
+    if (progress > 1.5) progress = 1.5; if (progress < -1.5) progress = -1.5;
+    winning = progress >= 0; // price is on the target side of entry
+  }
   return {
     id: p.id, kind: "signal", signalExtId: p.signal_ext_id,
     symbol: p.symbol, dir: p.direction, stake: p.stake, status: p.status, outcome: p.outcome,
@@ -579,6 +604,9 @@ function signalPositionView(p, signal) {
     exitPrice: p.exit_price, payout: p.payout,
     openedAt: p.opened_at, settledAt: p.settled_at,
     potentialWin: decimal.add(p.stake, engine.profitOf(p.stake)),
+    livePrice: lpRaw != null ? String(lpRaw) : null,
+    progress: progress,       // number | null  (1 = at target, 0 = entry, <0 = toward stop)
+    winning: winning,         // bool | null    (price currently on the winning side)
     signal: signal ? signalView(signal) : null,
   };
 }

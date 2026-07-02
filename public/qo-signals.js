@@ -166,6 +166,43 @@
       ICO(up ? '<path d="M3 17l6-6 4 4 8-8"/><path d="M21 7v6h-6"/>' : '<path d="M3 7l6 6 4-4 8 8"/><path d="M21 17v-6h-6"/>', 13) +
       (up ? "LONG" : "SHORT") + '</span>';
   }
+  // Map signalExtId -> the user's OPEN position on that signal (for inline status).
+  function openBySignal() {
+    var map = {};
+    (SG.openList || []).forEach(function (p) {
+      if (p && p.status === "open" && p.signalExtId != null) map[String(p.signalExtId)] = p;
+    });
+    return map;
+  }
+  // A compact progress bar (entry -> target, red toward stop) + potential payout,
+  // shown on any card that has an open position. progress: 1=target, 0=entry, <0=stop.
+  function posBarHTML(p, c) {
+    var up = p.dir === "long";
+    var dc = up ? c.green : c.red;
+    var pr = (typeof p.progress === "number") ? p.progress : null;
+    // fill 0..100% of the target side; when negative (toward stop) show a red sliver.
+    var towardTarget = pr != null ? Math.max(0, Math.min(1, pr)) : 0;
+    var towardStop = (pr != null && pr < 0) ? Math.max(0, Math.min(1, -pr)) : 0;
+    var barCol = (pr != null && pr < 0) ? c.red : c.green;
+    var pct = Math.round(towardTarget * 100);
+    var live = (p.livePrice != null) ? fmtP(p.livePrice) : "\u2014";
+    var stateTxt = pr == null ? "Live" : (pr >= 1 ? "At target" : pr <= -1 ? "At stop" : (pr >= 0 ? "Toward target" : "Toward stop"));
+    var stateCol = pr == null ? c.t3 : (pr >= 0 ? c.green : c.red);
+    return '<div style="margin-top:9px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:5px">' +
+          '<span style="font-size:10px;font-weight:800;letter-spacing:.3px;color:' + stateCol + '">' + stateTxt + '</span>' +
+          '<span style="font-size:11px;font-weight:800;color:' + c.t2 + ';font-variant-numeric:tabular-nums">' + live + '</span>' +
+        '</div>' +
+        '<div style="position:relative;height:7px;border-radius:999px;background:' + c.panel3 + ';overflow:hidden">' +
+          '<div style="position:absolute;left:0;top:0;height:100%;width:' + pct + '%;background:' + barCol + ';transition:width .3s ease,background .3s ease"></div>' +
+          (towardStop > 0 ? '<div style="position:absolute;right:0;top:0;height:100%;width:' + Math.round(towardStop * 22) + '%;background:' + hexA(c.red, .6) + '"></div>' : '') +
+        '</div>' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:6px">' +
+          '<span style="font-size:10.5px;color:' + c.t3 + '">Staked ' + fmtQ(p.stake) + ' QNTM</span>' +
+          '<span style="font-size:10.5px;font-weight:800;color:' + c.green + '">Wins &rarr; +' + fmtQ(p.potentialWin) + ' QNTM</span>' +
+        '</div>' +
+      '</div>';
+  }
   function listHTML() {
     var c = TH();
     var adminBtn = isAdmin()
@@ -176,20 +213,27 @@
         '</div>'
       : "";
     var live = SG.signals.filter(function (s) { return s.status === "live" && s.entry != null && s.tp1 != null && s.sl != null; });
+    var posMap = openBySignal();
     var list = live.length ? live.map(function (s) {
-      return '<div class="qs-sigcard" data-ext="' + ESC(s.extId) + '">' +
+      var mine = posMap[String(s.extId)] || null; // the user's open position on THIS signal, if any
+      var actionHtml = mine
+        ? '<span style="display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:800;letter-spacing:.4px;color:' + (mine.dir === "long" ? c.green : c.red) + ';background:' + hexA(mine.dir === "long" ? c.green : c.red, .14) + ';padding:3px 8px;border-radius:6px">' +
+            '<span style="width:6px;height:6px;border-radius:50%;background:' + (mine.dir === "long" ? c.green : c.red) + ';box-shadow:0 0 6px ' + hexA(mine.dir === "long" ? c.green : c.red, .8) + ';animation:qsPulse 1.4s infinite"></span>ACTIVE</span>'
+        : '<span style="font-size:11px;font-weight:800;color:' + c.blue + '">Trade ' + ICO('<path d="M5 12h14M12 5l7 7-7 7"/>', 13) + '</span>';
+      return '<div class="qs-sigcard' + (mine ? ' qs-sigcard-active' : '') + '" data-ext="' + ESC(s.extId) + '"' + (mine ? ' data-open="' + mine.id + '"' : '') + (mine ? ' style="border-color:' + hexA(mine.dir === "long" ? c.green : c.red, .45) + '"' : '') + '>' +
         '<div class="qs-row">' +
           '<div style="display:flex;align-items:center;gap:9px">' + dirBadge(s.direction, c) +
             '<span style="font-size:14px;font-weight:800;color:' + c.t1 + '">' + ESC(s.symbol) + '</span>' +
             (s.tf ? '<span style="font-size:10.5px;color:' + c.t4 + ';font-weight:700">' + ESC(tfLabel(s.tf)) + '</span>' : '') +
           '</div>' +
-          '<span style="font-size:11px;font-weight:800;color:' + c.blue + '">Trade ' + ICO('<path d="M5 12h14M12 5l7 7-7 7"/>', 13) + '</span>' +
+          actionHtml +
         '</div>' +
         '<div class="qs-lv">' +
           '<div class="qs-lvc"><div class="k" style="color:' + c.gold + '">Entry</div><div class="v">' + fmtP(s.entry) + '</div></div>' +
           '<div class="qs-lvc"><div class="k" style="color:' + c.green + '">Target</div><div class="v" style="color:' + c.green + '">' + fmtP(s.tp1) + '</div></div>' +
           '<div class="qs-lvc"><div class="k" style="color:' + c.red + '">Stop</div><div class="v" style="color:' + c.red + '">' + fmtP(s.sl) + '</div></div>' +
         '</div>' +
+        (mine ? posBarHTML(mine, c) : '') +
       '</div>';
     }).join("") : '<div class="qs-empty">No live signals right now.<br>God Mode signals appear here once the webhook is set up.</div>';
     var resume = "";
@@ -216,13 +260,16 @@
           var up = p.dir === "long"; var dc = up ? c.green : c.red;
           var hasTL = p.timeLimitSec != null && p.expiresAt;
           var cd = hasTL ? ' \u00b7 <span id="qs-opc-' + p.id + '">' + mmss(new Date(p.expiresAt).getTime() - Date.now()) + '</span>' : '';
-          return '<div class="qs-card" style="display:flex;align-items:center;gap:10px;border-color:' + hexA(dc, .4) + ';background:' + hexA(dc, .07) + '">' +
-              '<div class="qs-opmain" data-open="' + p.id + '" style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;cursor:pointer">' +
-                '<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:' + dc + ';box-shadow:0 0 8px ' + hexA(dc, .7) + ';animation:qsPulse 1.4s infinite"></span>' +
-                '<div style="min-width:0"><div style="font-size:13px;font-weight:800;color:' + c.t1 + '">' + ESC(p.symbol) + ' \u00b7 ' + (up ? "Long" : "Short") + '</div>' +
-                '<div style="font-size:10.5px;color:' + c.t3 + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Staked ' + fmtQ(p.stake) + ' QNTM' + cd + '</div></div>' +
+          return '<div class="qs-card" style="border-color:' + hexA(dc, .4) + ';background:' + hexA(dc, .07) + '">' +
+              '<div style="display:flex;align-items:center;gap:10px">' +
+                '<div class="qs-opmain" data-open="' + p.id + '" style="display:flex;align-items:center;gap:9px;flex:1;min-width:0;cursor:pointer">' +
+                  '<span style="width:9px;height:9px;border-radius:50%;flex-shrink:0;background:' + dc + ';box-shadow:0 0 8px ' + hexA(dc, .7) + ';animation:qsPulse 1.4s infinite"></span>' +
+                  '<div style="min-width:0"><div style="font-size:13px;font-weight:800;color:' + c.t1 + '">' + ESC(p.symbol) + ' \u00b7 ' + (up ? "Long" : "Short") + '</div>' +
+                  '<div style="font-size:10.5px;color:' + c.t3 + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Staked ' + fmtQ(p.stake) + ' QNTM' + cd + '</div></div>' +
+                '</div>' +
+                '<button class="qs-opclose" data-close="' + p.id + '" type="button" style="flex-shrink:0;padding:8px 13px;border-radius:9px;border:1px solid ' + hexA(c.red, .4) + ';background:' + hexA(c.red, .12) + ';color:' + c.red + ';font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">Close</button>' +
               '</div>' +
-              '<button class="qs-opclose" data-close="' + p.id + '" type="button" style="flex-shrink:0;padding:8px 13px;border-radius:9px;border:1px solid ' + hexA(c.red, .4) + ';background:' + hexA(c.red, .12) + ';color:' + c.red + ';font-weight:800;font-size:12px;cursor:pointer;font-family:inherit">Close</button>' +
+              posBarHTML(p, c) +
             '</div>';
         }).join("") +
         '<div class="qs-lab" style="margin:14px 2px 9px">Live signals</div>';
@@ -386,6 +433,10 @@
       var rb = T(".qs-resume"); if (rb && SG.openPos) rb.onclick = function () { SG.pos = SG.openPos; SG.screen = "position"; rerender(); startPoll(); };
       st.querySelectorAll(".qs-sigcard").forEach(function (card) {
         card.onclick = function () {
+          // An ACTIVE card (already has an open position on this signal) routes to
+          // managing that position; otherwise it opens the trade confirm sheet.
+          var openId = card.getAttribute("data-open");
+          if (openId) { openDetailById(openId); return; }
           var ext = card.getAttribute("data-ext");
           var sig = SG.signals.filter(function (s) { return String(s.extId) === String(ext); })[0];
           if (sig) { SG.sel = sig; SG.screen = "confirm"; rerender(); }
