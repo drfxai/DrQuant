@@ -811,11 +811,32 @@
     if (typeof S !== "undefined" && S && S.chatInfo && S.chatInfo.type === "channel") return true;
     return false;
   }
+  // A God Mode message is a "progress/closed" alert (NOT the openable entry) when
+  // it announces TP2/TP3 being hit, the stop, or that the trade has closed. The
+  // "Trade on Quant Option" action must NEVER appear on these — only under the
+  // ENTRY and TP1 messages. Tokens match the God Mode alert templates.
+  function isTerminalSignalMessage(text) {
+    var s = String(text || "");
+    if (/trade\s*closed/i.test(s)) return true;                 // "♻️ TRADE CLOSED — NEW SIGNAL"
+    if (/new\s+god\s*mode\s+signal\s+replaces/i.test(s)) return true;
+    if (/\btp\s*2\b.*\bhit\b|\bhit\b.*\btp\s*2\b|tp2\s*hit/i.test(s)) return true; // TP2 reached
+    if (/\btp\s*3\b.*\bhit\b|\bhit\b.*\btp\s*3\b|tp3\s*hit/i.test(s)) return true; // TP3 reached
+    if (/\b(sl|stop\s*loss|stopped)\b.*\bhit\b|\bhit\b.*\b(sl|stop\s*loss)\b|sl\s*hit/i.test(s)) return true; // stopped
+    if (/closed\s*direction/i.test(s)) return true;            // closed-summary card
+    if (/result\s*[:=]\s*(win|loss|lose)/i.test(s)) return true;
+    return false;
+  }
   function tradeButtonHTML(m) {
     if (!m || !m.content || !window.DQSignal) return "";
     if (!officialSignalContext(m)) return "";
+    // Suppress on any TP2/TP3/SL/closed alert — those are not tradeable entries.
+    if (isTerminalSignalMessage(m.content)) return "";
     var sig; try { sig = (window.DQSignal.extractOfficial && window.DQSignal.extractOfficial(m.content)) || window.DQSignal.extract(m.content); } catch (e) { return ""; }
     if (!sig || !sig.symbol || !sig.direction) return "";
+    // Only show the action when a LIVE (still-valid) stored signal matches this
+    // message. The server's list is validity-gated, so a live match means the
+    // price has NOT yet reached the 2nd target or the stop.
+    if (!matchForMessage(m)) return "";
     var c = TH();
     return '<button class="qs-trade-btn" data-sym="' + ESC(String(sig.symbol).toUpperCase()) + '" data-dir="' + ESC(sig.direction) + '" type="button" style="margin-top:5px;width:100%;padding:9px;border:none;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;gap:7px;background:linear-gradient(180deg,' + c.blue + ',#2456d8)">' +
       ICO('<path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>', 14) + 'Trade on Quant Option</button>';

@@ -135,6 +135,35 @@ async function exposureOk(client, addStake) {
 
 function num(v) { if (v == null || v === "" || v === "null") return null; const n = Number(v); return Number.isFinite(n) ? String(n) : null; }
 function dir(v) { v = String(v || "").toLowerCase(); return (v === "long" || v === "buy") ? "long" : (v === "short" || v === "sell") ? "short" : null; }
+
+// ── signal validity against the LIVE price ──────────────────────────────────
+// A God Mode signal is tradeable only while price is still inside the usable
+// zone: it must NOT have reached the 2nd target (tp2, or tp3 if tp2 is absent)
+// and must NOT have reached the stop (sl). Direction-aware. Returns a reason so
+// callers can log/mark WHY a signal was invalidated.
+//   long : dead if price >= 2nd-target (target reached) OR price <= sl (stopped)
+//   short: dead if price <= 2nd-target (target reached) OR price >= sl (stopped)
+function secondTarget(sig) {
+  const tp2 = sig.tp2 != null ? Number(sig.tp2) : null;
+  const tp3 = sig.tp3 != null ? Number(sig.tp3) : null;
+  return tp2 != null ? tp2 : tp3; // fall back to final target when tp2 absent
+}
+function signalValidity(sig, livePrice) {
+  if (!sig || sig.status !== "live") return { valid: false, reason: "not_live" };
+  if (sig.entry == null || sig.sl == null || !sig.direction) return { valid: false, reason: "incomplete" };
+  const lp = Number(livePrice);
+  if (!Number.isFinite(lp)) return { valid: true, reason: "no_price" }; // can't disprove → allow (fail-open only for validity gating; open path re-checks with a real feed)
+  const sl = Number(sig.sl);
+  const t2 = secondTarget(sig);
+  if (sig.direction === "long") {
+    if (lp <= sl) return { valid: false, reason: "stopped" };
+    if (t2 != null && lp >= t2) return { valid: false, reason: "target_reached" };
+  } else {
+    if (lp >= sl) return { valid: false, reason: "stopped" };
+    if (t2 != null && lp <= t2) return { valid: false, reason: "target_reached" };
+  }
+  return { valid: true, reason: "ok" };
+}
 function normEvent(e) {
   e = String(e || "").toLowerCase().trim();
   if (e === "entry" || e === "open" || e === "filled") return "entry";
@@ -148,6 +177,23 @@ function normEvent(e) {
 }
 
 // ── webhook intake: drive the signal store + settle bound positions ─────────
+// Resolve the authoritative live price for validity checks: prefer the real feed
+// (Binance/TwelveData), fall back to the signal's last webhook price.
+async function livePriceFor(sig) {
+  let lp = await priceFeed.getSpot(sig.symbol).catch(() => null);
+  if (!(Number.isFinite(Number(lp)) && Number(lp) > 0)) lp = (sig.last_price != null ? Number(sig.last_price) : null);
+  return (Number.isFinite(Number(lp)) && Number(lp) > 0) ? Number(lp) : null;
+}
+
+// Mark a live signal as invalidated by price (removed from the tradeable list).
+// Uses status 'closed' so it leaves the live feed but is distinct from won/lost.
+async function invalidateSignal(sig, livePrice, reason) {
+  await pool.query(
+    `UPDATE quantoption_signals SET status='closed', last_price=COALESCE($2,last_price), settled_at=now()
+       WHERE id=$1 AND status='live'`, [sig.id, livePrice != null ? String(livePrice) : null]);
+  return { invalidated: true, reason };
+}
+
 // payload: { signal_id, event, symbol, direction, entry, sl, tp1, tp2, tp3, price, result, tf }
 async function ingestSignalEvent(payload) {
   await init();
@@ -278,6 +324,27 @@ async function openSignalPosition(userId, input) {
       const e = new Error("signal is missing entry, target, or stop"); e.code = "bad_signal"; throw e;
     }
 
+    // Live-price validity gate: a signal is only tradeable while price has NOT yet
+    // reached its 2nd target or its stop. Re-check against a fresh price here so a
+    // stale signal can never be opened (and mark it dead so it leaves the list).
+    const livePx = await livePriceFor(signal);
+    const validity = signalValidity(signal, livePx);
+    if (!validity.valid) {
+      if (validity.reason === "stopped" || validity.reason === "target_reached") {
+        try { await invalidateSignal(signal, livePx, validity.reason); } catch (e2) { /* best-effort */ }
+      }
+      const msg = validity.reason === "stopped" ? "This signal has already hit its stop — it's no longer tradeable"
+        : validity.reason === "target_reached" ? "This signal has already reached its target — it's no longer tradeable"
+        : "This signal is no longer valid";
+      const e = new Error(msg); e.code = "signal_invalid"; throw e;
+    }
+    if (livePx == null) { const e = new Error("Live price unavailable — please try again in a moment"); e.code = "feed_unavailable"; throw e; }
+
+    // Bind the position to the REAL current price (not the stale signal entry) so
+    // barriers/settlement are internally consistent. Keep the signal's TP3/SL as
+    // the barriers, but stamp entry at the live fill.
+    const fillEntry = String(livePx);
+
     // one open position per (user, signal)
     const { rows: dup } = await cx.query(
       `SELECT id FROM quantoption_signal_positions WHERE user_id=$1 AND signal_ext_id=$2 AND status='open' LIMIT 1`,
@@ -293,7 +360,7 @@ async function openSignalPosition(userId, input) {
          (user_id, signal_ext_id, symbol, direction, stake, entry_price, target_price, stop_price, tier, time_limit_sec, expires_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [String(userId), extId, signal.symbol, signal.direction, stake,
-       signal.entry, signal.tp3, signal.sl, DEFAULT_TIER, timeLimit, expiresAt]);
+       fillEntry, signal.tp3, signal.sl, DEFAULT_TIER, timeLimit, expiresAt]);
     const p = pr[0];
     const txn = await postTransaction({
       type: "tournament_entry", amount: stake,
@@ -414,6 +481,25 @@ async function refundExpired(positionId) {
 async function sweepExpired(limitInput) {
   await init();
   const limit = Math.min(500, Math.max(1, Math.floor(Number(limitInput) || 200)));
+  // (0) price-driven invalidation: any LIVE signal whose real price has already
+  // reached its 2nd target or its stop is dead even if the webhook never fired —
+  // mark it closed so it leaves the list. Any positions bound to it are handled by
+  // the normal barrier settlement in liveView (real mode) or the passes below.
+  let invalidated = 0;
+  const { rows: liveSigs } = await pool.query(
+    `SELECT * FROM quantoption_signals WHERE status='live' AND entry IS NOT NULL AND sl IS NOT NULL ORDER BY id DESC LIMIT $1`, [limit]);
+  const swpCache = {};
+  for (const sig of liveSigs) {
+    try {
+      let lp = swpCache[sig.symbol];
+      if (lp === undefined) { lp = await livePriceFor(sig); swpCache[sig.symbol] = lp; }
+      const v = signalValidity(sig, lp);
+      if (!v.valid && (v.reason === "stopped" || v.reason === "target_reached")) {
+        await invalidateSignal(sig, lp, v.reason);
+        invalidated++;
+      }
+    } catch (e) { /* best-effort per signal */ }
+  }
   // (1) positions whose bound signal already terminally resolved but are still open
   const { rows: resolved } = await pool.query(
     `SELECT p.id, p.signal_ext_id, s.status AS sig_status, s.last_price
@@ -432,7 +518,7 @@ async function sweepExpired(limitInput) {
     `SELECT id FROM quantoption_signal_positions WHERE status='open' AND expires_at IS NOT NULL AND expires_at < now() ORDER BY id LIMIT $1`, [limit]);
   let refunded = 0;
   for (const r of expired) { try { const x = await refundExpired(r.id); if (x && x.refunded) refunded++; } catch (e) { console.warn("[quantoption-signals] refund failed:", e.message); } }
-  return { settled, refunded };
+  return { settled, refunded, invalidated };
 }
 
 // ── reads for the UI ────────────────────────────────────────────────────────
@@ -442,7 +528,21 @@ async function listLiveSignals(limitInput) {
   const { rows } = await pool.query(
     `SELECT * FROM quantoption_signals WHERE status='live' AND entry IS NOT NULL AND tp1 IS NOT NULL AND sl IS NOT NULL
       ORDER BY id DESC LIMIT $1`, [limit]);
-  return { signals: rows.map(signalView) };
+  // Live-price validity gate: a signal whose price has already reached TP2/TP3 or
+  // SL is dead — drop it from the list AND invalidate it in the DB so it's removed
+  // for everyone, even if the terminating webhook never arrived.
+  const out = [];
+  const priceCache = {};
+  for (const s of rows) {
+    let lp = priceCache[s.symbol];
+    if (lp === undefined) { lp = await livePriceFor(s); priceCache[s.symbol] = lp; }
+    const v = signalValidity(s, lp);
+    if (v.valid) { out.push(signalView(s)); }
+    else if (v.reason === "stopped" || v.reason === "target_reached") {
+      try { await invalidateSignal(s, lp, v.reason); } catch (e) { /* best-effort */ }
+    }
+  }
+  return { signals: out };
 }
 async function getSignalByExt(extId) {
   await init();
