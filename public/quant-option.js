@@ -689,9 +689,33 @@
     wireStage();
     drawChart();
   }
+  // Tap handler for an open-position chip: focus that position + switch the chart to
+  // its symbol so its candles and entry/TP/SL levels show. Shared by the delegated
+  // listener below.
+  function selectOpenChip(id) {
+    id = +id; if (!id) return;
+    QO.focusId = id;
+    var fp = null, list = QO.openPositions || [], k;
+    for (k = 0; k < list.length; k++) { if (list[k].id === id) { fp = list[k]; break; } }
+    if (fp) { for (k = 0; k < QO.symbols.length; k++) { if (QO.symbols[k].symbol === fp.symbol) { QO.symIdx = k; break; } } }
+    syncFocus(); rerender();
+    if (QO.realPrices) fetchChart(true);
+  }
   function wireStage() {
     var st = document.getElementById("qo-stage"); if (!st) return;
     var T = function (id) { return st.querySelector(id); };
+    // Bind the open-chip delegation exactly once for this stage element. Delegation
+    // means the listener lives on the stable #qo-stage container and keeps working
+    // across every st.innerHTML re-render, so a chip tap is never dropped.
+    if (!st.__qoChipDelegated) {
+      st.__qoChipDelegated = true;
+      st.addEventListener("click", function (e) {
+        var chip = e.target && e.target.closest ? e.target.closest(".qo-openchip") : null;
+        if (!chip || !st.contains(chip)) return;
+        var id = chip.getAttribute("data-id");
+        if (id) selectOpenChip(id);
+      });
+    }
     var tt = T("#qo-tab-trade"); if (tt) tt.onclick = function () { if (QO.view !== "trade") { QO.view = "trade"; rerender(); } };
     var tsig = T("#qo-tab-signals"); if (tsig) tsig.onclick = function () { if (window.dqQOSignals) window.dqQOSignals.open(); else toast("Signal trading is loading — try again", "error"); };
     var th = T("#qo-tab-history"); if (th) th.onclick = function () { QO.view = "history"; rerender(); loadHistory(); };
@@ -716,18 +740,9 @@
         else { var sm = curSym(); if (sm) QO.amb[sm.symbol] = buildAmbient(sm); rerender(); }
       };
     });
-    st.querySelectorAll(".qo-openchip").forEach(function (b) {
-      b.onclick = function () {
-        var id = +b.getAttribute("data-id"); if (!id || id === QO.focusId) return;
-        QO.focusId = id;
-        // switch the chart to THIS position's symbol so its candles + levels show
-        var fp = null, list = QO.openPositions || [], k;
-        for (k = 0; k < list.length; k++) { if (list[k].id === id) { fp = list[k]; break; } }
-        if (fp) { for (k = 0; k < QO.symbols.length; k++) { if (QO.symbols[k].symbol === fp.symbol) { QO.symIdx = k; break; } } }
-        syncFocus(); rerender();
-        if (QO.realPrices) fetchChart(true);
-      };
-    });
+    // Open-position chips use ONE delegated listener bound to #qo-stage exactly once
+    // (see the delegation block at the top of wireStage), so taps survive every
+    // innerHTML re-render.
     var mc = T("#qo-m-candle"); if (mc) mc.onclick = function () { QO.chartMode = "candle"; rerender(); };
     var ml = T("#qo-m-line"); if (ml) ml.onclick = function () { QO.chartMode = "line"; rerender(); };
 
